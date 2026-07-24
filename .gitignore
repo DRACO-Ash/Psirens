@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+.env
+.env.local
+.env.*.local
+/data/
+/tmp/
+*.tmp
+dist/

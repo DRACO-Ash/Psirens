@@ -1,0 +1,17 @@
+# Shapes the image (distinct from the packaging allowlist).
+.venv/
+tests/
+coverage.xml
+.coverage
+.pytest_cache/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+.env.*
+requirements-dev.txt
+simulate-pipeline.sh
+package-appstore.sh
+README.md
+docs/

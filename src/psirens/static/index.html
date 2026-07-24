@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSIRENS - Plotted Satellite Inclination and Raan ENgagement Screening</title>
+<link rel="icon" type="image/png" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#162646">
+<style>
+  :root{
+    --navy:#162646; --navy-2:#0f1b33; --navy-3:#1d3157;
+    --blue-1:#385FAF; --blue-2:#739bcf; --amber:#C67C00; --green:#27AE60; --red:#C0504D;
+    --ink:#e8edf5; --ink-dim:#9fb0cc; --line:#2a3f66;
+    --mono:Consolas,'Cascadia Mono',monospace;
+    --gap:8px; --radius:2px; --motion:150ms;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:'Segoe UI',Segoe,system-ui,sans-serif; background:var(--navy-2);
+       color:var(--ink); font-size:14px; line-height:1.45}
+  .banner{background:var(--green); color:#04240f; text-align:center; font-weight:700;
+          letter-spacing:.16em; font-size:12px; padding:4px; text-transform:uppercase}
+  .hdr{background:var(--navy); border-bottom:2px solid var(--blue-1); padding:12px 20px;
+       display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+  .hdr .brand{font-weight:700; letter-spacing:.14em; font-size:12px; color:var(--blue-2); text-transform:uppercase}
+  .hdr h1{font-size:17px; font-weight:600; margin:0}
+  .hdr .meta{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--ink-dim)}
+  .tabs{display:flex; gap:2px; background:var(--navy); padding:0 20px}
+  .tabs button{background:none; border:none; border-bottom:3px solid transparent;
+    color:var(--ink-dim); font:inherit; font-size:14px; padding:9px 16px; cursor:pointer}
+  .tabs button:hover{color:var(--ink)}
+  .tabs button.on{color:var(--ink); border-bottom-color:var(--amber); font-weight:600}
+  .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 20px;
+    background:var(--navy); border-bottom:1px solid var(--line)}
+  .chips{display:flex; gap:6px; flex-wrap:wrap}
+  .chip{font:inherit; font-size:12px; padding:5px 12px; cursor:pointer; border-radius:var(--radius);
+    background:var(--navy-3); color:var(--ink-dim); border:1px solid var(--line)}
+  .chip.on{color:var(--ink)}
+  .chip.REAL.on{border-color:var(--blue-2); color:var(--blue-2)}
+  .chip.SIMULATED.on{border-color:var(--amber); color:var(--amber)}
+  .chip.TEST.on{border-color:var(--green); color:var(--green)}
+  .chip.EXERCISE.on{border-color:var(--red); color:var(--red)}
+  input[type=search]{font:inherit; background:var(--navy-2); color:var(--ink); border:1px solid var(--line);
+    padding:6px 10px; border-radius:var(--radius); min-width:200px}
+  button:focus-visible,.chip:focus-visible,input:focus-visible{outline:2px solid var(--blue-2); outline-offset:2px}
+  .wrap{padding:14px 20px 40px}
+  .plot{position:relative; background:var(--navy); border:1px solid var(--line)}
+  canvas{display:block; width:100%; touch-action:none}
+  .tip{position:absolute; pointer-events:none; background:var(--navy); border:1px solid var(--blue-1);
+    padding:8px 10px; font-size:12px; border-radius:var(--radius); max-width:260px; display:none; z-index:5}
+  .tip b{color:var(--blue-2)}
+  .tip .mono{font-family:var(--mono); color:var(--ink-dim); font-size:11px}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--ink-dim)}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .swatch{width:12px; height:12px; border-radius:2px; display:inline-block}
+  .empty{padding:40px; text-align:center; color:var(--ink-dim); border:1px dashed var(--line)}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="banner" id="banner" role="status">UNCLASSIFIED</div>
+<div class="hdr">
+  <img src="/static/icon-192.png" alt="PSIRENS" width="30" height="30" style="border-radius:6px;vertical-align:middle">
+  <span class="brand">Bluestaq Limited</span>
+  <h1>PSIRENS <span style="color:var(--ink-dim);font-weight:400;font-size:13px">· Longitude and inclination belt screening</span></h1>
+  <span class="meta" id="meta"></span>
+</div>
+<nav class="tabs" role="tablist" id="tabs">
+  <button data-view="real" role="tab">Real World</button>
+  <button data-view="combined" role="tab" class="on">Combined (Real + SIM)</button>
+</nav>
+<div class="toolbar">
+  <div class="chips" id="chips"></div>
+  <input type="search" id="search" placeholder="Filter by name or NORAD id" aria-label="Filter objects">
+  <button class="chip" id="refresh" title="Pull sources now">Refresh</button>
+</div>
+<div class="wrap">
+  <div class="plot" id="plot">
+    <canvas id="cv" height="640" aria-label="Satellite longitude and inclination plot" role="img"></canvas>
+    <div class="tip" id="tip"></div>
+  </div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+"use strict";
+(function(){
+  const MODE_COLOUR = {REAL:"#739bcf", SIMULATED:"#C67C00", TEST:"#27AE60", EXERCISE:"#C0504D"};
+  const ALL_MODES = ["REAL","SIMULATED","TEST","EXERCISE"];
+  const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  const state = {
+    view:"combined",
+    modes:new Set(["REAL","SIMULATED","TEST","EXERCISE"]),
+    data:null, filter:"", bounds:null, etag:null, hover:null,
+    pts:[]  // screen-space head points for hit-testing
+  };
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const tip = document.getElementById("tip");
+
+  function activeModes(){
+    return state.view==="real" ? ["REAL"] : ALL_MODES;
+  }
+  function renderChips(){
+    const box = document.getElementById("chips");
+    box.innerHTML = "";
+    activeModes().forEach(m=>{
+      const b = document.createElement("button");
+      b.className = "chip "+m+(state.modes.has(m)?" on":"");
+      b.textContent = m;
+      b.setAttribute("aria-pressed", state.modes.has(m));
+      b.onclick = ()=>{ state.modes.has(m)?state.modes.delete(m):state.modes.add(m); renderChips(); draw(); };
+      box.appendChild(b);
+    });
+  }
+  function setView(v){
+    state.view = v;
+    document.querySelectorAll("#tabs button").forEach(b=>{
+      const on = b.dataset.view===v; b.classList.toggle("on", on); b.setAttribute("aria-selected", on);
+    });
+    state.modes = new Set(activeModes());
+    renderChips();
+    load();
+  }
+
+  async function load(){
+    const headers = {};
+    try{
+      const r = await fetch(`/api/tracks?view=${encodeURIComponent(state.view)}`, {headers});
+      if(r.status===304) return;
+      const j = await r.json();
+      state.data = j; state.bounds = j.bounds; state.etag = r.headers.get("ETag");
+      document.getElementById("banner").textContent = esc(j.classification_banner || "UNCLASSIFIED");
+      document.getElementById("meta").textContent =
+        `${j.count} objects · view ${j.view} · ${new Date(j.generated_at).toISOString().slice(0,16).replace("T"," ")}Z`;
+      draw();
+    }catch(e){ /* offline or transient; keep last-good */ }
+  }
+
+  function scale(){
+    const b = state.bounds || {lon_min:-180,lon_max:180,inc_min:0,inc_max:15};
+    const W = cv.width, H = cv.height, padL=54, padR=18, padT=14, padB=34;
+    const x = lon => padL + (lon-b.lon_min)/(b.lon_max-b.lon_min)*(W-padL-padR);
+    const y = inc => H-padB - (inc-b.inc_min)/(b.inc_max-b.inc_min)*(H-padT-padB);
+    return {b,W,H,padL,padR,padT,padB,x,y};
+  }
+
+  function grid(s){
+    ctx.strokeStyle="#22375c"; ctx.fillStyle="#7d90b3"; ctx.lineWidth=1;
+    ctx.font="11px "+getComputedStyle(document.body).fontFamily;
+    for(let lon=Math.ceil(s.b.lon_min/20)*20; lon<=s.b.lon_max; lon+=20){
+      const px=s.x(lon); ctx.beginPath(); ctx.moveTo(px,s.padT); ctx.lineTo(px,s.H-s.padB); ctx.stroke();
+      ctx.textAlign="center"; ctx.fillText(lon+"\u00b0", px, s.H-s.padB+16);
+    }
+    for(let inc=Math.ceil(s.b.inc_min); inc<=s.b.inc_max; inc+=(s.b.inc_max-s.b.inc_min>10?2:1)){
+      const py=s.y(inc); ctx.beginPath(); ctx.moveTo(s.padL,py); ctx.lineTo(s.W-s.padR,py); ctx.stroke();
+      ctx.textAlign="right"; ctx.fillText(inc+"\u00b0", s.padL-6, py+3);
+    }
+    ctx.fillStyle="#9fb0cc"; ctx.textAlign="center";
+    ctx.fillText("Geostationary longitude (\u00b0)", (s.padL+s.W-s.padR)/2, s.H-6);
+    ctx.save(); ctx.translate(14,(s.padT+s.H-s.padB)/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText("Inclination (\u00b0)",0,0); ctx.restore();
+  }
+
+  function visibleTracks(){
+    if(!state.data) return [];
+    const f = state.filter.trim().toLowerCase();
+    return state.data.tracks.filter(t=>
+      state.modes.has(t.data_mode) &&
+      (!f || t.name.toLowerCase().includes(f) || t.object_id.toLowerCase().includes(f)));
+  }
+
+  function head(t){ const s=t.samples[t.samples.length-1]; return s?{lon:s.sub_lon_deg,inc:s.inclination_deg}:null; }
+
+  function draw(){
+    const s = scale();
+    ctx.clearRect(0,0,s.W,s.H);
+    grid(s);
+    const tracks = visibleTracks();
+    const byId = {}; tracks.forEach(t=>byId[t.object_id]=t);
+    state.pts = [];
+
+    // target-link lines (dashed) from an object's head to its labelled target
+    ctx.setLineDash([4,4]); ctx.lineWidth=1;
+    tracks.forEach(t=>{
+      if(!t.target) return;
+      const h=head(t); if(!h) return;
+      const tgt = byId[t.target];
+      let tp=null;
+      if(tgt){ const th=head(tgt); if(th) tp={x:s.x(th.lon),y:s.y(th.inc)}; }
+      else if(!isNaN(parseFloat(t.target))){ tp={x:s.x(parseFloat(t.target)), y:s.y(h.inc)}; }
+      if(tp){ ctx.strokeStyle=MODE_COLOUR[t.data_mode]||"#888";
+        ctx.beginPath(); ctx.moveTo(s.x(h.lon),s.y(h.inc)); ctx.lineTo(tp.x,tp.y); ctx.stroke();
+        ctx.beginPath(); ctx.arc(tp.x,tp.y,4,0,7); ctx.stroke(); }
+    });
+    ctx.setLineDash([]);
+
+    // trails + heads
+    tracks.forEach(t=>{
+      const col = MODE_COLOUR[t.data_mode]||"#888";
+      if(t.samples.length>1){
+        ctx.strokeStyle=col; ctx.globalAlpha=.55; ctx.lineWidth=1.4; ctx.beginPath();
+        t.samples.forEach((p,i)=>{ const px=s.x(p.sub_lon_deg), py=s.y(p.inclination_deg);
+          i?ctx.lineTo(px,py):ctx.moveTo(px,py); });
+        ctx.stroke(); ctx.globalAlpha=1;
+      }
+      const h=head(t); if(!h) return;
+      const px=s.x(h.lon), py=s.y(h.inc);
+      const drift=t.drift_deg_per_day;
+      ctx.fillStyle=col;
+      if(drift!==null && Math.abs(drift)>0.05){
+        drawArrow(px,py, drift>0?1:-1, Math.min(9, 4+Math.abs(drift)*2), col);
+      } else {
+        ctx.beginPath(); ctx.arc(px,py,3.2,0,7); ctx.fill();
+      }
+      state.pts.push({px,py,t});
+    });
+
+    renderLegend();
+  }
+
+  function drawArrow(px,py,dir,size,col){
+    ctx.fillStyle=col; ctx.beginPath();
+    ctx.moveTo(px+dir*size, py);
+    ctx.lineTo(px-dir*size*0.7, py-size*0.7);
+    ctx.lineTo(px-dir*size*0.7, py+size*0.7);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function renderLegend(){
+    const el = document.getElementById("legend");
+    el.innerHTML =
+      ALL_MODES.filter(m=>activeModes().includes(m)).map(m=>
+        `<span><i class="swatch" style="background:${MODE_COLOUR[m]}"></i>${m}</span>`).join("") +
+      `<span><i class="swatch" style="background:#9fb0cc"></i>trail = historic track</span>` +
+      `<span>triangle points in drift direction; size \u221d drift rate</span>` +
+      `<span>dashed line = labelled target</span>`;
+  }
+
+  // hit-testing for the tooltip
+  cv.addEventListener("mousemove", ev=>{
+    const rect=cv.getBoundingClientRect(); const sx=cv.width/rect.width, sy=cv.height/rect.height;
+    const mx=(ev.clientX-rect.left)*sx, my=(ev.clientY-rect.top)*sy;
+    let best=null,bd=100;
+    state.pts.forEach(p=>{ const d=(p.px-mx)**2+(p.py-my)**2; if(d<bd){bd=d;best=p;} });
+    if(best){
+      const t=best.t, h=head(t);
+      tip.style.display="block";
+      tip.style.left=Math.min(rect.width-140,(best.px/sx)+10)+"px";
+      tip.style.top=((best.py/sy)-10)+"px";
+      tip.innerHTML = `<b>${esc(t.name)}</b> <span class="mono">${esc(t.object_id)}</span><br>`+
+        `<span class="mono">${esc(t.data_mode)} \u00b7 ${esc(t.origin)} \u00b7 ${esc(t.classification_marking)}</span><br>`+
+        `lon ${h.lon.toFixed(2)}\u00b0 \u00b7 inc ${h.inc.toFixed(2)}\u00b0<br>`+
+        (t.drift_deg_per_day!==null?`drift ${t.drift_deg_per_day.toFixed(2)}\u00b0/day<br>`:"")+
+        (t.target?`target: <b>${esc(t.target)}</b>`:"");
+    } else { tip.style.display="none"; }
+  });
+  cv.addEventListener("mouseleave", ()=>{ tip.style.display="none"; });
+
+  function fit(){ cv.width = document.getElementById("plot").clientWidth; draw(); }
+  window.addEventListener("resize", fit);
+
+  document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+  document.getElementById("search").addEventListener("input", e=>{ state.filter=e.target.value; draw(); });
+  document.getElementById("refresh").onclick = async ()=>{
+    try{ await fetch("/api/refresh",{method:"POST"}); }catch(e){}
+    load();
+  };
+
+  // boot
+  renderChips();
+  cv.width = document.getElementById("plot").clientWidth || 900;
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>
