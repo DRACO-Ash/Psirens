@@ -80,6 +80,9 @@ class Config:
     hrr_lookback_hours: int = 6
     hrr_refresh_seconds: int = 21600  # 6h cadence for the dynamic HRR list
     conj_window_hours: int = 168  # closest-approach screening window (7 days)
+    # TLE source selection: ordered classes, first non-empty class wins, newest
+    # epoch within it. `any` disables class ranking (plain newest-fix-wins).
+    tle_source_priority: str = "commercial,government,unknown"
     scheduler_enabled: bool = True  # background refresh loop; off in tests
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
@@ -120,4 +123,6 @@ def load_config() -> Config:
         hrr_refresh_seconds=int(_env("HRR_REFRESH_SECONDS", "21600") or "21600"),
         scheduler_enabled=_env_bool("SCHEDULER_ENABLED", default=True),
         conj_window_hours=int(_env("CONJ_WINDOW_HOURS", "168") or "168"),
+        tle_source_priority=_env("TLE_SOURCE_PRIORITY",
+                                 "commercial,government,unknown"),
     )

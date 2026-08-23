@@ -94,6 +94,24 @@ def _retain_elset(existing: dict, rec: dict) -> None:
         existing["elset"] = in_el
 
 
+def _retain_candidates(existing: dict, rec: dict) -> None:
+    """Keep the newest element set per provider, anti-shrink.
+
+    A pull that returns nothing from one provider must not erase what that
+    provider supplied on an earlier pull: the TLE selection policy chooses
+    between providers, so silently losing one would change which line an
+    operator sees for reasons that have nothing to do with the data.
+    """
+    incoming = rec.get("elset_candidates")
+    if not isinstance(incoming, dict):
+        return
+    bucket = existing.setdefault("elset_candidates", {})
+    for source, el in incoming.items():
+        held = bucket.get(source)
+        if held is None or el.get("epoch", "") >= held.get("epoch", ""):
+            bucket[source] = el
+
+
 class Store:
     def __init__(self, data_dir: str):
         self.data_dir = data_dir
@@ -194,6 +212,7 @@ class Store:
                     objects[oid] = existing
                 _copy_meta(existing, rec)  # display fields; latest non-blank wins
                 _retain_elset(existing, rec)  # newest full element set
+                _retain_candidates(existing, rec)  # newest per provider
                 by_epoch = {s["epoch"]: s for s in existing["samples"]}
                 for s in rec.get("samples", []):
                     if s["epoch"] not in by_epoch:

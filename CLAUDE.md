@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (build 1.4.14)
+## Current state (build 1.5.0)
 
 Deployed and live. Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
@@ -56,11 +56,18 @@ Shipped features:
 - Deep zoom to 0.05deg longitude / 0.01deg inclination with precision-aware axis
   labels.
 - Trail and drift sanitised against physically impossible motion (see LEARNED).
-
-Known limitation being addressed: the TLEs shown are currently RECONSTRUCTED from
-stored mean elements via `sgp4.exporter`. UDL actually carries native `line1`/
-`line2` on ~100% of elset records; wiring those in is the top pending task (see
-Open items).
+- NATIVE UDL TLEs (1.5.0). `line1`/`line2` are captured at ingest, validated
+  (shape, both checksums, and the embedded catalogue number against the record's
+  own `satNo`) and served verbatim with source provenance, epoch, rev number and
+  per-record classification marking. Reconstruction via `sgp4.exporter` is now
+  the labelled FALLBACK, used only where no usable native line exists.
+- Source selection policy (1.5.0). `TLE_SOURCE_PRIORITY`, default
+  `commercial,government,unknown`: the first class holding a fix wins, newest
+  epoch within it. `any` collapses to plain newest-fix-wins. Owner decision,
+  23 August 2026: newest commercial first.
+- Copy-out gate (1.5.0). The copy control is offered only for a plain
+  unclassified, caveat-free marking. A proprietary commercial line (`U//PR-...`)
+  is displayed with the control withheld and the reason stated. Fail-closed.
 
 ## Golden verify loop (run before ANY packaging or upload)
 
@@ -127,11 +134,20 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
 - `config.py` — env-only config (UDL base/path, epoch param, retention, HRR
   cadence, conjunction window, memory-independent tunables).
 - `store.py` — atomic JSON store; anti-shrink `merge_samples`; `retain_only`
-  (prunes only REAL objects not on the HRR list; keeps non-REAL); elset retention.
+  (prunes only REAL objects not on the HRR list; keeps non-REAL); elset retention
+  (`_retain_elset` newest overall, `_retain_candidates` newest per provider,
+  anti-shrink so a pull missing one provider never erases it).
 - `sources.py` — `UDLElsetSource`, `ManualElsetSource`, `DemoElsetSource`;
-  `_elset_dict` (the retained mean elements); `_udl_ts` (trailing-Z epoch form).
+  `_elset_dict` (the retained mean elements plus native `line1`/`line2`, `source`,
+  `rev_no`, `mean_motion_dot`, `mean_motion_ddot`, `ephem_type`); `_udl_ts`
+  (trailing-Z epoch form); `_record_elset` (files each fix under `elset`, newest
+  overall, and `elset_candidates`, newest per provider).
+- `tle.py` — native line validation (checksum and satNo cross-check), source
+  classification, the selection policy, and the copy-out gate.
 - `hrr.py` — dynamic JCO HRR list pull and store.
-- `conjunction.py` — SGP4 closest-approach screen and TLE export/reconstruction.
+- `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native first,
+  reconstruction fallback, with provenance). The element set that is served is
+  also the one propagated, so the displayed line always produces the shown range.
 - `refresh.py` — background scheduler; `run_once`; `pull_window` (mode + absolute
   or relative window).
 - `security.py` — token gate and rate limiting.
@@ -141,8 +157,14 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drawHead` (+ `raNeedle`), the inspector modal, view/window/range controls.
 
 Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
-`test_drift.py`, `test_hrr.py`, `test_sources.py`, `test_store.py`. Offline-safe
-(demo mode when `UDL_BASE_URL` is unset).
+`test_drift.py`, `test_hrr.py`, `test_sources.py`, `test_store.py`, `test_tle.py`.
+Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
+by the exporter, never hand-typed, so every "valid" line genuinely checksums.
+
+`tools/udl_elset_probe.py` — Script-mode, stdlib-only live probe of `/udl/elset`.
+Checks the four assumptions the native-TLE work rests on (line presence, satNo
+cross-check, source classification, marking distribution). Needs Ash's
+credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 
 ## API contract
 
@@ -192,17 +214,17 @@ Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
 
 ## Open items and pending decisions
 
-- Native UDL TLEs (top task). FACT, established during migration: `/udl/elset`
-  carries native `line1`/`line2` on ~100% of records; JCO pushes the HRR list
-  only, elements come from Cloudstone, NorthStar, EXO, KBR, KRTL, LeoLabs and
-  18th SPCS. Plan: capture `line1`/`line2` (and `revNo`, `meanMotionDot`,
-  `meanMotionDDot`, `ephemType`) at ingest, serve them verbatim with source
-  provenance and per-record classification marking, demote reconstruction to a
-  fallback, and cross-check the native line's satnum against the HRR satNo before
-  serving. DECISION OWED BY ASH: a source trust order (e.g. 18th SPCS then
-  LeoLabs then commercial) versus newest-fix-wins-with-a-visible-label. LICENSING
-  boundary: commercial elsets are `U//PR-...` proprietary; confirm copy-out terms
-  before exposing a copy button on them.
+- Native UDL TLEs: SHIPPED in 1.5.0, pending live verification. Built and
+  verified offline against exporter-produced fixtures and a seeded store driven
+  headlessly. NOT yet checked against live UDL: the build environment is denied
+  egress to `unifieddatalibrary.com` by organisation policy (403 on CONNECT) and
+  holds no credentials. Run `python3 tools/udl_elset_probe.py --hours 6` on a
+  networked workstation before the next upload; it reports each assumption as MET
+  or NOT MET and names any provider that falls outside the classification table.
+- Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
+  caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
+  not copyable. If DS-caveated records should be copyable, say so and it is a
+  one-line change in `tle.is_copyable`.
 - Ingest-time sample sanitisation. The physical-rate guard currently lives only
   on the trail/drift display; moving it to ingest would also clean the inspector
   Track-span readout and the head position from one place, and remove the

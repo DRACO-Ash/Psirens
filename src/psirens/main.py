@@ -27,6 +27,7 @@ from .astro import drift_deg_per_day
 from .config import Config, load_config
 from .models import VIEW_MODES, DataMode, ManualElsetIn
 from .conjunction import conjunctions_for
+from .tle import parse_priority
 from .hrr import HrrStore
 from .refresh import Refresher
 from .security import RateLimiter, SingleFlight, token_ok
@@ -317,7 +318,8 @@ def _conjunctions(request: Request) -> JSONResponse:
     if not target:
         return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
     data = request.app.state.store.load()
-    payload = conjunctions_for(data, target, window_hours=cfg.conj_window_hours)
+    payload = conjunctions_for(data, target, window_hours=cfg.conj_window_hours,
+                               priority=parse_priority(cfg.tle_source_priority))
     return _cors(JSONResponse(payload), cfg)
 
 
@@ -383,7 +385,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.4.14", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.5.0", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

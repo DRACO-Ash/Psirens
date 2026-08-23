@@ -126,6 +126,11 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   .nb2cl{color:var(--dim);margin-bottom:6px}
   .tle{font-family:var(--mono);font-size:10px;color:var(--ink);background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:6px;overflow-x:auto;white-space:pre;margin:0 0 6px}
   .copybtn{font:inherit;font-size:11px;background:none;border:1px solid var(--line2);color:var(--ink);border-radius:5px;padding:4px 10px;cursor:pointer}
+  .tleprov{font-size:10.5px;color:var(--dim);margin:0 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .tlebadge{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;padding:2px 5px;border-radius:3px;border:1px solid currentColor}
+  .tlebadge.native{color:#3fd27b}
+  .tlebadge.recon{color:var(--accent)}
+  .nocopy{font-size:10.5px;color:var(--faint);border:1px dashed var(--line2);border-radius:5px;padding:4px 10px;display:inline-block}
   .copybtn:hover{border-color:var(--accent);color:#fff}
   .copybtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .nbr{display:grid;grid-template-columns:10px 1fr auto;gap:8px;align-items:center;width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:4px;margin:4px 0;text-align:left}
@@ -395,16 +400,29 @@ function fmtKm(v){return v==null?"n/a":Math.round(v).toLocaleString("en-GB")+" k
 function relClose(iso){if(!iso){return "";}const d=Date.parse(iso)-Date.now();if(d<=0){return "now";}
   const h=Math.floor(d/3600000),m=Math.floor(d%3600000/60000);
   return h>=24?(Math.floor(h/24)+"d "+(h%24)+"h"):(h+"h "+m+"m");}
+function provLine(p){if(p==null){return "";}
+  const badge=p.native?`<span class="tlebadge native">NATIVE</span>`:`<span class="tlebadge recon">RECONSTRUCTED</span>`;
+  const src=p.source?esc(p.source):"unattributed";
+  const ep=String(p.epoch||"").slice(0,16).replace("T"," ");
+  const rev=p.rev_no==null?"":` \u00b7 rev ${esc(String(p.rev_no))}`;
+  return `<div class="tleprov">${badge}<b>${src}</b><span class="muted">${esc(String(p.source_class||"unknown"))}</span><span>epoch ${esc(ep)}Z${rev}</span><span>${esc(String(p.classification_marking||"U"))}</span></div>`;}
+function copyCtl(t,p,label){
+  if(p&&p.copyable){return `<button class="copybtn" type="button" data-l1="${esc(t[0])}" data-l2="${esc(t[1])}">${label}</button>`;}
+  const why=p&&p.copy_denied_reason?p.copy_denied_reason:"copy-out withheld";
+  return `<div class="nocopy">\u{1F512} ${esc(why)}</div>`;}
+function tleBlock(t,p,label){
+  if(t==null){return `<div class="muted">no element set for TLE</div>`;}
+  return `<pre class="tle">${esc(t[0])}\n${esc(t[1])}</pre>${provLine(p)}${copyCtl(t,p,label)}`;}
 function nbRow(n){const hh=state.hrr[n.id]||{};const rank=hh.rank==null?5:hh.rank;
   const closest=n.min_km==null?"no close-approach solution in window"
     :`closest ${esc(fmtKm(n.min_km))} \u00b7 in ${esc(relClose(n.tca))} \u00b7 ${esc((n.tca||"").slice(0,16).replace("T"," "))}Z`;
-  const tle=n.tle?`<pre class="tle">${esc(n.tle[0])}\n${esc(n.tle[1])}</pre><button class="copybtn" type="button" data-l1="${esc(n.tle[0])}" data-l2="${esc(n.tle[1])}">Copy TLE</button>`:`<div class="muted">no element set for TLE</div>`;
+  const tle=tleBlock(n.tle,n.tle_provenance,"Copy TLE");
   return `<details class="nb2"><summary><span class="nbdot" style="background:${rankCol(rank)}"></span><b>${esc(n.name)}</b> <i>${esc(n.id)}</i><span class="nbsep">\u0394 ${esc(fmtKm(n.range_now_km))}</span></summary><div class="nb2bd"><div class="nb2cl">${closest}</div>${tle}</div></details>`;}
 function loadConjunctions(id){const nb=document.getElementById("nb");if(nb===null){return;}
   fetch("/api/conjunctions?target="+encodeURIComponent(id)).then(r=>r.json()).then(j=>{
     if(state.sel!==id){return;}
     const tgt=document.getElementById("tgttle");
-    if(tgt&&j.target&&j.target.tle){tgt.innerHTML=`<button class="copybtn" type="button" data-l1="${esc(j.target.tle[0])}" data-l2="${esc(j.target.tle[1])}">Copy this object\u2019s TLE</button>`;}
+    if(tgt&&j.target&&j.target.tle){tgt.innerHTML=tleBlock(j.target.tle,j.target.tle_provenance,"Copy this object\u2019s TLE");}
     const el=document.getElementById("nb"),list=j.neighbours||[];
     el.innerHTML=list.length?list.map(nbRow).join(""):`<div class="muted">Nothing within \u00b110\u00b0.</div>`;
   }).catch(()=>{const el=document.getElementById("nb");if(el){el.innerHTML=`<div class="muted">Conjunction service unavailable.</div>`;}});}

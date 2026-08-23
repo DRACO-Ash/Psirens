@@ -89,3 +89,72 @@ def test_atomic_write_leaves_no_tmp(tmp_path):
     s.merge_samples(_rec("A", [now]), retention_days=90, max_samples=100, now=now)
     leftovers = [p.name for p in tmp_path.iterdir() if p.suffix == ".tmp"]
     assert leftovers == []
+
+
+# -- per-provider element-set retention (anti-shrink) --------------------
+def _cand_rec(oid, epoch, sources):
+    """A pull carrying one element set per named provider."""
+    rec = _rec(oid, [epoch])
+    rec[oid]["elset_candidates"] = {
+        src: {"sat_no": oid, "epoch": epoch.isoformat(), "source": src}
+        for src in sources
+    }
+    rec[oid]["elset"] = {"sat_no": oid, "epoch": epoch.isoformat(),
+                         "source": sources[0]}
+    return rec
+
+
+def test_candidates_are_retained_per_provider(tmp_path):
+    s = Store(str(tmp_path))
+    now = datetime.now(timezone.utc)
+    s.merge_samples(_cand_rec("A", now - timedelta(days=2), ["LeoLabs", "18SDS"]),
+                    retention_days=90, max_samples=100, now=now)
+    held = s.load()["objects"]["A"]["elset_candidates"]
+    assert set(held) == {"LeoLabs", "18SDS"}
+
+
+def test_a_pull_missing_one_provider_does_not_erase_it(tmp_path):
+    """Anti-shrink: losing a provider from one pull must not change which
+    line an operator sees."""
+    s = Store(str(tmp_path))
+    now = datetime.now(timezone.utc)
+    s.merge_samples(_cand_rec("A", now - timedelta(days=2), ["LeoLabs", "18SDS"]),
+                    retention_days=90, max_samples=100, now=now)
+    s.merge_samples(_cand_rec("A", now - timedelta(days=1), ["LeoLabs"]),
+                    retention_days=90, max_samples=100, now=now)
+    held = s.load()["objects"]["A"]["elset_candidates"]
+    assert set(held) == {"LeoLabs", "18SDS"}   # 18SDS survives its absence
+
+
+def test_a_newer_fix_replaces_the_same_provider(tmp_path):
+    s = Store(str(tmp_path))
+    now = datetime.now(timezone.utc)
+    older, newer = now - timedelta(days=2), now - timedelta(days=1)
+    s.merge_samples(_cand_rec("A", older, ["LeoLabs"]),
+                    retention_days=90, max_samples=100, now=now)
+    s.merge_samples(_cand_rec("A", newer, ["LeoLabs"]),
+                    retention_days=90, max_samples=100, now=now)
+    held = s.load()["objects"]["A"]["elset_candidates"]["LeoLabs"]
+    assert held["epoch"] == newer.isoformat()
+
+
+def test_an_older_fix_never_overwrites_a_newer_one(tmp_path):
+    s = Store(str(tmp_path))
+    now = datetime.now(timezone.utc)
+    older, newer = now - timedelta(days=2), now - timedelta(days=1)
+    s.merge_samples(_cand_rec("A", newer, ["LeoLabs"]),
+                    retention_days=90, max_samples=100, now=now)
+    s.merge_samples(_cand_rec("A", older, ["LeoLabs"]),
+                    retention_days=90, max_samples=100, now=now)
+    held = s.load()["objects"]["A"]["elset_candidates"]["LeoLabs"]
+    assert held["epoch"] == newer.isoformat()
+
+
+def test_a_pull_without_candidates_leaves_existing_ones_alone(tmp_path):
+    s = Store(str(tmp_path))
+    now = datetime.now(timezone.utc)
+    s.merge_samples(_cand_rec("A", now - timedelta(days=2), ["LeoLabs"]),
+                    retention_days=90, max_samples=100, now=now)
+    s.merge_samples(_rec("A", [now - timedelta(days=1)]),
+                    retention_days=90, max_samples=100, now=now)
+    assert set(s.load()["objects"]["A"]["elset_candidates"]) == {"LeoLabs"}

@@ -18,7 +18,7 @@ import math
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
-from typing import Protocol
+from typing import Callable, Protocol, TypeVar
 
 import httpx
 
@@ -28,6 +28,7 @@ from .astro import gmst_rad, sub_longitude_deg
 from .config import Config
 from .models import DataMode, ManualElsetIn
 from .store import resilient_write
+from .tle import validate_native
 
 _log = logging.getLogger("psirens.sources")
 
@@ -42,10 +43,21 @@ def _norm_mode(raw: str | None) -> DataMode:
 def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
                 eccentricity: float, raan_deg: float, argp_deg: float,
                 mean_anomaly_deg: float, mean_motion_rev_per_day: float,
-                bstar: float, classification: str, intl_desig: str = "") -> dict:
+                bstar: float, classification: str, intl_desig: str = "",
+                source: str = "", line1: str = "", line2: str = "",
+                rev_no: int | None = None, mean_motion_dot: float | None = None,
+                mean_motion_ddot: float | None = None,
+                ephem_type: int | None = None) -> dict:
     """Latest mean elements retained per object so conjunctions and TLE export
     can be computed later. This is the only place the full element set survives
-    into the store; the plot itself needs only sub-longitude and inclination."""
+    into the store; the plot itself needs only sub-longitude and inclination.
+
+    `line1`/`line2` carry the provider's own native TLE where UDL supplied one
+    and it passed validation. They are stored verbatim: the whole point of
+    serving native lines is that nothing between the provider and the operator
+    reformats them. `source` is retained because it decides selection order
+    when several providers hold a fix for the same object.
+    """
     return {
         "sat_no": str(sat_no),
         "epoch": epoch.astimezone(timezone.utc).isoformat(),
@@ -54,7 +66,46 @@ def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
         "mean_anomaly_deg": mean_anomaly_deg,
         "mean_motion_rev_per_day": mean_motion_rev_per_day, "bstar": bstar,
         "classification": classification, "intl_desig": intl_desig,
+        "source": source, "line1": line1, "line2": line2,
+        "rev_no": rev_no, "mean_motion_dot": mean_motion_dot,
+        "mean_motion_ddot": mean_motion_ddot, "ephem_type": ephem_type,
     }
+
+
+_N = TypeVar("_N", int, float)
+
+
+def _opt_num(row: dict, key: str, cast: Callable[[object], _N]) -> _N | None:
+    """Read an optional numeric wire field, or None when absent or unusable.
+
+    Absent stays absent: a missing rev number is not a rev number of zero, and
+    writing one in would make a reconstructed line look like a provider fix.
+    """
+    val = row.get(key)
+    if val is None or val == "":
+        return None
+    try:
+        return cast(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _record_elset(rec: dict, el: dict) -> None:
+    """File one element set against a record, per source and overall.
+
+    `elset` stays the newest fix regardless of provider: it drives the plot
+    head, the drift rate and the RA needle, and none of those should change
+    because a selection policy changed. `elset_candidates` keeps the newest
+    fix per provider, which is what the TLE selection policy chooses between.
+    """
+    prev = rec.get("elset")
+    if prev is None or el["epoch"] >= prev["epoch"]:
+        rec["elset"] = el
+    key = el.get("source") or "UNKNOWN"
+    bucket = rec.setdefault("elset_candidates", {})
+    held = bucket.get(key)
+    if held is None or el["epoch"] >= held["epoch"]:
+        bucket[key] = el
 
 
 def _sample_from_elements(
@@ -182,13 +233,31 @@ class UDLElsetSource:
                 "samples": [],
             })
             rec["samples"].append(sample)
-            el = _elset_dict(sat_no=oid, epoch=epoch,
-                             classification=str(row.get("classificationMarking", "U")),
-                             intl_desig=str(row.get("origObjectId", "") or ""), **els)
-            prev = rec.get("elset")
-            if prev is None or el["epoch"] >= prev["epoch"]:
-                rec["elset"] = el
+            _record_elset(rec, self._elset_from_row(oid, row, epoch, els))
         return out
+
+    @staticmethod
+    def _elset_from_row(oid: str, row: dict, epoch: datetime, els: dict) -> dict:
+        """Build the retained element set for one UDL row, native lines included.
+
+        A native line is captured only if it validates against this record's
+        own catalogue number (see `tle.validate_native`); a line that fails is
+        dropped here rather than stored, so nothing downstream has to decide
+        whether a stored line can be trusted.
+        """
+        native = validate_native(row.get("line1"), row.get("line2"), oid)
+        line1, line2 = native if native else ("", "")
+        return _elset_dict(
+            sat_no=oid, epoch=epoch,
+            classification=str(row.get("classificationMarking", "U")),
+            intl_desig=str(row.get("origObjectId", "") or ""),
+            source=str(row.get("source", "") or ""),
+            line1=line1, line2=line2,
+            rev_no=_opt_num(row, "revNo", int),
+            mean_motion_dot=_opt_num(row, "meanMotionDot", float),
+            mean_motion_ddot=_opt_num(row, "meanMotionDDot", float),
+            ephem_type=_opt_num(row, "ephemType", int),
+            **els)
 
 
 # --------------------------------------------------------------------------
@@ -267,6 +336,7 @@ class ManualElsetSource:
                     mean_motion_rev_per_day=i["mean_motion_rev_per_day"],
                     bstar=i.get("bstar", 0.0),
                     classification=i["classification_marking"],
+                    source=str(i.get("source", "MANUAL") or "MANUAL"),
                     intl_desig=str(i["object_id"])),
             }
         return out
@@ -338,7 +408,7 @@ class DemoElsetSource:
             sat_no=oid, epoch=epoch, inclination_deg=inc, eccentricity=0.0002,
             raan_deg=0.0, argp_deg=0.0, mean_anomaly_deg=mean_anom,
             mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
-            classification="U", intl_desig="")
+            classification="U", intl_desig="", source="DEMO")
 
     def _span(self, now: datetime, days: int, lon0: float, inc: float,
               rate: float) -> list[dict]:

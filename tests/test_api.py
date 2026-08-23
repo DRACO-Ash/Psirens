@@ -169,6 +169,57 @@ def test_conjunctions_endpoint_returns_target_tle(client):
     assert "neighbours" in j and "window_hours" in j
 
 
+def test_conjunctions_payload_carries_tle_provenance(client):
+    """Every served line states where it came from and whether it is the
+    provider's own fix or a reconstruction."""
+    j = client.get("/api/conjunctions?target=41836").json()
+    prov = j["target"]["tle_provenance"]
+    assert prov is not None
+    # The demo belt synthesises elements, so these are reconstructions and
+    # must be labelled as such rather than presented as a provider fix.
+    assert prov["native"] is False
+    assert prov["source"] == "DEMO"
+    assert prov["source_class"] == "unknown"
+    assert prov["epoch"]
+    assert set(prov) >= {"native", "source", "source_class", "epoch",
+                         "classification_marking", "copyable",
+                         "copy_denied_reason"}
+
+
+def test_conjunctions_copy_gate_follows_the_marking(client):
+    """Demo elsets are plain unclassified, so copy-out is permitted; the gate
+    itself is exercised exhaustively in test_tle.py."""
+    j = client.get("/api/conjunctions?target=41836").json()
+    prov = j["target"]["tle_provenance"]
+    assert prov["classification_marking"] == "U"
+    assert prov["copyable"] is True
+    assert prov["copy_denied_reason"] is None
+
+
+def test_conjunctions_respect_the_configured_source_policy(tmp_path):
+    """The policy reaches the route from config, not just the library."""
+    from psirens.conjunction import tle_for
+    from psirens.tle import parse_priority
+    app = create_app(_cfg(tmp_path, tle_source_priority="government,commercial"),
+                     sources=[DemoElsetSource(), ManualElsetSource(str(tmp_path))])
+    app.state.refresher.run_once()
+    with TestClient(app) as c:
+        assert c.get("/api/conjunctions?target=41836").status_code == 200
+    obj = {"elset_candidates": {
+        "18SDS": {"sat_no": "1", "epoch": "2026-08-01T00:00:00+00:00",
+                  "source": "18SDS", "classification": "U",
+                  "inclination_deg": 0.05, "eccentricity": 0.0002,
+                  "raan_deg": 80.0, "argp_deg": 90.0, "mean_anomaly_deg": 10.0,
+                  "mean_motion_rev_per_day": 1.0027379, "bstar": 0.0},
+        "LeoLabs": {"sat_no": "1", "epoch": "2026-08-09T00:00:00+00:00",
+                    "source": "LeoLabs", "classification": "U",
+                    "inclination_deg": 0.05, "eccentricity": 0.0002,
+                    "raan_deg": 80.0, "argp_deg": 90.0, "mean_anomaly_deg": 10.0,
+                    "mean_motion_rev_per_day": 1.0027379, "bstar": 0.0}}}
+    el, _, _ = tle_for(obj, parse_priority("government,commercial"))
+    assert el["source"] == "18SDS"   # government first, despite the older epoch
+
+
 # -- SIMULATION view, timescale pull, and non-destructive prune ---------------
 def test_tracks_sim_view_is_simulated_only(client):
     r = client.get("/api/tracks?view=sim")
