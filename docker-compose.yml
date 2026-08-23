@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# PSIRENS - local development compose.
+#
+# The Bluestaq App Store does NOT use this file; the platform builds from the
+# Dockerfile directly. This exists only to build and run PSIRENS on your own
+# machine, mirroring how the container runs in the platform.
+#
+# Quick start:
+#   1. cp .env.example .env        # then put your UDL credentials in .env
+#   2. docker compose up --build
+#   3. open http://localhost:8080
+#
+# Leave the UDL_* values empty to run the offline demo belt with no credentials.
+# Secrets live in .env (gitignored), never in this file.
+# ---------------------------------------------------------------------------
+services:
+  psirens:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: psirens:local
+    container_name: psirens
+    ports:
+      - "8080:8080"
+    environment:
+      # UDL live pull. Set these in .env. Empty => offline demo belt.
+      UDL_BASE_URL: "${UDL_BASE_URL:-}"
+      UDL_USER: "${UDL_USER:-}"
+      UDL_PASSWORD: "${UDL_PASSWORD:-}"
+      # Optional tuning (code defaults are safe; uncomment to override):
+      # RETENTION_DAYS: "90"
+      # REFRESH_SECONDS: "3600"
+    # Storage defaults to ephemeral /tmp inside the container (writable by the
+    # non-root user); trails reset when the container is removed. Fine for local
+    # dev. For persistence see the note at the bottom of this file.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+# Persistent trails (optional): the container runs as non-root uid 10001, so a
+# plain named volume mounts root-owned and the app cannot write to it. If you
+# want persistence locally, bind-mount a host directory made writable by that
+# uid and point DATA_DIR at it:
+#
+#   mkdir -p ./data && sudo chown 10001:10001 ./data
+#
+# then add under the psirens service:
+#   environment:
+#     DATA_DIR: /data
+#   volumes:
+#     - ./data:/data
+# ---------------------------------------------------------------------------

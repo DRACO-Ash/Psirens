@@ -111,17 +111,34 @@ def sub_longitude_deg(
     return (lon + 180.0) % 360.0 - 180.0
 
 
+_MAX_GEO_DRIFT = 18.0     # deg/day; real GEO longitude rate tops out ~14, above is an artifact
+_MIN_DRIFT_DT = 1800.0    # seconds; ignore near-duplicate epochs (they produce garbage rates)
+
+
 def drift_deg_per_day(samples: list[tuple[datetime, float]]) -> float | None:
-    """Longitude drift rate (deg/day) from the two most recent samples.
+    """Longitude drift rate (deg/day) from the latest sample against the most
+    recent earlier one at least _MIN_DRIFT_DT before it.
 
     Uses shortest angular difference so a wrap across the +/-180 seam does not
-    register as a spurious ~360 deg/day jump. Returns None with < 2 samples.
+    register as a spurious ~360 deg/day jump. Returns None with < 2 usable
+    samples, when the pair is too close in time (near-duplicate epochs), or when
+    the result is physically impossible for a GEO object (a data artifact such as
+    a mismatched historical elset) rather than asserting a garbage rate.
     """
     if len(samples) < 2:
         return None
-    (t0, lon0), (t1, lon1) = samples[-2], samples[-1]
+    t1, lon1 = samples[-1]
+    pair = None
+    for t0, lon0 in reversed(samples[:-1]):
+        if (t1 - t0).total_seconds() >= _MIN_DRIFT_DT:
+            pair = (t0, lon0)
+            break
+    if pair is None:
+        return None
+    t0, lon0 = pair
     dt_days = (t1 - t0).total_seconds() / 86400.0
-    if abs(dt_days) < 1e-9:
+    if dt_days <= 0:
         return None
     dlon = (lon1 - lon0 + 180.0) % 360.0 - 180.0
-    return dlon / dt_days
+    rate = dlon / dt_days
+    return None if abs(rate) > _MAX_GEO_DRIFT else rate

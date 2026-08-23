@@ -8,8 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY requirements-runtime.txt .
+RUN pip install -r requirements-runtime.txt
 
 FROM python:3.12-slim AS prep
 # Patch OS packages (fail-open, in its own layer so it cannot mask the strip).
@@ -34,4 +34,4 @@ WORKDIR /app
 USER 10001:10001
 EXPOSE 8080
 # exec so SIGTERM reaches gunicorn; uvicorn worker for the ASGI app.
-CMD ["sh","-c","exec gunicorn psirens.main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8080} --workers 2 --timeout 60"]
+CMD ["sh","-c","exec gunicorn psirens.main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8080} --workers 1 --timeout 60 --no-control-socket --preload"]

@@ -1,6 +1,6 @@
 [project]
 name = "psirens"
-version = "1.0.0"
+version = "1.4.14"
 description = "PSIRENS - Plotted Satellite Inclination and Raan ENgagement Screening"
 requires-python = ">=3.11"
 

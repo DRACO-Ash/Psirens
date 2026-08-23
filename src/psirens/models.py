@@ -24,6 +24,7 @@ class DataMode(str, enum.Enum):
 # Which modes each hero tab shows by default.
 VIEW_MODES: dict[str, list[DataMode]] = {
     "real": [DataMode.REAL],
+    "sim": [DataMode.SIMULATED],
     "combined": [DataMode.REAL, DataMode.SIMULATED, DataMode.TEST, DataMode.EXERCISE],
 }
 

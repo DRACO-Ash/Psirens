@@ -17,6 +17,7 @@ def _cfg(tmp_path, token="", origin="", **kw):
         udl_base_url="", udl_elset_path="/udl/elset", udl_user="",
         udl_password="", udl_target_field="tags", udl_epoch_param="epoch",
         udl_accept="application/json", data_dir=str(tmp_path),
+        scheduler_enabled=False,  # deterministic: tests seed via run_once()
     )
     base.update(kw)
     return Config(**base)
@@ -26,6 +27,7 @@ def _cfg(tmp_path, token="", origin="", **kw):
 def client(tmp_path):
     app = create_app(_cfg(tmp_path),
                      sources=[DemoElsetSource(), ManualElsetSource(str(tmp_path))])
+    app.state.refresher.run_once()  # deterministic seed (prod seeds in background)
     with TestClient(app) as c:
         yield c
 
@@ -140,3 +142,157 @@ def test_favicon_and_icon_assets_served(client):
 def test_static_asset_rejects_unknown_name(client):
     # path-traversal / unknown files are refused (whitelist only)
     assert client.get("/static/etc-passwd").status_code == 404
+
+
+def test_hrr_endpoint_returns_map(client):
+    r = client.get("/api/hrr")
+    assert r.status_code == 200
+    j = r.json()
+    assert "objects" in j and "count" in j and "marking" in j
+    assert j["count"] == len(j["objects"])
+
+
+def test_conjunctions_requires_target(client):
+    r = client.get("/api/conjunctions")
+    assert r.status_code == 400
+    assert "target" in r.json()["detail"]
+
+
+def test_conjunctions_endpoint_returns_target_tle(client):
+    # demo anchors carry a synthesised elset, so the target exports a TLE even
+    # though these anchors are too far apart to have neighbours within +/-10deg.
+    r = client.get("/api/conjunctions?target=41836")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["target"] is not None
+    assert j["target"]["tle"] is not None and len(j["target"]["tle"]) == 2
+    assert "neighbours" in j and "window_hours" in j
+
+
+# -- SIMULATION view, timescale pull, and non-destructive prune ---------------
+def test_tracks_sim_view_is_simulated_only(client):
+    r = client.get("/api/tracks?view=sim")
+    assert r.status_code == 200
+    modes = {t["data_mode"] for t in r.json()["tracks"]}
+    assert modes <= {"SIMULATED"}          # a clean picture: zero REAL
+    assert "SIMULATED" in modes            # the demo belt carries one
+
+
+def test_tracks_real_view_is_real_only(client):
+    r = client.get("/api/tracks?view=real")
+    assert r.status_code == 200
+    assert all(t["data_mode"] == "REAL" for t in r.json()["tracks"])
+
+
+def test_pull_sim_returns_ok(client):
+    r = client.post("/api/pull?mode=sim&hours=48")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["status"] == "ok" and j["mode"] == "sim"
+    assert "start" in j and "end" in j
+
+
+def test_pull_rejects_unknown_mode(client):
+    assert client.post("/api/pull?mode=nonsense&hours=24").status_code == 400
+
+
+def test_pull_rejects_non_integer_hours(client):
+    assert client.post("/api/pull?mode=real&hours=lots").status_code == 400
+
+
+def test_retain_only_keeps_simulated_drops_stale_real(tmp_path):
+    from datetime import datetime, timezone
+    from psirens.store import Store
+    st = Store(str(tmp_path))
+    now = datetime(2026, 8, 6, tzinfo=timezone.utc)
+    sample = [{"epoch": now.isoformat(), "sub_lon_deg": 0.0, "inclination_deg": 0.0}]
+    st.merge_samples({
+        "R1": {"name": "real-hrr", "data_mode": "REAL", "origin": "UDL", "samples": sample},
+        "R2": {"name": "real-stale", "data_mode": "REAL", "origin": "UDL", "samples": sample},
+        "S1": {"name": "sim", "data_mode": "SIMULATED", "origin": "UDL", "samples": sample},
+    }, retention_days=90, max_samples=100, now=now)
+    removed = st.retain_only({"R1"})       # only R1 is on the HRR list
+    kept = set(st.load()["objects"])
+    assert removed == 1                     # R2 (stale REAL) dropped
+    assert kept == {"R1", "S1"}             # simulated survives the HRR prune
+
+
+def test_pull_real_brings_real_data(client):
+    r = client.post("/api/pull?mode=real&hours=24")
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    assert client.get("/api/tracks?view=real").json()["count"] >= 1
+
+
+def test_pull_combined_pulls_both(client):
+    r = client.post("/api/pull?mode=combined&hours=72")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["status"] == "ok" and j["mode"] == "combined"
+
+
+# -- absolute scenario start/stop window --------------------------------------
+def test_pull_absolute_range_ok(client):
+    r = client.post("/api/pull?mode=sim"
+                    "&start=2026-07-01T00:00:00Z&end=2026-07-08T00:00:00Z")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["status"] == "ok" and j["mode"] == "sim"
+    assert j["start"].startswith("2026-07-01") and j["end"].startswith("2026-07-08")
+
+
+def test_pull_absolute_naive_treated_as_utc(client):
+    r = client.post("/api/pull?mode=real"
+                    "&start=2026-07-01T00:00&end=2026-07-02T00:00")
+    assert r.status_code == 200
+    assert "+00:00" in r.json()["start"]  # naive input anchored to UTC
+
+
+def test_pull_range_requires_both_ends(client):
+    assert client.post("/api/pull?mode=sim&start=2026-07-01T00:00:00Z").status_code == 400
+
+
+def test_pull_range_rejects_start_after_end(client):
+    r = client.post("/api/pull?mode=sim"
+                    "&start=2026-07-08T00:00:00Z&end=2026-07-01T00:00:00Z")
+    assert r.status_code == 400
+
+
+def test_pull_range_rejects_bad_datetime(client):
+    r = client.post("/api/pull?mode=sim&start=not-a-date&end=2026-07-01T00:00:00Z")
+    assert r.status_code == 400
+
+
+def test_pull_range_rejects_oversized_span(client):
+    r = client.post("/api/pull?mode=sim"
+                    "&start=2024-01-01T00:00:00Z&end=2026-01-01T00:00:00Z")
+    assert r.status_code == 400
+
+
+def test_tracks_carry_ra_deg(client):
+    r = client.get("/api/tracks?view=real")
+    assert r.status_code == 200
+    tracks = r.json()["tracks"]
+    assert tracks and all("ra_deg" in t for t in tracks)  # RAAN for the bearing needle
+
+
+def test_scheduler_seeds_on_first_tick(tmp_path):
+    """The background loop runs run_once on its first tick and seeds the store.
+    Deterministic: one tick, then stop. Covers refresh.Refresher.scheduler."""
+    import asyncio
+
+    from psirens.refresh import Refresher
+    from psirens.security import SingleFlight
+    from psirens.store import Store as _Store
+
+    refresher = Refresher(_cfg(tmp_path), _Store(str(tmp_path)),
+                          [DemoElsetSource()], SingleFlight(), hrr=None)
+
+    async def run() -> None:
+        stop = asyncio.Event()
+        task = asyncio.create_task(refresher.scheduler(stop))
+        await asyncio.sleep(0.15)   # let the first tick complete run_once
+        stop.set()
+        await asyncio.wait_for(task, timeout=2)
+
+    asyncio.run(run())
+    assert refresher.store.load().get("objects")  # first tick seeded the belt

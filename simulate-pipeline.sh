@@ -1,17 +1,49 @@
 #!/bin/sh
-# Reproduce the platform's test stage against the ACTUAL upload artefact,
-# including its added CI file and GITLAB_CI=true, and verify coverage.xml.
-# sh-portable (the platform runs under BusyBox sh, not bash).
+# Reproduce the App Store python template test stage EXACTLY as the platform
+# runs it: install ONLY requirements.txt (never requirements-dev.txt), then run
+# the platform's exact pytest command. A divergence here once let a green local
+# run fail the platform with `pytest: command not found`; this must not drift.
 set -eu
-VERSION="${1:-1.0.0}"
-sh package-appstore.sh "$VERSION"
 SIM="$(mktemp -d)"
-unzip -q "psirens-appstore-${VERSION}.zip" -d "$SIM"
-printf 'stages: [test]\n' > "$SIM/.gitlab-ci.yml"   # platform commits its own
+cp -r Dockerfile requirements.txt pyproject.toml sonar-project.properties src tests "$SIM"/
 cd "$SIM"
-python -m venv .venv
+python3 -m venv .venv
 . .venv/bin/activate
-pip install --quiet -r requirements.txt -r requirements-dev.txt
-GITLAB_CI=true python -m pytest -q
+pip install -r requirements.txt            # platform step 1 (this file only)
+pytest --cov --cov-report=xml:coverage.xml  # platform step 2 (exact command)
 test -s coverage.xml || { echo "FAIL: coverage.xml missing/empty"; exit 1; }
-echo "SIMULATION GREEN: tests passed and coverage.xml present at $SIM/coverage.xml"
+# SonarQube python:S3776 proxy: no function may exceed cognitive complexity 15.
+# The platform gate flags this server-side; check it here so a green local run
+# cannot pass a smell the gate will reject (a real 1.4.0 miss on parse_hrr).
+pip install -q cognitive_complexity >/dev/null 2>&1
+python3 - <<'PY' || { echo "FAIL: cognitive complexity over 15 (see above)"; exit 1; }
+import ast, glob, sys
+from cognitive_complexity.api import get_cognitive_complexity
+over = []
+for f in sorted(glob.glob("src/psirens/*.py")):
+    for n in ast.walk(ast.parse(open(f).read())):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            cc = get_cognitive_complexity(n)
+            if cc > 15:
+                over.append(f"{f}:{n.lineno} {n.name} cc={cc}")
+if over:
+    print("\n".join(over)); sys.exit(1)
+print("cognitive complexity OK (all functions <=15)")
+PY
+# SonarQube JS "prefer globalThis over window" (S6643) proxy: eslint-plugin-sonarjs
+# does not carry this rule, so grep the served SPA for window.* member access.
+if grep -nE "\bwindow\." src/psirens/static/index.html; then
+  echo "FAIL: use globalThis instead of window.* in the SPA (SonarQube S6643)"; exit 1
+fi
+# SonarQube Web:S6819 proxy: prefer native elements over ARIA landmark roles
+# (region->section, banner->header, navigation->nav, main->main, etc.). The
+# eslint proxy cannot parse HTML a11y, so grep the SPA for these roles.
+if grep -nE 'role="(region|banner|navigation|main|contentinfo|complementary|form)"' src/psirens/static/index.html; then
+  echo "FAIL: use the native element instead of the ARIA role above (SonarQube S6819)"; exit 1
+fi
+# SonarQube "prefer dataset over getAttribute" proxy: a data-* attribute read
+# via getAttribute should use element.dataset.* instead.
+if grep -nE 'getAttribute\("data-' src/psirens/static/index.html; then
+  echo "FAIL: use element.dataset.* instead of getAttribute(\"data-...\") above (SonarQube prefer-dataset)"; exit 1
+fi
+echo "SIMULATION GREEN (matches platform): tests passed, coverage.xml at $SIM/coverage.xml"

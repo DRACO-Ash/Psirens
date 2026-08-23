@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -21,9 +22,12 @@ from typing import Protocol
 
 import httpx
 
-from .astro import sub_longitude_deg
+from sgp4.api import jday
+
+from .astro import gmst_rad, sub_longitude_deg
 from .config import Config
 from .models import DataMode, ManualElsetIn
+from .store import resilient_write
 
 _log = logging.getLogger("psirens.sources")
 
@@ -33,6 +37,24 @@ def _norm_mode(raw: str | None) -> DataMode:
         return DataMode((raw or "REAL").upper())
     except ValueError:
         return DataMode.REAL
+
+
+def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
+                eccentricity: float, raan_deg: float, argp_deg: float,
+                mean_anomaly_deg: float, mean_motion_rev_per_day: float,
+                bstar: float, classification: str, intl_desig: str = "") -> dict:
+    """Latest mean elements retained per object so conjunctions and TLE export
+    can be computed later. This is the only place the full element set survives
+    into the store; the plot itself needs only sub-longitude and inclination."""
+    return {
+        "sat_no": str(sat_no),
+        "epoch": epoch.astimezone(timezone.utc).isoformat(),
+        "inclination_deg": inclination_deg, "eccentricity": eccentricity,
+        "raan_deg": raan_deg, "argp_deg": argp_deg,
+        "mean_anomaly_deg": mean_anomaly_deg,
+        "mean_motion_rev_per_day": mean_motion_rev_per_day, "bstar": bstar,
+        "classification": classification, "intl_desig": intl_desig,
+    }
 
 
 def _sample_from_elements(
@@ -66,7 +88,7 @@ def _sample_from_elements(
 
 
 class ElsetSource(Protocol):
-    def fetch(self, start: datetime, end: datetime) -> dict[str, dict]:
+    def fetch(self, start: datetime, end: datetime, /) -> dict[str, dict]:
         """Return object_id -> record with meta and a `samples` list."""
         ...
 
@@ -74,14 +96,25 @@ class ElsetSource(Protocol):
 # --------------------------------------------------------------------------
 # UDL
 # --------------------------------------------------------------------------
+def _udl_ts(dt: datetime) -> str:
+    """Format an instant the way the UDL epoch range filter expects: microsecond
+    precision with a trailing Z. Python's isoformat() emits a '+00:00' offset,
+    which the tenant accepts (200) but matches against nothing, yielding an empty
+    result. Verified against tenant data: the Z form returns records.
+    """
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+
+
 class UDLElsetSource:
     """Pulls element sets from UDL.
 
-    WARNING (owner action): every wire detail below is TBC. The LEARNED
-    register only verifies /udl/eoobservation behaviour; the Accept-header
-    quirk and the 10,000 firstResult cap are NOT assumed to apply to /udl/elset.
-    Confirm the endpoint path, the epoch range parameter, the Accept header,
-    and which labelled field carries the intended target against the tenant.
+    Verified against tenant /udl/elset responses: field names (satNo, epoch,
+    inclination, eccentricity, raan, argOfPerigee, meanAnomaly, meanMotion,
+    bStar, dataMode, classificationMarking, origObjectId, source) map directly,
+    and the epoch range filter requires the trailing-Z form (see _udl_ts).
+    Still TBC: which labelled field carries the intended target (UDL_TARGET_FIELD
+    default 'tags'); this tenant's records carry no such field, so target links
+    stay empty until confirmed.
     """
 
     def __init__(self, cfg: Config, client: httpx.Client | None = None):
@@ -97,10 +130,7 @@ class UDLElsetSource:
         headers = {"Accept": self.cfg.udl_accept, **self._auth_header()}
         url = self.cfg.udl_base_url.rstrip("/") + self.cfg.udl_elset_path
         params = {
-            self.cfg.udl_epoch_param: (
-                f"{start.astimezone(timezone.utc).isoformat()}.."
-                f"{end.astimezone(timezone.utc).isoformat()}"
-            )
+            self.cfg.udl_epoch_param: f"{_udl_ts(start)}..{_udl_ts(end)}"
         }
         try:
             resp = client.get(url, headers=headers, params=params)
@@ -128,16 +158,16 @@ class UDLElsetSource:
                 continue
             try:
                 epoch = datetime.fromisoformat(str(row["epoch"]).replace("Z", "+00:00"))
-                sample = _sample_from_elements(
-                    inclination_deg=float(row["inclination"]),
-                    eccentricity=float(row.get("eccentricity", 0.0)),
-                    raan_deg=float(row.get("raan", 0.0)),
-                    argp_deg=float(row.get("argOfPerigee", 0.0)),
-                    mean_anomaly_deg=float(row.get("meanAnomaly", 0.0)),
-                    mean_motion_rev_per_day=float(row["meanMotion"]),
-                    bstar=float(row.get("bStar", 0.0)),
-                    epoch=epoch,
-                )
+                els = {
+                    "inclination_deg": float(row["inclination"]),
+                    "eccentricity": float(row.get("eccentricity", 0.0)),
+                    "raan_deg": float(row.get("raan", 0.0)),
+                    "argp_deg": float(row.get("argOfPerigee", 0.0)),
+                    "mean_anomaly_deg": float(row.get("meanAnomaly", 0.0)),
+                    "mean_motion_rev_per_day": float(row["meanMotion"]),
+                    "bstar": float(row.get("bStar", 0.0)),
+                }
+                sample = _sample_from_elements(epoch=epoch, **els)
             except (KeyError, ValueError, TypeError):
                 continue
             if sample is None:
@@ -152,6 +182,12 @@ class UDLElsetSource:
                 "samples": [],
             })
             rec["samples"].append(sample)
+            el = _elset_dict(sat_no=oid, epoch=epoch,
+                             classification=str(row.get("classificationMarking", "U")),
+                             intl_desig=str(row.get("origObjectId", "") or ""), **els)
+            prev = rec.get("elset")
+            if prev is None or el["epoch"] >= prev["epoch"]:
+                rec["elset"] = el
         return out
 
 
@@ -171,11 +207,7 @@ class ManualElsetSource:
             return []
 
     def _save(self, items: list[dict]) -> None:
-        os.makedirs(self.data_dir, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self.data_dir, suffix=".tmp")
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(items, fh)
-        os.replace(tmp, self.path)
+        resilient_write(self.data_dir, self.path, json.dumps(items))
 
     def add(self, elset: ManualElsetIn, now: datetime | None = None) -> None:
         now = now or datetime.now(timezone.utc)
@@ -203,7 +235,7 @@ class ManualElsetSource:
             self._save(active)  # prune expired
         return active
 
-    def fetch(self, start: datetime, end: datetime) -> dict[str, dict]:
+    def fetch(self, _start: datetime, _end: datetime) -> dict[str, dict]:
         out: dict[str, dict] = {}
         for i in self.list_active():
             epoch = datetime.fromisoformat(i["epoch"])
@@ -227,6 +259,15 @@ class ManualElsetSource:
                 "origin": "MANUAL",
                 "target": i.get("target"),
                 "samples": [sample],
+                "elset": _elset_dict(
+                    sat_no=i["object_id"], epoch=epoch,
+                    inclination_deg=i["inclination_deg"], eccentricity=i["eccentricity"],
+                    raan_deg=i["raan_deg"], argp_deg=i["argp_deg"],
+                    mean_anomaly_deg=i["mean_anomaly_deg"],
+                    mean_motion_rev_per_day=i["mean_motion_rev_per_day"],
+                    bstar=i.get("bstar", 0.0),
+                    classification=i["classification_marking"],
+                    intl_desig=str(i["object_id"])),
             }
         return out
 
@@ -242,7 +283,7 @@ class DemoElsetSource:
 
     _GEO_MM = 1.0027379093  # sidereal rev/day
 
-    def fetch(self, start: datetime, end: datetime) -> dict[str, dict]:
+    def fetch(self, _start: datetime, end: datetime) -> dict[str, dict]:
         now = end
         out: dict[str, dict] = {}
 
@@ -278,7 +319,26 @@ class DemoElsetSource:
             "77777", "INSPECTOR-EX", "EXERCISE", "DEMO", "43683",
             self._span(now, 20, 133.0, 1.5, 0.35),
         )
+        for oid, rec in out.items():  # synthesise a GEO elset so offline works
+            head = rec["samples"][-1]
+            rec["elset"] = self._demo_elset(
+                oid, head["sub_lon_deg"], head["inclination_deg"],
+                datetime.fromisoformat(head["epoch"]))
         return out
+
+    @staticmethod
+    def _demo_elset(oid: str, lon: float, inc: float, epoch: datetime) -> dict:
+        """Approximate mean elements placing a circular GEO object near `lon`:
+        with raan=argp=0 and e~0, sub-longitude ~= mean anomaly minus GMST."""
+        jd, fr = jday(epoch.year, epoch.month, epoch.day, epoch.hour,
+                      epoch.minute, epoch.second + epoch.microsecond / 1e6)
+        gmst_deg = math.degrees(gmst_rad(jd + fr))
+        mean_anom = (lon + gmst_deg) % 360.0
+        return _elset_dict(
+            sat_no=oid, epoch=epoch, inclination_deg=inc, eccentricity=0.0002,
+            raan_deg=0.0, argp_deg=0.0, mean_anomaly_deg=mean_anom,
+            mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
+            classification="U", intl_desig="")
 
     def _span(self, now: datetime, days: int, lon0: float, inc: float,
               rate: float) -> list[dict]:

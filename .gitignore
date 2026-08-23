@@ -11,3 +11,11 @@ coverage.xml
 /tmp/
 *.tmp
 dist/
+
+
+# build artifacts and local-only
+*.zip
+.ruff_cache/
+shots/
+node_modules/
+credentials.ini

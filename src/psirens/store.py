@@ -11,7 +11,9 @@ Contracts held here:
 
 from __future__ import annotations
 
+import errno
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -21,6 +23,41 @@ from datetime import datetime, timedelta, timezone
 from .models import SCHEMA_VERSION
 
 _LOCK = threading.Lock()  # single-writer per process
+_log = logging.getLogger("psirens.store")
+
+# errnos raised by volumes that do not implement rename (seen on some
+# Kubernetes NFS/CephFS/CSI mounts): "Function not implemented" and kin.
+_NO_RENAME = (errno.ENOSYS, errno.EINVAL, errno.ENOTSUP)
+
+
+def resilient_write(data_dir: str, path: str, text: str) -> None:
+    """Write text to path durably.
+
+    Atomic (temp file then rename) where the filesystem supports it, which is
+    the safe default on normal disks and tmpfs. On volumes that refuse rename
+    (ENOSYS/EINVAL/ENOTSUP), fall back to a direct write so the app still
+    functions; readers tolerate a rare partial read by returning the empty
+    default and succeeding on the next read.
+    """
+    os.makedirs(data_dir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=data_dir, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        try:
+            os.replace(tmp, path)  # atomic where the filesystem supports rename
+        except OSError as exc:
+            if exc.errno not in _NO_RENAME:
+                raise
+            _log.warning("atomic rename unsupported on %s (errno %s: %s); "
+                         "writing directly", data_dir, exc.errno, exc.strerror)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def _iso(dt: datetime) -> str:
@@ -33,6 +70,30 @@ def _parse(dt: str) -> datetime:
     return datetime.fromisoformat(dt)
 
 
+_META_KEYS = ("name", "data_mode", "classification_marking",
+              "source", "origin", "target")
+
+
+def _copy_meta(existing: dict, rec: dict) -> None:
+    """Latest pull wins for display fields, but a missing field never blanks
+    an existing value."""
+    for key in _META_KEYS:
+        val = rec.get(key)
+        if val is not None:
+            existing[key] = val
+
+
+def _retain_elset(existing: dict, rec: dict) -> None:
+    """Keep the newest full element set (by epoch) so conjunctions and TLE
+    export always use the freshest mean elements."""
+    in_el = rec.get("elset")
+    if in_el is None:
+        return
+    cur = existing.get("elset")
+    if cur is None or in_el.get("epoch", "") >= cur.get("epoch", ""):
+        existing["elset"] = in_el
+
+
 class Store:
     def __init__(self, data_dir: str):
         self.data_dir = data_dir
@@ -40,15 +101,8 @@ class Store:
 
     # -- durability -------------------------------------------------------
     def _write_atomic(self, payload: dict) -> None:
-        os.makedirs(self.data_dir, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self.data_dir, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, separators=(",", ":"))
-            os.replace(tmp, self.path)  # atomic on the same filesystem
-        finally:
-            if os.path.exists(tmp):
-                os.remove(tmp)
+        resilient_write(self.data_dir, self.path,
+                        json.dumps(payload, separators=(",", ":")))
 
     def load(self) -> dict:
         try:
@@ -90,6 +144,27 @@ class Store:
             self._write_atomic(data)
             return True
 
+    def retain_only(self, ids: set[str], *, keep_origins: tuple[str, ...] = (),
+                    keep_nonreal: bool = True) -> int:
+        """Drop every object whose id is not in `ids`, except those whose origin
+        is in keep_origins or (when keep_nonreal) whose data_mode is not REAL.
+        The HRR set is a REAL-world construct, so this prune only ever removes
+        REAL objects that dropped off the list; SIMULATED/TEST/EXERCISE data
+        that an operator pulled for a scenario is never touched. Returns the
+        number removed."""
+        with _LOCK:
+            data = self.load()
+            objects = data.setdefault("objects", {})
+            drop = [o for o, r in objects.items()
+                    if o not in ids and r.get("origin") not in keep_origins
+                    and not (keep_nonreal and r.get("data_mode", "REAL") != "REAL")]
+            if not drop:
+                return 0
+            for o in drop:
+                del objects[o]
+            self._write_atomic(data)
+            return len(drop)
+
     # -- merge ------------------------------------------------------------
     def merge_samples(
         self,
@@ -117,14 +192,8 @@ class Store:
                 if existing is None:
                     existing = {"samples": []}
                     objects[oid] = existing
-                # meta: latest pull wins for display fields, but never blanks
-                for key in (
-                    "name", "data_mode", "classification_marking",
-                    "source", "origin", "target",
-                ):
-                    val = rec.get(key)
-                    if val is not None:
-                        existing[key] = val
+                _copy_meta(existing, rec)  # display fields; latest non-blank wins
+                _retain_elset(existing, rec)  # newest full element set
                 by_epoch = {s["epoch"]: s for s in existing["samples"]}
                 for s in rec.get("samples", []):
                     if s["epoch"] not in by_epoch:

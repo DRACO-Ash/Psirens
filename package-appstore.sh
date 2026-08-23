@@ -6,7 +6,7 @@ VERSION="${1:-1.0.0}"
 OUT="psirens-appstore-${VERSION}.zip"
 rm -f "$OUT"
 zip -r "$OUT" \
-  Dockerfile .dockerignore requirements.txt requirements-dev.txt \
+  Dockerfile .dockerignore requirements.txt requirements-runtime.txt \
   pyproject.toml sonar-project.properties README.md \
   src tests \
   -x '*/__pycache__/*' '*.pyc' >/dev/null

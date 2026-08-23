@@ -10,8 +10,8 @@ __pycache__/
 .gitignore
 .env
 .env.*
-requirements-dev.txt
 simulate-pipeline.sh
 package-appstore.sh
 README.md
 docs/
+docker-compose.yml

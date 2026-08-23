@@ -14,7 +14,12 @@ tenant without a code change.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, field
+
+# Default storage lives under the system temp dir resolved at runtime, not a
+# hardcoded world-writable path, and the store creates it with owner-only mode.
+_DEFAULT_DATA_DIR = os.path.join(tempfile.gettempdir(), "psirens-data")
 
 
 def _clean(value: str | None) -> str:
@@ -67,13 +72,22 @@ class Config:
     udl_target_field: str = "tags"  # TBC: which labelled field carries target
     udl_epoch_param: str = "epoch"
     udl_accept: str = "application/json"
+    # HRR list (JCO High Risk Register) pulled from UDL notifications.
+    udl_notification_path: str = "/udl/notification"
+    hrr_msg_type: str = "JCO-HRR-SATELLITES"
+    hrr_source: str = "JCO"
+    hrr_regime: str = "GEO"
+    hrr_lookback_hours: int = 6
+    hrr_refresh_seconds: int = 21600  # 6h cadence for the dynamic HRR list
+    conj_window_hours: int = 168  # closest-approach screening window (7 days)
+    scheduler_enabled: bool = True  # background refresh loop; off in tests
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
     def storage_dir(self) -> str:
         """Resolve at call time: explicit override/var, platform mount, default."""
         explicit = self.data_dir or _env("DATA_DIR")
         mount = _env("STORAGE_MOUNT_PATH")  # FILE_STORAGE add-on injects /data
-        return explicit or mount or "/tmp/psirens-data"
+        return explicit or mount or _DEFAULT_DATA_DIR
 
 
 def load_config() -> Config:
@@ -98,4 +112,12 @@ def load_config() -> Config:
         udl_target_field=_env("UDL_TARGET_FIELD", "tags"),
         udl_epoch_param=_env("UDL_EPOCH_PARAM", "epoch"),
         udl_accept=_env("UDL_ACCEPT", "application/json"),
+        udl_notification_path=_env("UDL_NOTIFICATION_PATH", "/udl/notification"),
+        hrr_msg_type=_env("HRR_MSG_TYPE", "JCO-HRR-SATELLITES"),
+        hrr_source=_env("HRR_SOURCE", "JCO"),
+        hrr_regime=_env("HRR_REGIME", "GEO"),
+        hrr_lookback_hours=int(_env("HRR_LOOKBACK_HOURS", "6") or "6"),
+        hrr_refresh_seconds=int(_env("HRR_REFRESH_SECONDS", "21600") or "21600"),
+        scheduler_enabled=_env_bool("SCHEDULER_ENABLED", default=True),
+        conj_window_hours=int(_env("CONJ_WINDOW_HOURS", "168") or "168"),
     )

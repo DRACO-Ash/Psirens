@@ -3,24 +3,31 @@
 Runtime contract (App Store): reads PORT (default 8080), binds 0.0.0.0 via the
 gunicorn CMD, returns 200 unauthenticated at `/` and `/healthz`, runs non-root.
 The operator Environment Variables tab must stay EMPTY for a code-defaults run.
+
+Handlers are module-level and read their dependencies from `request.app.state`,
+which keeps the create_app factory small and each unit independently testable.
 """
 
 from __future__ import annotations
 
-import hashlib
+import asyncio
 import json
 import logging
 import os
+import zlib
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from .astro import drift_deg_per_day
 from .config import Config, load_config
 from .models import VIEW_MODES, DataMode, ManualElsetIn
+from .conjunction import conjunctions_for
+from .hrr import HrrStore
 from .refresh import Refresher
 from .security import RateLimiter, SingleFlight, token_ok
 from .sources import DemoElsetSource, ManualElsetSource, UDLElsetSource
@@ -30,6 +37,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 _log = logging.getLogger("psirens")
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
+_PNG = "image/png"
+_RATE_LIMIT = "rate limit"
+_NOT_FOUND = "not found"
+
+# Served assets, whitelisted. Paths are precomputed from LITERAL filenames at
+# import, so a request never constructs a filesystem path from user input; the
+# request only supplies a dictionary key.
+_ASSET_MEDIA: dict[str, str] = {
+    "icon-512.png": _PNG,
+    "icon-192.png": _PNG,
+    "favicon-32.png": _PNG,
+    "apple-touch-icon.png": _PNG,
+    "psirens-banner.png": _PNG,
+    "manifest.webmanifest": "application/manifest+json",
+    "hrr-geo.json": "application/json",  # GEO subset of the JCO HRR list
+}
+_ASSET_PATHS: dict[str, str] = {name: os.path.join(_STATIC, name) for name in _ASSET_MEDIA}
 
 # Classification ranking so the banner shows the most restrictive marking present.
 _RANK = {"U": 0, "UNCLASSIFIED": 0, "CUI": 1, "C": 2, "S": 3, "TS": 4}
@@ -73,6 +97,7 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
             "target": rec.get("target"),
             "samples": samples,
             "drift_deg_per_day": drift_deg_per_day(pairs),
+            "ra_deg": (rec.get("elset") or {}).get("raan_deg"),
         })
     return {
         "view": view,
@@ -85,6 +110,257 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
         "count": len(tracks),
         "tracks": tracks,
     }
+
+
+# --------------------------------------------------------------------------
+# Cross-cutting helpers and dependencies (module-level; read app.state)
+# --------------------------------------------------------------------------
+def _err(status: int, desc: str) -> dict:
+    """One OpenAPI error-response entry; keeps the 'description' literal single."""
+    return {status: {"description": desc}}
+
+
+def _client_key(request: Request) -> str:
+    return request.client.host if request.client else "anon"
+
+
+def _cors(resp: Response, cfg: Config) -> Response:
+    if cfg.allowed_origin and cfg.allowed_origin != "*":
+        resp.headers["Access-Control-Allow-Origin"] = cfg.allowed_origin
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+        "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    )
+    resp.headers["X-Frame-Options"] = "DENY"
+    return resp
+
+
+def _global_gate(request: Request) -> None:
+    if not request.app.state.global_rl.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail=_RATE_LIMIT)
+
+
+def _require_token(request: Request,
+                   authorization: Annotated[str | None, Header()] = None) -> None:
+    cfg: Config = request.app.state.cfg
+    if not cfg.team_token:
+        return  # single-user local mode, auth off
+    given = (authorization or "").removeprefix("Bearer ").strip()
+    if not token_ok(given, cfg.team_token):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+# --------------------------------------------------------------------------
+# Route handlers
+# --------------------------------------------------------------------------
+def _index(request: Request) -> HTMLResponse:
+    with open(os.path.join(_STATIC, "index.html"), encoding="utf-8") as fh:
+        return _cors(HTMLResponse(fh.read()), request.app.state.cfg)
+
+
+def _favicon(request: Request) -> FileResponse:
+    resp = FileResponse(_ASSET_PATHS["favicon-32.png"], media_type=_PNG)
+    return _cors(resp, request.app.state.cfg)
+
+
+def _static_asset(request: Request, name: str) -> Response:
+    path = _ASSET_PATHS.get(name)  # value is a precomputed, trusted constant
+    if path is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    return _cors(FileResponse(path, media_type=_ASSET_MEDIA[name]), request.app.state.cfg)
+
+
+def _healthz(request: Request) -> JSONResponse:
+    # Liveness: the server is up and serving. Storage writability is reported
+    # as a degraded detail, NOT a 503, so a read-only pod filesystem cannot make
+    # the platform tear down an otherwise-healthy pod.
+    ok, detail = request.app.state.store.probe_write()
+    return JSONResponse({
+        "status": "ok",
+        "storage": "writable" if ok else "degraded",
+        "detail": detail,
+    })
+
+
+def _readyz(request: Request) -> dict:
+    refresher: Refresher = request.app.state.refresher
+    last = refresher.last_run.isoformat() if refresher.last_run else None
+    return {"status": "ready", "last_refresh": last}
+
+
+def _parse_modes(view: str, modes: str) -> set[DataMode]:
+    if not modes.strip():
+        return set(VIEW_MODES[view])
+    wanted: set[DataMode] = set()
+    for m in modes.split(","):
+        try:
+            wanted.add(DataMode(m.strip().upper()))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"bad mode {m!r}") from exc
+    return wanted
+
+
+def _tracks(request: Request, view: str = "combined", modes: str = "",
+            if_none_match: Annotated[str | None, Header()] = None) -> Response:
+    if view not in VIEW_MODES:
+        raise HTTPException(status_code=400, detail="unknown view")
+    cfg: Config = request.app.state.cfg
+    wanted = _parse_modes(view, modes)
+    payload = _tracks_payload(cfg, request.app.state.store, view, wanted)
+    body = json.dumps(payload, separators=(",", ":"))
+    # ETag is a CACHE KEY (not security): a non-crypto checksum of the stable
+    # content, so an unchanged dataset returns 304 even though generated_at moves.
+    stable = json.dumps(
+        {k: payload[k] for k in ("view", "classification_banner", "bounds",
+                                 "count", "tracks")},
+        separators=(",", ":"), sort_keys=True,
+    )
+    etag = '"' + format(zlib.crc32(stable.encode()) & 0xFFFFFFFF, "08x") + '"'
+    if if_none_match == etag:
+        return _cors(Response(status_code=304), cfg)
+    resp = Response(content=body, media_type="application/json")
+    resp.headers["ETag"] = etag
+    return _cors(resp, cfg)
+
+
+def _meta(request: Request) -> JSONResponse:
+    cfg: Config = request.app.state.cfg
+    refresher: Refresher = request.app.state.refresher
+    last = refresher.last_run.isoformat() if refresher.last_run else None
+    return _cors(JSONResponse({
+        "classification_default": "UNCLASSIFIED",
+        "views": {k: [m.value for m in v] for k, v in VIEW_MODES.items()},
+        "refresh_seconds": cfg.refresh_seconds,
+        "retention_days": cfg.retention_days,
+        "last_refresh": last,
+        "manual_count": len(request.app.state.manual.list_active()),
+    }), cfg)
+
+
+def _add_manual(request: Request, elset: ManualElsetIn) -> JSONResponse:
+    if not request.app.state.strict_rl.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail=_RATE_LIMIT)
+    request.app.state.manual.add(elset)
+    request.app.state.refresher.merge_one(request.app.state.manual)  # deterministic
+    return _cors(JSONResponse({"status": "added", "object_id": elset.object_id}),
+                 request.app.state.cfg)
+
+
+def _del_manual(request: Request, object_id: str) -> JSONResponse:
+    if not request.app.state.manual.remove(object_id):
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    request.app.state.store.remove_object(object_id)  # drop from the plot immediately
+    return _cors(JSONResponse({"status": "removed", "object_id": object_id}),
+                 request.app.state.cfg)
+
+
+def _refresh(request: Request) -> JSONResponse:
+    if not request.app.state.strict_rl.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail=_RATE_LIMIT)
+    return _cors(JSONResponse(request.app.state.refresher.run_once(force_hrr=True)),
+                 request.app.state.cfg)
+
+
+def _parse_dt(raw: str) -> datetime:
+    """Parse an ISO datetime; a naive value is treated as UTC (operators work in
+    Zulu). Raises ValueError on anything unparseable."""
+    dt = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _resolve_window(q, now: datetime) -> tuple[datetime, datetime]:
+    """Resolve the pull window from the query: an explicit start+end scenario
+    range if both are given, else a relative `hours` lookback ending now."""
+    start_s, end_s = q.get("start"), q.get("end")
+    has_start, has_end = bool(start_s), bool(end_s)
+    if has_start != has_end:
+        raise HTTPException(status_code=400, detail="start and end must both be set")
+    if has_start and has_end:
+        try:
+            start, end = _parse_dt(start_s), _parse_dt(end_s)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="bad datetime") from exc
+        if start >= end:
+            raise HTTPException(status_code=400, detail="start must be before end")
+        if end - start > timedelta(days=366):
+            raise HTTPException(status_code=400, detail="range exceeds 366 days")
+        return start, end
+    try:
+        hours = int(q.get("hours", "24"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="hours must be an integer") from exc
+    hours = max(1, min(hours, 24 * 366))  # 1 hour .. 1 year
+    return now - timedelta(hours=hours), now
+
+
+def _pull(request: Request) -> JSONResponse:
+    """Operator-defined pull. mode in {real, sim, combined}. Window is either an
+    explicit start+end scenario range or a relative `hours` lookback. Rate-limited
+    like refresh."""
+    if not request.app.state.strict_rl.allow(_client_key(request)):
+        raise HTTPException(status_code=429, detail=_RATE_LIMIT)
+    q = request.query_params
+    mode = q.get("mode", "real").strip().lower()
+    if mode not in VIEW_MODES:
+        raise HTTPException(status_code=400, detail="unknown mode")
+    start, end = _resolve_window(q, datetime.now(timezone.utc))
+    result = request.app.state.refresher.pull_window(mode=mode, start=start, end=end)
+    return _cors(JSONResponse(result), request.app.state.cfg)
+
+
+def _conjunctions(request: Request) -> JSONResponse:
+    """Closest approach and TLEs for the target and its +/-10deg neighbours.
+    On-demand: computed when an object is selected, not on every refresh."""
+    cfg = request.app.state.cfg
+    target = request.query_params.get("target", "").strip()
+    if not target:
+        return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
+    data = request.app.state.store.load()
+    payload = conjunctions_for(data, target, window_hours=cfg.conj_window_hours)
+    return _cors(JSONResponse(payload), cfg)
+
+
+def _hrr(request: Request) -> JSONResponse:
+    """Current dynamic HRR GEO list (satNo -> name, country, rank) plus its
+    marking, source and generation time. The SPA joins tracks to this and plots
+    HRR objects only."""
+    return _cors(JSONResponse(request.app.state.hrr.as_payload()),
+                 request.app.state.cfg)
+
+
+# --------------------------------------------------------------------------
+# Lifespan and factory
+# --------------------------------------------------------------------------
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    store: Store = app.state.store
+    refresher: Refresher = app.state.refresher
+    ok, detail = store.probe_write()
+    _log.info("storage boot verdict: %s (%s)", "WRITABLE" if ok else "UNWRITABLE", detail)
+    # Seed and refresh in the background. Startup must NEVER block on a source:
+    # a slow or unreachable UDL host must not stall readiness and get the pod
+    # torn down. The scheduler runs its first refresh immediately, off the loop.
+    stop = asyncio.Event()
+    task = (asyncio.create_task(refresher.scheduler(stop))
+            if app.state.cfg.scheduler_enabled else None)
+    try:
+        yield
+    finally:
+        stop.set()
+        if task is not None:
+            task.cancel()
+
+
+def _build_sources(cfg: Config, http_client: httpx.Client | None,
+                   manual: ManualElsetSource) -> list:
+    sources: list = []
+    if cfg.udl_enabled:
+        sources.append(UDLElsetSource(cfg, client=http_client))
+    sources.append(manual)
+    if cfg.demo_mode or not cfg.udl_enabled:
+        sources.append(DemoElsetSource())
+    return sources
 
 
 def create_app(cfg: Config | None = None,
@@ -101,184 +377,46 @@ def create_app(cfg: Config | None = None,
 
     store = Store(cfg.storage_dir())
     manual = ManualElsetSource(cfg.storage_dir())
+    hrr = HrrStore(cfg, http_client=http_client,
+                   static_fallback=_ASSET_PATHS["hrr-geo.json"])
     if sources is None:
-        sources = []
-        if cfg.udl_enabled:
-            sources.append(UDLElsetSource(cfg, client=http_client))
-        sources.append(manual)
-        if cfg.demo_mode or not cfg.udl_enabled:
-            sources.append(DemoElsetSource())
-    flight = SingleFlight()
-    refresher = Refresher(cfg, store, sources, flight)
-    global_rl = RateLimiter(limit=120, window_s=60.0)
-    strict_rl = RateLimiter(limit=6, window_s=60.0)
+        sources = _build_sources(cfg, http_client, manual)
+    refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        import asyncio
-        ok, detail = store.probe_write()
-        _log.info("storage boot verdict: %s (%s)", "WRITABLE" if ok else "UNWRITABLE", detail)
-        refresher.run_once()  # seed the store immediately so `/` is never empty
-        if cfg.udl_enabled:
-            n = len(store.load().get("objects", {}))
-            if n == 0:
-                _log.warning(
-                    "UDL enabled but first refresh added 0 objects; the demo "
-                    "belt is OFF while UDL_BASE_URL is set, so the plot will be "
-                    "empty. Verify against the tenant: UDL_ELSET_PATH=%s, "
-                    "UDL_ACCEPT=%s, UDL_EPOCH_PARAM=%s, UDL_TARGET_FIELD=%s, "
-                    "and the UDL_USER/UDL_PASSWORD credentials.",
-                    cfg.udl_elset_path, cfg.udl_accept,
-                    cfg.udl_epoch_param, cfg.udl_target_field,
-                )
-            else:
-                _log.info("UDL first refresh: %d objects in store", n)
-        stop = asyncio.Event()
-        task = asyncio.create_task(refresher.scheduler(stop))
-        try:
-            yield
-        finally:
-            stop.set()
-            task.cancel()
-
-    app = FastAPI(title="PSIRENS", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="PSIRENS", version="1.4.14", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual
     app.state.refresher = refresher
+    app.state.hrr = hrr
+    app.state.global_rl = RateLimiter(limit=120, window_s=60.0)
+    app.state.strict_rl = RateLimiter(limit=6, window_s=60.0)
 
-    def _client_key(request: Request) -> str:
-        return request.client.host if request.client else "anon"
-
-    async def _global_gate(request: Request):
-        if not global_rl.allow(_client_key(request)):
-            raise HTTPException(status_code=429, detail="rate limit")
-
-    def _require_token(authorization: str | None = Header(default=None)):
-        if not cfg.team_token:
-            return  # single-user local mode, auth off
-        given = (authorization or "").removeprefix("Bearer ").strip()
-        if not token_ok(given, cfg.team_token):
-            raise HTTPException(status_code=401, detail="unauthorized")
-
-    def _cors(resp: Response) -> Response:
-        if cfg.allowed_origin and cfg.allowed_origin != "*":
-            resp.headers["Access-Control-Allow-Origin"] = cfg.allowed_origin
-        resp.headers["Content-Security-Policy"] = (
-            "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
-            "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
-            "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
-        )
-        resp.headers["X-Frame-Options"] = "DENY"
-        return resp
-
-    # -- health (unauthenticated) ----------------------------------------
-    @app.get("/healthz")
-    def healthz():
-        ok, detail = store.probe_write()
-        if ok:
-            return JSONResponse({"status": "ok", "data_dir": detail})
-        return JSONResponse({"status": "unwritable", "detail": detail}, status_code=503)
-
-    @app.get("/readyz")
-    def readyz():
-        return {"status": "ready", "last_refresh":
-                refresher.last_run.isoformat() if refresher.last_run else None}
-
-    # -- SPA + data (open reads) -----------------------------------------
-    @app.get("/", response_class=HTMLResponse)
-    def index():
-        with open(os.path.join(_STATIC, "index.html"), encoding="utf-8") as fh:
-            return _cors(HTMLResponse(fh.read()))
-
-    # Icon and manifest assets (whitelisted; no path traversal).
-    _ASSETS = {
-        "icon-512.png": "image/png",
-        "icon-192.png": "image/png",
-        "favicon-32.png": "image/png",
-        "apple-touch-icon.png": "image/png",
-        "psirens-banner.png": "image/png",
-        "manifest.webmanifest": "application/manifest+json",
-    }
-
-    @app.get("/favicon.ico")
-    def favicon():
-        return _cors(FileResponse(os.path.join(_STATIC, "favicon-32.png"),
-                                  media_type="image/png"))
-
-    @app.get("/static/{name}")
-    def static_asset(name: str):
-        media = _ASSETS.get(name)
-        if media is None:
-            raise HTTPException(status_code=404, detail="not found")
-        return _cors(FileResponse(os.path.join(_STATIC, name), media_type=media))
-
-    @app.get("/api/tracks", dependencies=[Depends(_global_gate)])
-    def tracks(request: Request, view: str = "combined", modes: str = "",
-               if_none_match: str | None = Header(default=None)):
-        if view not in VIEW_MODES:
-            raise HTTPException(status_code=400, detail="unknown view")
-        if modes.strip():
-            wanted = set()
-            for m in modes.split(","):
-                try:
-                    wanted.add(DataMode(m.strip().upper()))
-                except ValueError:
-                    raise HTTPException(status_code=400, detail=f"bad mode {m!r}")
-        else:
-            wanted = set(VIEW_MODES[view])
-        payload = _tracks_payload(cfg, store, view, wanted)
-        body = json.dumps(payload, separators=(",", ":"))
-        # ETag is a CACHE KEY (not security): hash stable content only, so an
-        # unchanged dataset returns 304 even though generated_at advances.
-        stable = json.dumps(
-            {k: payload[k] for k in ("view", "classification_banner", "bounds",
-                                     "count", "tracks")},
-            separators=(",", ":"), sort_keys=True,
-        )
-        etag = '"' + hashlib.sha1(stable.encode()).hexdigest() + '"'  # noqa: S324
-        if if_none_match == etag:
-            return _cors(Response(status_code=304))
-        resp = Response(content=body, media_type="application/json")
-        resp.headers["ETag"] = etag
-        return _cors(resp)
-
-    @app.get("/api/meta")
-    def meta():
-        return _cors(JSONResponse({
-            "classification_default": "UNCLASSIFIED",
-            "views": {k: [m.value for m in v] for k, v in VIEW_MODES.items()},
-            "refresh_seconds": cfg.refresh_seconds,
-            "retention_days": cfg.retention_days,
-            "last_refresh": refresher.last_run.isoformat() if refresher.last_run else None,
-            "manual_count": len(manual.list_active()),
-        }))
-
-    # -- state-changing (token-gated + strict rate limit) ----------------
-    @app.post("/api/manual-elset", dependencies=[Depends(_require_token)])
-    def add_manual(elset: ManualElsetIn, request: Request):
-        if not strict_rl.allow(_client_key(request)):
-            raise HTTPException(status_code=429, detail="rate limit")
-        manual.add(elset)
-        refresher.merge_one(manual)  # deterministic, not single-flight
-        return _cors(JSONResponse({"status": "added", "object_id": elset.object_id}))
-
-    @app.delete("/api/manual-elset/{object_id}", dependencies=[Depends(_require_token)])
-    def del_manual(object_id: str):
-        removed = manual.remove(object_id)
-        if not removed:
-            raise HTTPException(status_code=404, detail="not found")
-        store.remove_object(object_id)  # drop from the plot immediately
-        return _cors(JSONResponse({"status": "removed", "object_id": object_id}))
-
-    @app.post("/api/refresh", dependencies=[Depends(_require_token)])
-    def refresh(request: Request):
-        if not strict_rl.allow(_client_key(request)):
-            raise HTTPException(status_code=429, detail="rate limit")
-        return _cors(JSONResponse(refresher.run_once()))
-
+    _rl = _err(429, "rate limited")
+    app.add_api_route("/healthz", _healthz, methods=["GET"])
+    app.add_api_route("/readyz", _readyz, methods=["GET"])
+    app.add_api_route("/", _index, methods=["GET"])
+    app.add_api_route("/favicon.ico", _favicon, methods=["GET"])
+    app.add_api_route("/static/{name}", _static_asset, methods=["GET"],
+                      responses=_err(404, "unknown asset"))
+    app.add_api_route("/api/tracks", _tracks, methods=["GET"],
+                      dependencies=[Depends(_global_gate)],
+                      responses={**_err(400, "unknown view or mode"), **_rl})
+    app.add_api_route("/api/meta", _meta, methods=["GET"])
+    app.add_api_route("/api/hrr", _hrr, methods=["GET"],
+                      dependencies=[Depends(_global_gate)])
+    app.add_api_route("/api/conjunctions", _conjunctions, methods=["GET"],
+                      dependencies=[Depends(_global_gate)])
+    app.add_api_route("/api/manual-elset", _add_manual, methods=["POST"],
+                      dependencies=[Depends(_require_token)], responses=_rl)
+    app.add_api_route("/api/manual-elset/{object_id}", _del_manual, methods=["DELETE"],
+                      dependencies=[Depends(_require_token)], responses=_err(404, _NOT_FOUND))
+    app.add_api_route("/api/refresh", _refresh, methods=["POST"],
+                      dependencies=[Depends(_require_token)], responses=_rl)
+    app.add_api_route("/api/pull", _pull, methods=["POST"],
+                      dependencies=[Depends(_require_token)], responses=_rl)
     return app
 
 
-# ASGI entrypoint for gunicorn: `gunicorn --pythonpath src psirens.main:app`
+# ASGI entrypoint for gunicorn: `gunicorn psirens.main:app`
 app = create_app()
