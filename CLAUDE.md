@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (build 1.5.0)
+## Current state (build 1.5.1)
 
 Deployed and live. Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
@@ -115,8 +115,10 @@ or upload cycle to learn. Build compliant from the start.
 - `sonar-project.properties`: `sonar.sources=src` (the SPA `index.html` IS
   analysed for issues); the SPA is excluded from coverage and duplication only.
 
-Rules the local eslint proxy misses, each now grep-gated in
-`simulate-pipeline.sh`: `python:S3776` cognitive complexity cap 15 per function;
+Rules the local eslint proxy misses, each now gated in `simulate-pipeline.sh`:
+`python:S3776` cognitive complexity cap 15 per function; `python:S107` parameter
+cap 13 per function (this one failed the 1.5.0 upload on `_elset_dict` at 18;
+group related arguments into a value object rather than widening a signature);
 `S6643` prefer `globalThis` over `window`; `S6819` prefer the native element over
 an ARIA landmark role; prefer `element.dataset.x` over `getAttribute("data-x")`;
 HTML a11y landmark labelling; `no-negated-condition`; zero-fraction literals.
@@ -214,7 +216,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 
 ## Open items and pending decisions
 
-- Native UDL TLEs: SHIPPED in 1.5.0, pending live verification. Built and
+- Native UDL TLEs: SHIPPED in 1.5.1, pending live verification. (1.5.0 was
+  rejected by the SonarQube gate on `python:S107` and never deployed.) Built and
   verified offline against exporter-produced fixtures and a seeded store driven
   headlessly. NOT yet checked against live UDL: the build environment is denied
   egress to `unifieddatalibrary.com` by organisation policy (403 on CONNECT) and

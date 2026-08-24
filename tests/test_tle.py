@@ -12,9 +12,9 @@ from datetime import datetime, timedelta, timezone
 from psirens.conjunction import tle_for, tle_lines
 from psirens.sources import _elset_dict
 from psirens.tle import (CLASS_COMMERCIAL, CLASS_GOVERNMENT, CLASS_UNKNOWN,
-                         DEFAULT_PRIORITY, age_hours, candidates_of,
-                         classify_source, copy_denied_reason, is_copyable,
-                         parse_priority, satnum_of, select_elset,
+                         DEFAULT_PRIORITY, ElsetProvenance, age_hours,
+                         candidates_of, classify_source, copy_denied_reason,
+                         is_copyable, parse_priority, satnum_of, select_elset,
                          validate_native)
 
 EP = datetime(2026, 8, 6, tzinfo=timezone.utc)
@@ -26,8 +26,9 @@ def _el(oid="41836", *, epoch=EP, source="LeoLabs", marking="U",
         sat_no=oid, epoch=epoch, inclination_deg=0.05, eccentricity=0.0002,
         raan_deg=80.0, argp_deg=90.0, mean_anomaly_deg=100.0,
         mean_motion_rev_per_day=1.0027379, bstar=1e-5,
-        classification=marking, source=source,
-        line1=line1, line2=line2, rev_no=rev_no)
+        classification=marking,
+        provenance=ElsetProvenance(source=source, line1=line1, line2=line2,
+                                   rev_no=rev_no))
 
 
 def _real_lines(oid="41836"):

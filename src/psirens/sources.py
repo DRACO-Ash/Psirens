@@ -28,7 +28,7 @@ from .astro import gmst_rad, sub_longitude_deg
 from .config import Config
 from .models import DataMode, ManualElsetIn
 from .store import resilient_write
-from .tle import validate_native
+from .tle import ElsetProvenance, validate_native
 
 _log = logging.getLogger("psirens.sources")
 
@@ -44,19 +44,18 @@ def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
                 eccentricity: float, raan_deg: float, argp_deg: float,
                 mean_anomaly_deg: float, mean_motion_rev_per_day: float,
                 bstar: float, classification: str, intl_desig: str = "",
-                source: str = "", line1: str = "", line2: str = "",
-                rev_no: int | None = None, mean_motion_dot: float | None = None,
-                mean_motion_ddot: float | None = None,
-                ephem_type: int | None = None) -> dict:
+                provenance: ElsetProvenance = ElsetProvenance()) -> dict:
     """Latest mean elements retained per object so conjunctions and TLE export
     can be computed later. This is the only place the full element set survives
     into the store; the plot itself needs only sub-longitude and inclination.
 
-    `line1`/`line2` carry the provider's own native TLE where UDL supplied one
-    and it passed validation. They are stored verbatim: the whole point of
-    serving native lines is that nothing between the provider and the operator
-    reformats them. `source` is retained because it decides selection order
-    when several providers hold a fix for the same object.
+    `provenance` carries the provider's own native `line1`/`line2` where UDL
+    supplied a pair and it passed validation. Those are stored verbatim: the
+    whole point of serving native lines is that nothing between the provider
+    and the operator reformats them. The source is retained with them because
+    it decides selection order when several providers hold a fix for the same
+    object. The fields are grouped rather than passed loose so this signature
+    stays inside the SonarQube parameter cap (S107).
     """
     return {
         "sat_no": str(sat_no),
@@ -66,9 +65,12 @@ def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
         "mean_anomaly_deg": mean_anomaly_deg,
         "mean_motion_rev_per_day": mean_motion_rev_per_day, "bstar": bstar,
         "classification": classification, "intl_desig": intl_desig,
-        "source": source, "line1": line1, "line2": line2,
-        "rev_no": rev_no, "mean_motion_dot": mean_motion_dot,
-        "mean_motion_ddot": mean_motion_ddot, "ephem_type": ephem_type,
+        "source": provenance.source,
+        "line1": provenance.line1, "line2": provenance.line2,
+        "rev_no": provenance.rev_no,
+        "mean_motion_dot": provenance.mean_motion_dot,
+        "mean_motion_ddot": provenance.mean_motion_ddot,
+        "ephem_type": provenance.ephem_type,
     }
 
 
@@ -251,12 +253,13 @@ class UDLElsetSource:
             sat_no=oid, epoch=epoch,
             classification=str(row.get("classificationMarking", "U")),
             intl_desig=str(row.get("origObjectId", "") or ""),
-            source=str(row.get("source", "") or ""),
-            line1=line1, line2=line2,
-            rev_no=_opt_num(row, "revNo", int),
-            mean_motion_dot=_opt_num(row, "meanMotionDot", float),
-            mean_motion_ddot=_opt_num(row, "meanMotionDDot", float),
-            ephem_type=_opt_num(row, "ephemType", int),
+            provenance=ElsetProvenance(
+                source=str(row.get("source", "") or ""),
+                line1=line1, line2=line2,
+                rev_no=_opt_num(row, "revNo", int),
+                mean_motion_dot=_opt_num(row, "meanMotionDot", float),
+                mean_motion_ddot=_opt_num(row, "meanMotionDDot", float),
+                ephem_type=_opt_num(row, "ephemType", int)),
             **els)
 
 
@@ -336,7 +339,8 @@ class ManualElsetSource:
                     mean_motion_rev_per_day=i["mean_motion_rev_per_day"],
                     bstar=i.get("bstar", 0.0),
                     classification=i["classification_marking"],
-                    source=str(i.get("source", "MANUAL") or "MANUAL"),
+                    provenance=ElsetProvenance(
+                        source=str(i.get("source", "MANUAL") or "MANUAL")),
                     intl_desig=str(i["object_id"])),
             }
         return out
@@ -408,7 +412,8 @@ class DemoElsetSource:
             sat_no=oid, epoch=epoch, inclination_deg=inc, eccentricity=0.0002,
             raan_deg=0.0, argp_deg=0.0, mean_anomaly_deg=mean_anom,
             mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
-            classification="U", intl_desig="", source="DEMO")
+            classification="U", intl_desig="",
+            provenance=ElsetProvenance(source="DEMO"))
 
     def _span(self, now: datetime, days: int, lon0: float, inc: float,
               rate: float) -> list[dict]:

@@ -31,8 +31,29 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import NamedTuple
 
 _log = logging.getLogger("psirens.tle")
+
+
+class ElsetProvenance(NamedTuple):
+    """Where an element set came from, and the provider's own line pair.
+
+    Grouped into one value rather than passed as loose arguments: these fields
+    travel together, they are meaningless apart, and spreading them across a
+    builder's signature pushed it past the SonarQube parameter cap (S107).
+    Every field defaults to absent so a source that supplies none (demo,
+    manual) constructs an empty provenance rather than inventing values.
+    """
+
+    source: str = ""
+    line1: str = ""
+    line2: str = ""
+    rev_no: int | None = None
+    mean_motion_dot: float | None = None
+    mean_motion_ddot: float | None = None
+    ephem_type: int | None = None
+
 
 # Standard TLE line length. Providers sometimes pad or trim trailing spaces,
 # so lines are right-stripped before this is applied.

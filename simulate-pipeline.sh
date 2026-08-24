@@ -13,22 +13,30 @@ pip install -r requirements.txt            # platform step 1 (this file only)
 pytest --cov --cov-report=xml:coverage.xml  # platform step 2 (exact command)
 test -s coverage.xml || { echo "FAIL: coverage.xml missing/empty"; exit 1; }
 # SonarQube python:S3776 proxy: no function may exceed cognitive complexity 15.
-# The platform gate flags this server-side; check it here so a green local run
-# cannot pass a smell the gate will reject (a real 1.4.0 miss on parse_hrr).
+# Plus python:S107: no function may exceed 13 parameters. Both are flagged
+# server-side only; check them here so a green local run cannot pass a smell
+# the gate will reject (a real 1.4.0 miss on parse_hrr, and a real 1.5.0 miss
+# on _elset_dict at 18 parameters, which cost a full upload cycle).
 pip install -q cognitive_complexity >/dev/null 2>&1
-python3 - <<'PY' || { echo "FAIL: cognitive complexity over 15 (see above)"; exit 1; }
+python3 - <<'PY' || { echo "FAIL: cognitive complexity >15 or parameters >13 (see above)"; exit 1; }
 import ast, glob, sys
 from cognitive_complexity.api import get_cognitive_complexity
+MAX_CC, MAX_PARAMS = 15, 13
 over = []
 for f in sorted(glob.glob("src/psirens/*.py")):
     for n in ast.walk(ast.parse(open(f).read())):
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
             cc = get_cognitive_complexity(n)
-            if cc > 15:
-                over.append(f"{f}:{n.lineno} {n.name} cc={cc}")
+            if cc > MAX_CC:
+                over.append(f"{f}:{n.lineno} {n.name} cc={cc} (max {MAX_CC}, S3776)")
+            a = n.args
+            params = (len(a.posonlyargs) + len(a.args) + len(a.kwonlyargs)
+                      + (1 if a.vararg else 0) + (1 if a.kwarg else 0))
+            if params > MAX_PARAMS:
+                over.append(f"{f}:{n.lineno} {n.name} params={params} (max {MAX_PARAMS}, S107)")
 if over:
     print("\n".join(over)); sys.exit(1)
-print("cognitive complexity OK (all functions <=15)")
+print(f"cognitive complexity OK (<={MAX_CC}) and parameter counts OK (<={MAX_PARAMS})")
 PY
 # SonarQube JS "prefer globalThis over window" (S6643) proxy: eslint-plugin-sonarjs
 # does not carry this rule, so grep the served SPA for window.* member access.
