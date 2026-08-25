@@ -197,6 +197,13 @@ def _neighbour_entry(target_sat: Satrec, oid: str, obj: dict, start: datetime,
     return entry
 
 
+def _no_target(now: datetime, window_hours: int, detail: str) -> dict:
+    """The empty-but-valid payload. Always JSON, always with a stated reason:
+    the interface can render a cause rather than a shrug."""
+    return {"target": None, "neighbours": [], "window_hours": window_hours,
+            "computed_at": now.isoformat(), "detail": detail}
+
+
 def conjunctions_for(store_data: dict, target_id: str, *,
                      half_width_deg: float = 10.0, window_hours: int = 168,
                      cap: int = 20, now: datetime | None = None,
@@ -213,10 +220,17 @@ def conjunctions_for(store_data: dict, target_id: str, *,
     target = objects.get(target_id)
     t_el, t_tle, t_prov = tle_for(target or {}, priority)
     if target is None or t_el is None:
-        return {"target": None, "neighbours": [], "window_hours": window_hours,
-                "computed_at": now.isoformat(),
-                "detail": "target has no element set"}
-    target_sat = build_satrec(t_el)
+        return _no_target(now, window_hours,
+                          "target has no element set that can be propagated")
+    try:
+        target_sat = build_satrec(t_el)
+    except (ValueError, OverflowError, KeyError, TypeError) as exc:
+        # Neighbours have always been guarded this way; the target was not,
+        # so one malformed record took the whole request down as an
+        # unhandled 500 with a non-JSON body, which the SPA could only
+        # report as "service unavailable".
+        _log.warning("target %s has an unusable element set: %s", target_id, exc)
+        return _no_target(now, window_hours, "target element set is unusable")
     t_lon = _sub_lon(target)
     neighbours: list[dict] = []
     for oid, obj in objects.items():

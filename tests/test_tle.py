@@ -14,8 +14,8 @@ from psirens.sources import _elset_dict
 from psirens.tle import (CLASS_COMMERCIAL, CLASS_GOVERNMENT, CLASS_UNKNOWN,
                          DEFAULT_PRIORITY, ElsetProvenance, age_hours,
                          candidates_of, classify_source, copy_denied_reason,
-                         is_copyable, parse_priority, satnum_of, select_elset,
-                         validate_native)
+                         is_copyable, is_propagatable, parse_priority,
+                         satnum_of, select_elset, validate_native)
 
 EP = datetime(2026, 8, 6, tzinfo=timezone.utc)
 
@@ -262,3 +262,44 @@ def test_age_hours_measures_from_epoch():
     assert age_hours(_el(epoch=EP), now=EP + timedelta(hours=5)) == 5.0
     assert age_hours({}) is None
     assert age_hours({"epoch": "not-a-date"}) is None
+
+
+# -- unusable element sets are skipped, never propagated -----------------
+def _bad(**over):
+    el = _el()
+    el.update(over)
+    return el
+
+
+def test_is_propagatable_rejects_what_build_satrec_cannot_use():
+    assert is_propagatable(_el()) is True
+    assert is_propagatable({}) is False
+    assert is_propagatable(None) is False
+    assert is_propagatable("not a dict") is False
+    assert is_propagatable(_bad(epoch="not-a-date")) is False
+    assert is_propagatable(_bad(mean_motion_rev_per_day=None)) is False
+    assert is_propagatable(_bad(inclination_deg="abc")) is False
+    missing = {k: v for k, v in _el().items() if k != "raan_deg"}
+    assert is_propagatable(missing) is False
+
+
+def test_a_broken_candidate_never_costs_an_object_its_legacy_fix():
+    """Selection prefers per-source candidates, so a malformed one must not
+    shadow a usable legacy elset the object already had."""
+    obj = {"elset": _el(source="LeoLabs"),
+           "elset_candidates": {"EXO": {"epoch": "junk"}}}
+    chosen = select_elset(obj, DEFAULT_PRIORITY)
+    assert chosen is not None
+    assert chosen["source"] == "LeoLabs"
+
+
+def test_a_broken_candidate_is_skipped_for_a_usable_one():
+    obj = {"elset_candidates": {"EXO": {"epoch": "junk"},
+                                "LeoLabs": _el(source="LeoLabs")}}
+    assert select_elset(obj, DEFAULT_PRIORITY)["source"] == "LeoLabs"
+
+
+def test_an_object_whose_every_elset_is_broken_selects_nothing():
+    obj = {"elset": {}, "elset_candidates": {"EXO": {"epoch": "junk"}}}
+    assert select_elset(obj, DEFAULT_PRIORITY) is None
+    assert candidates_of(obj) == []

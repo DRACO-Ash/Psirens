@@ -247,19 +247,50 @@ def _epoch_key(el: dict) -> str:
     return str(el.get("epoch") or "")
 
 
+# Every field `conjunction.build_satrec` reads without a default. An element
+# set missing any of them cannot be propagated at all.
+_REQUIRED_ELSET_KEYS = (
+    "epoch", "mean_motion_rev_per_day", "eccentricity", "argp_deg",
+    "inclination_deg", "mean_anomaly_deg", "raan_deg",
+)
+
+
+def is_propagatable(el: object) -> bool:
+    """Whether an element set can actually be turned into a Satrec.
+
+    Checked before selection rather than at propagation time so a malformed
+    record is skipped in favour of a usable one from another provider,
+    instead of being chosen and then failing the whole request.
+    """
+    if not isinstance(el, dict):
+        return False
+    try:
+        for key in _REQUIRED_ELSET_KEYS[1:]:
+            float(el[key])  # raises on absent, None, or non-numeric
+        datetime.fromisoformat(str(el["epoch"]).replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
+
+
 def candidates_of(obj: dict) -> list[dict]:
-    """Every retained element set for an object, newest first.
+    """Every usable retained element set for an object, newest first.
 
     Falls back to the single legacy `elset` for records written before
     per-source retention existed, so an existing store keeps working
-    unchanged rather than losing its TLEs on upgrade.
+    unchanged rather than losing its TLEs on upgrade. The legacy set is also
+    considered when none of the per-source candidates is usable, so a bad
+    candidate never costs an object the fix it already had.
+
+    Element sets that cannot be propagated are dropped here. A record that
+    reaches selection is one that can be both served and screened.
     """
     by_source = obj.get("elset_candidates")
-    if isinstance(by_source, dict) and by_source:
-        items = [el for el in by_source.values() if isinstance(el, dict)]
-    else:
-        legacy = obj.get("elset")
-        items = [legacy] if isinstance(legacy, dict) else []
+    items: list[dict] = []
+    if isinstance(by_source, dict):
+        items = [el for el in by_source.values() if is_propagatable(el)]
+    if not items and is_propagatable(obj.get("elset")):
+        items = [obj["elset"]]
     return sorted(items, key=_epoch_key, reverse=True)
 
 

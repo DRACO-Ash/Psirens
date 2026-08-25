@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (build 1.5.1)
+## Current state (build 1.5.2)
 
 Deployed and live. Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
@@ -224,6 +224,15 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   holds no credentials. Run `python3 tools/udl_elset_probe.py --hours 6` on a
   networked workstation before the next upload; it reports each assumption as MET
   or NOT MET and names any provider that falls outside the classification table.
+- Conjunction robustness: FIXED in 1.5.2. A malformed target element set used
+  to raise out of `/api/conjunctions` as an unhandled 500 with a NON-JSON body,
+  which the SPA could only report as "Conjunction service unavailable". The
+  neighbour path was always guarded; the target's `build_satrec` was not. This
+  predates the native-TLE work (identical in 1.4.14). Now: `tle.is_propagatable`
+  filters unusable element sets before selection (so a broken candidate never
+  shadows a usable legacy fix), the target build is guarded, every path returns
+  JSON with a `detail`, and the SPA checks `response.ok` and renders the stated
+  reason instead of a catch-all.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

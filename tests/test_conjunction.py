@@ -101,3 +101,38 @@ def test_store_retains_newest_elset(tmp_path):
                      max_samples=100, now=EP)   # older must not overwrite
     kept = st.load()["objects"]["1"]["elset"]
     assert kept["epoch"] == "2026-08-05T00:00:00+00:00"
+
+
+# -- a malformed target must degrade to JSON, never to an unhandled 500 ------
+def _target_with(el):
+    """A store holding one target whose element set is `el`."""
+    obj = {"name": "KOREASAT 5",
+           "samples": [{"epoch": EP.isoformat(), "sub_lon_deg": 113.07,
+                        "inclination_deg": 1.96}]}
+    if el is not None:
+        obj["elset"] = el
+    return {"objects": {"29349": obj}}
+
+
+def test_malformed_target_elset_returns_a_reason_not_an_exception():
+    """Regression: neighbours were guarded but the target was not, so one bad
+    record raised out of the route as a non-JSON 500 and the SPA could only
+    say "service unavailable"."""
+    broken = {
+        "no elset": None,
+        "empty": {},
+        "unparseable epoch": {**_el("29349", 100.0), "epoch": "not-a-date"},
+        "null mean motion": {**_el("29349", 100.0),
+                             "mean_motion_rev_per_day": None},
+    }
+    for label, el in broken.items():
+        payload = conjunctions_for(_target_with(el), "29349", now=EP)
+        assert payload["target"] is None, label
+        assert payload["neighbours"] == [], label
+        assert payload["detail"], f"{label}: no reason given"
+
+
+def test_a_healthy_target_is_unaffected_by_the_guard():
+    payload = conjunctions_for(_target_with(_el("29349", 100.0)), "29349", now=EP)
+    assert payload["target"] is not None
+    assert payload.get("detail") is None

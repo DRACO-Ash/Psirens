@@ -419,13 +419,20 @@ function nbRow(n){const hh=state.hrr[n.id]||{};const rank=hh.rank==null?5:hh.ran
   const tle=tleBlock(n.tle,n.tle_provenance,"Copy TLE");
   return `<details class="nb2"><summary><span class="nbdot" style="background:${rankCol(rank)}"></span><b>${esc(n.name)}</b> <i>${esc(n.id)}</i><span class="nbsep">\u0394 ${esc(fmtKm(n.range_now_km))}</span></summary><div class="nb2bd"><div class="nb2cl">${closest}</div>${tle}</div></details>`;}
 function loadConjunctions(id){const nb=document.getElementById("nb");if(nb===null){return;}
-  fetch("/api/conjunctions?target="+encodeURIComponent(id)).then(r=>r.json()).then(j=>{
+  fetch("/api/conjunctions?target="+encodeURIComponent(id)).then(r=>{
+    if(r.ok){return r.json();}
+    return Promise.reject(new Error(r.status===429?"rate limited, retry shortly":"server error "+r.status));
+  }).then(j=>{
     if(state.sel!==id){return;}
     const tgt=document.getElementById("tgttle");
     if(tgt&&j.target&&j.target.tle){tgt.innerHTML=tleBlock(j.target.tle,j.target.tle_provenance,"Copy this object\u2019s TLE");}
     const el=document.getElementById("nb"),list=j.neighbours||[];
-    el.innerHTML=list.length?list.map(nbRow).join(""):`<div class="muted">Nothing within \u00b110\u00b0.</div>`;
-  }).catch(()=>{const el=document.getElementById("nb");if(el){el.innerHTML=`<div class="muted">Conjunction service unavailable.</div>`;}});}
+    // A stated reason from the server beats a bare empty state: "target
+    // element set is unusable" and "nothing nearby" look identical otherwise.
+    const empty=j.detail?esc(j.detail):"Nothing within \u00b110\u00b0.";
+    el.innerHTML=list.length?list.map(nbRow).join(""):`<div class="muted">${empty}</div>`;
+  }).catch(err=>{const el=document.getElementById("nb");
+    if(el){el.innerHTML=`<div class="muted">Conjunction service unavailable: ${esc(String(err&&err.message?err.message:err))}.</div>`;}});}
 
 function paint(){
   const box=plot;cv.width=box.clientWidth;cv.height=box.clientHeight;
