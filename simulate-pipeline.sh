@@ -54,4 +54,72 @@ fi
 if grep -nE 'getAttribute\("data-' src/psirens/static/index.html; then
   echo "FAIL: use element.dataset.* instead of getAttribute(\"data-...\") above (SonarQube prefer-dataset)"; exit 1
 fi
+# SPA lint gates.
+# The grep below is the one that matters for the rule that failed the 1.5.2
+# upload ("prefer throw over a returned rejected promise"). MEASURED, not
+# assumed: eslint-plugin-sonarjs does NOT carry that rule, even with all 279
+# of its rules enabled, so running eslint would NOT have caught it. Only a
+# real sonar-scanner or this grep will.
+# eslint still runs below because it covers a different, wider set of JS
+# smells, and it carries its own canary so it can never report a silent pass.
+if grep -nE "Promise\.reject" src/psirens/static/index.html; then
+  echo "FAIL: prefer 'throw error' over 'return Promise.reject(error)' above (SonarJS)"; exit 1
+fi
+SPA_LINT_CACHE="${SPA_LINT_CACHE:-$HOME/.cache/psirens-spa-lint}"
+if command -v node >/dev/null 2>&1; then
+  mkdir -p "$SPA_LINT_CACHE"
+  if [ ! -x "$SPA_LINT_CACHE/node_modules/.bin/eslint" ]; then
+    (cd "$SPA_LINT_CACHE" && npm init -y >/dev/null 2>&1 \
+      && npm install --no-audit --no-fund --loglevel=error eslint@9 eslint-plugin-sonarjs >/dev/null 2>&1) || true
+  fi
+  if [ -x "$SPA_LINT_CACHE/node_modules/.bin/eslint" ]; then
+    # eslint resolves its plugin and its base path from the working directory,
+    # so the config, the node_modules and the extracted script must all sit in
+    # $SIM. Linting from elsewhere makes eslint silently ignore the file and
+    # report success, which is worse than having no gate at all.
+    ln -sfn "$SPA_LINT_CACHE/node_modules" node_modules
+    cat > eslint.config.mjs <<'ESLINTCFG'
+import sonarjs from 'eslint-plugin-sonarjs';
+export default [
+  { files: ['**/*.js'],
+    languageOptions: { ecmaVersion: 2023, sourceType: 'script' },
+    plugins: { sonarjs },
+    rules: { ...sonarjs.configs.recommended.rules, 'no-negated-condition': 'error' } },
+];
+ESLINTCFG
+    python3 - <<'EXTRACT'
+import re
+src = open("src/psirens/static/index.html").read()
+blocks = re.findall(r"<script>(.*?)</script>", src, re.S)
+assert blocks, "no inline script found in the SPA"
+open("_spa_lint.js", "w").write("\n".join(blocks))
+# A deliberate violation of a rule the PLUGIN genuinely carries
+# (sonarjs/no-invariant-returns). If it is not flagged, eslint is not really
+# running here and the step must not report a pass. Verified by hand that
+# this snippet trips the rule and that a clean file does not.
+open("_spa_lint_canary.js", "w").write(
+    "function canary(flag) {\n"
+    "  if (flag) { return 'same'; }\n"
+    "  return 'same';\n"
+    "}\n")
+EXTRACT
+    node --check _spa_lint.js || { echo "FAIL: SPA script is not valid JavaScript"; exit 1; }
+    # Prove the gate bites before trusting it to pass.
+    if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint_canary.js >/dev/null 2>&1; then
+      echo "FAIL: SPA lint canary was NOT flagged; the linter is not running"; exit 1
+    fi
+    if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint.js; then
+      echo "SPA lint OK (eslint + eslint-plugin-sonarjs bit the canary, no findings in the SPA)"
+    else
+      echo "FAIL: SonarJS findings in the SPA (see above)"; exit 1
+    fi
+    rm -f _spa_lint.js _spa_lint_canary.js eslint.config.mjs node_modules
+  else
+    echo "WARNING: SPA lint SKIPPED (could not install eslint-plugin-sonarjs)."
+    echo "         Run it by hand before upload; two gate failures came from here."
+  fi
+else
+  echo "WARNING: SPA lint SKIPPED (no node on this machine)."
+  echo "         Run it by hand before upload; two gate failures came from here."
+fi
 echo "SIMULATION GREEN (matches platform): tests passed, coverage.xml at $SIM/coverage.xml"

@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (build 1.5.2)
+## Current state (build 1.5.3)
 
 Deployed and live. Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
@@ -83,9 +83,12 @@ grep gates that pre-empt SonarQube rules the eslint proxy cannot see. A green
 local loop that skips this has failed the platform before. Coverage floor is 80%
 (enforced in `pyproject.toml` addopts and in the sim).
 
-If you edited the SPA (`src/psirens/static/index.html`), also syntax-check and
-lint the extracted script (`node --check`, eslint with eslint-plugin-sonarjs) and
-rely on the grep gates below.
+The SPA is linted automatically: `simulate-pipeline.sh` extracts the inline
+script, runs `node --check`, then eslint with eslint-plugin-sonarjs. That step
+carries a CANARY (a deliberate `sonarjs/no-invariant-returns` violation) and
+fails if the canary is not flagged, because an eslint run from the wrong
+working directory silently ignores the file and reports success. If node is
+absent the step prints a loud SKIPPED warning rather than passing quietly.
 
 ## App Store deploy contract (understand before packaging)
 
@@ -119,6 +122,10 @@ Rules the local eslint proxy misses, each now gated in `simulate-pipeline.sh`:
 `python:S3776` cognitive complexity cap 15 per function; `python:S107` parameter
 cap 13 per function (this one failed the 1.5.0 upload on `_elset_dict` at 18;
 group related arguments into a value object rather than widening a signature);
+prefer `throw error` over `return Promise.reject(error)` inside a `then`
+callback (failed the 1.5.2 upload; MEASURED: eslint-plugin-sonarjs does NOT
+carry this rule even with all 279 enabled, so only a real scanner or the grep
+gate catches it);
 `S6643` prefer `globalThis` over `window`; `S6819` prefer the native element over
 an ARIA landmark role; prefer `element.dataset.x` over `getAttribute("data-x")`;
 HTML a11y landmark labelling; `no-negated-condition`; zero-fraction literals.

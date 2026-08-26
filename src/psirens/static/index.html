@@ -421,7 +421,9 @@ function nbRow(n){const hh=state.hrr[n.id]||{};const rank=hh.rank==null?5:hh.ran
 function loadConjunctions(id){const nb=document.getElementById("nb");if(nb===null){return;}
   fetch("/api/conjunctions?target="+encodeURIComponent(id)).then(r=>{
     if(r.ok){return r.json();}
-    return Promise.reject(new Error(r.status===429?"rate limited, retry shortly":"server error "+r.status));
+    // Throw rather than returning a rejected promise: inside a then callback
+    // both reject identically, and SonarJS flags the returned form.
+    throw new Error(r.status===429?"rate limited, retry shortly":"server error "+r.status);
   }).then(j=>{
     if(state.sel!==id){return;}
     const tgt=document.getElementById("tgttle");

@@ -385,7 +385,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.5.2", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.5.3", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual
