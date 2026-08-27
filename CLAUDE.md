@@ -260,5 +260,11 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 - `CONTEXT-001.md` — the LEARNED register (UDL API and notification/HRR, SGP4 TLE
   export and conjunction, drift/trail physical ceilings, the elset native-TLE and
   multi-provider facts) plus the full App Store deploy-contract section. Read it.
+- `DEPENDENCY-GATES.md` — the five supply-chain gates (Secret Detection,
+  Dependencies, SAST, Dependency Scanning, Container Scan). All have always
+  passed, so unlike the SonarQube section it is inference from a passing
+  signal, tagged FACT / INFERENCE / TBC. Read it before bumping a dependency
+  or touching the Dockerfile base image, and convert its TBC items to FACT
+  the first time one of those gates fails.
 - `READINESS.md` — pre-submit App Store readiness scoring.
 - `pyproject.toml` — tool config and the coverage floor.
