@@ -38,9 +38,12 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (build 1.6.0)
+## Current state (repo 1.6.0; DEPLOYED 1.5.3)
 
-Deployed and live. Memory set to 1Gi in the App Store Configuration tab.
+Keep these apart. **1.5.3 is the build on the App Store**: uploaded, passed all
+TEN pipeline stages including Deploy, status Active. **1.6.0 is committed here
+but has never been uploaded**; it adds the Co-Planar view on top of 1.5.3.
+Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
 
@@ -131,12 +134,16 @@ prefer `throw error` over `return Promise.reject(error)` inside a `then`
 callback (failed the 1.5.2 upload; MEASURED: eslint-plugin-sonarjs does NOT
 carry this rule even with all 279 enabled, so only a real scanner or the grep
 gate catches it);
+FACT, 2 September 2026: 1.5.3 CLEARED Code Quality outright, the first PSIRENS
+build to do so. The gates below, each added after the failure that taught it,
+are what got it through; keep adding one per rule learned.
 `S6643` prefer `globalThis` over `window`; `S6819` prefer the native element over
 an ARIA landmark role; prefer `element.dataset.x` over `getAttribute("data-x")`;
 HTML a11y landmark labelling; `no-negated-condition`; zero-fraction literals.
 
-Durable fix, still open and highest-ROI: run a real `sonar-scanner` against the
-tenant SonarQube host before upload. The prior sandbox could not reach it; if
+Durable fix, still worth doing though no longer urgent now 1.5.3 has passed
+clean: run a real `sonar-scanner` against the tenant SonarQube host before
+upload. The prior sandbox could not reach it; if
 this machine can, wire it and stop the one-rule-per-cycle pattern.
 
 ## Architecture (src/psirens/)

@@ -2,8 +2,10 @@
 
 **Owner:** Ash Higgins, Technical Director, Bluestaq Ltd
 **Classification:** Not Classified
-**Status as at 26 August 2026:** every dependency-related gate has PASSED on every
-PSIRENS upload. Nothing in this file was learned from a failure.
+**Status as at 2 September 2026:** every dependency-related gate has PASSED on
+every PSIRENS upload, and build 1.5.3 passed ALL TEN stages including Deploy
+and is Active on the App Store. Nothing in this file was learned from a
+failure of these gates.
 
 ## Read this warning first
 
@@ -28,7 +30,15 @@ time someone reads a job log.
 
 ## 1. The pipeline, and where these gates sit
 
-**FACT.** Nine stages, in this order, from the 1.5.0 and 1.5.2 upload screens:
+**FACT, corrected 2 September 2026.** TEN stages, in this order. Nine are
+listed under `Gates`; the tenth, `Deploy`, sits under a separate `Deployment`
+heading, and the UI totals them as "All 10 stages passed".
+
+An earlier version of this file said nine. That was wrong for an instructive
+reason: it was derived from the 1.5.0 and 1.5.2 screens, both of which FAILED
+at Code Quality and therefore never reached Deploy, so the stage was invisible.
+Inferring a pipeline's shape from failed runs alone understates it. That is the
+same weakness this file warns about at the top, caught in its own text.
 
 | # | Stage | Concern |
 |---|-------|---------|
@@ -41,11 +51,21 @@ time someone reads a job log.
 | 7 | Dockerfile Lint | Dockerfile hygiene |
 | 8 | Container Build | the image builds |
 | 9 | Container Scan | vulnerabilities in the built image |
+| 10 | Deploy | the release itself, under a separate `Deployment` heading |
 
 **FACT, and useful.** A Code Quality failure at stage 6 did **not** stop stages
 7, 8 and 9 running: all three still reported Passed on the failed 1.5.0 run,
-and the summary read "8 of 9 stages passed". The pipeline is not fail-fast, so
-a Code Quality failure still tells you the container built and scanned clean.
+and the summary read "8 of 9 stages passed". The pipeline is not fail-fast for
+the gates, so a Code Quality failure still tells you the container built and
+scanned clean.
+
+**FACT.** Deploy is the exception. It did not appear at all on either failed
+run, and appeared only on the full pass. A failed gate therefore blocks the
+release even though the remaining gates keep reporting.
+
+**FACT, 1.5.3.** The first complete pass: all ten green, status Active. This is
+also the first time any PSIRENS build cleared Code Quality, after 1.5.0 was
+rejected on `python:S107` and 1.5.2 on the throw-versus-rejected-promise rule.
 
 **INFERENCE.** Stage 2 (`Dependencies`) and stage 4 (`Dependency Scanning`) are
 distinct concerns, most likely resolve-and-inventory versus vulnerability
