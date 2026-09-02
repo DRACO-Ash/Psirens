@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (build 1.5.3)
+## Current state (build 1.6.0)
 
 Deployed and live. Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
@@ -68,6 +68,11 @@ Shipped features:
 - Copy-out gate (1.5.0). The copy control is offered only for a plain
   unclassified, caveat-free marking. A proprietary commercial line (`U//PR-...`)
   is displayed with the control withheld and the reason stated. Fail-closed.
+- Co-Planar view (1.6.0). An inspector button opens a modal chart of coplanar
+  angle (the mutual inclination between two orbital planes) against absolute
+  longitude difference on a log axis, for every stored object within
+  `COPLANAR_HALF_WIDTH_DEG` (default 20) of the primary. Small angle plus small
+  longitude separation is the co-orbital / RPO geometry an operator watches for.
 
 ## Golden verify loop (run before ANY packaging or upload)
 
@@ -154,6 +159,11 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
 - `tle.py` — native line validation (checksum and satNo cross-check), source
   classification, the selection policy, and the copy-out gate.
 - `hrr.py` — dynamic JCO HRR list pull and store.
+- `coplanar.py` — coplanar angle from inclination and RAAN, the longitude-
+  difference wrap, and `coplanar_for` (the neighbourhood payload). Reads the
+  plane from `elset`, the newest fix overall, which is what the plot head and RA
+  needle use; it deliberately does NOT go through the TLE selection policy, so
+  changing `TLE_SOURCE_PRIORITY` cannot move the plot and the chart apart.
 - `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native first,
   reconstruction fallback, with provenance). The element set that is served is
   also the one propagated, so the displayed line always produces the shown range.
@@ -166,7 +176,8 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drawHead` (+ `raNeedle`), the inspector modal, view/window/range controls.
 
 Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
-`test_drift.py`, `test_hrr.py`, `test_sources.py`, `test_store.py`, `test_tle.py`.
+`test_coplanar.py`, `test_drift.py`, `test_hrr.py`, `test_sources.py`,
+`test_store.py`, `test_tle.py`.
 Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
 by the exporter, never hand-typed, so every "valid" line genuinely checksums.
 
@@ -183,6 +194,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 - `GET /api/hrr` — the HRR object map.
 - `GET /api/conjunctions?target=<satNo>` — target TLE plus per-neighbour closest
   approach and TLEs.
+- `GET /api/coplanar?target=<satNo>` — the primary's plane plus, for each object
+  within the half-width, its coplanar angle and longitude difference. 400 when
+  `target` is absent.
 - `POST /api/pull?mode=<real|sim|combined>&hours=N` OR
   `&start=<ISO>&end=<ISO>` — operator pull; token-gated and rate-limited.
 - `POST /api/refresh` — force HRR + REAL refresh.

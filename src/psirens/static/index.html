@@ -114,6 +114,16 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .agebar{display:inline-block;width:48px;height:6px;background:#141d2b;border-radius:3px;overflow:hidden;margin-left:6px;vertical-align:1px}.agebar i{display:block;height:100%;background:#fff}
 .ins-nb-h{margin-top:12px;font-size:9.5px;letter-spacing:.14em;color:var(--accent);text-transform:uppercase}
   .tgttle{margin:8px 0 2px}
+  .cobtn{margin:10px 0 2px;font:inherit;font-size:11.5px;background:rgba(56,95,175,.20);border:1px solid var(--line2);color:var(--ink);border-radius:6px;padding:6px 13px;cursor:pointer}
+  .cobtn:hover{border-color:var(--accent);color:#fff}
+  .cobtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+  .comodal{position:fixed;display:none;flex-direction:column;top:70px;left:70px;width:780px;max-width:95vw;height:580px;max-height:90vh;background:#0a1120;border:1px solid var(--line2);border-radius:9px;box-shadow:0 18px 60px rgba(0,0,0,.6);z-index:40;overflow:hidden}
+  .comodal.show{display:flex}
+  .comodal-hd{display:flex;align-items:center;gap:8px;padding:9px 8px 9px 12px;cursor:move;user-select:none;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(56,95,175,.22),rgba(56,95,175,.04));border-radius:8px 8px 0 0}
+  .comodal-ttl{flex:1;font-weight:600;font-size:13px}
+  .comodal-bd{flex:1;position:relative;background:#05070d}
+  #cocanvas{width:100%;height:100%;display:block}
+  .comuted{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:13px;pointer-events:none}
   .nb2{border:1px solid var(--line);border-radius:4px;margin:4px 0;background:rgba(255,255,255,.02)}
   .nb2>summary{list-style:none;cursor:pointer;padding:6px 8px;display:flex;align-items:center;gap:7px;font-size:12px}
   .nb2>summary::-webkit-details-marker{display:none}
@@ -202,6 +212,10 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 <section class="imodal" id="imodal" aria-label="Object inspector">
   <div class="imodal-hd" id="imodal-hd"><span class="imodal-ttl" id="imodal-ttl">Inspector</span><button type="button" class="imodal-x" id="imodal-x" aria-label="Close inspector" title="Close">×</button></div>
   <div class="imodal-bd" id="insp"></div>
+</section>
+<section class="comodal" id="comodal" aria-label="Co-planar view">
+  <div class="comodal-hd" id="comodal-hd"><span class="comodal-ttl" id="comodal-ttl">Co-Planar view</span><button type="button" class="imodal-x" id="comodal-x" aria-label="Close co-planar view" title="Close">×</button></div>
+  <div class="comodal-bd"><canvas id="cocanvas"></canvas><div class="comuted" id="comsg"></div></div>
 </section>
 <div class="foot"><span class="b" id="banner">UNCLASSIFIED</span><span>PSIRENS · sub-satellite longitude via validated SGP4</span>
   <span style="margin-left:auto" id="laststatus">—</span></div>
@@ -393,6 +407,7 @@ function inspectHTML(o){if(!o)return"";
     <dt>Longitude</dt><dd>${o.lon.toFixed(2)}\u00b0E</dd><dt>Inclination</dt><dd>${o.inc.toFixed(2)}\u00b0</dd>
     <dt>Drift</dt><dd>${dr}</dd><dt>Track span</dt><dd>${span.toFixed(1)}\u00b0 over ${o.tr?o.tr.length:0} fixes</dd>
     <dt>Data age</dt><dd>${ageLabel(o.ageH)} <span class="agebar"><i style="width:${ageAlpha(o.ageH)*100}%"></i></span></dd></dl>
+    <button type="button" class="cobtn" id="cobtn">Co-Planar view</button>
     <div class="tgttle" id="tgttle"></div>
     <div class="ins-nb-h">NEIGHBOURHOOD \u00b110\u00b0 \u00b7 closest approach (7d)</div>
     <div class="ins-nb" id="nb"><div class="muted">computing conjunctions\u2026</div></div>`;}
@@ -486,6 +501,81 @@ document.getElementById("imodal-x").addEventListener("click",()=>{state.sel=null
     im.style.left=L+"px";im.style.top=T+"px";});
   globalThis.addEventListener("mouseup",()=>{md=null;});
 })();
+
+// ---- Co-Planar view -----------------------------------------------------
+let COPLANAR=null;
+const CO_ARCS=[{cop:1,lon:10,c:"217,178,58"},{cop:0.5,lon:5,c:"233,134,58"},{cop:0.25,lon:2,c:"226,72,61"}];
+const coColour=i=>`hsl(${(i*57)%360} 72% 62%)`;
+function coDims(W,H){return {padL:56,padR:20,padT:30,padB:42,x0:56,x1:W-20,y0:30,y1:H-42,W,H};}
+function coYMax(maxl){if(maxl<=10){return 10;}if(maxl<=20){return 20;}return Math.pow(10,Math.ceil(Math.log10(maxl)));}
+function coScales(data,d){
+  let maxc=4,maxl=1;data.tracks.forEach(t=>t.points.forEach(pt=>{maxc=Math.max(maxc,pt.coplanar_deg);maxl=Math.max(maxl,pt.lon_diff_deg);}));
+  const xmax=Math.max(4,Math.ceil((maxc+0.4)*2)/2),ymin=0.1,ymax=coYMax(maxl);
+  const lymin=Math.log10(ymin),lymax=Math.log10(ymax);
+  const sx=v=>d.x0+(v/xmax)*(d.x1-d.x0);
+  const sy=v=>{const lv=Math.log10(Math.min(ymax,Math.max(ymin,v)));return d.y1-(lv-lymin)/(lymax-lymin)*(d.y1-d.y0);};
+  return {xmax,ymin,ymax,lymin,lymax,sx,sy};}
+function coYTicks(sc){const out=[];
+  for(let p=Math.floor(sc.lymin);p<=Math.ceil(sc.lymax);p++){const base=Math.pow(10,p);
+    for(let m=1;m<10;m++){const v=base*m;if(v>=sc.ymin-1e-9&&v<=sc.ymax+1e-9){out.push({v,major:m===1});}}}
+  return out;}
+function coYGrid(ctx,d,sc){
+  coYTicks(sc).forEach(t=>{const py=sc.sy(t.v);
+    ctx.strokeStyle=t.major?"rgba(120,150,200,.18)":"rgba(120,150,200,.06)";
+    ctx.beginPath();ctx.moveTo(d.x0,py);ctx.lineTo(d.x1,py);ctx.stroke();
+    if(t.major){ctx.fillStyle="#7f93b3";ctx.textAlign="right";ctx.fillText(t.v>=1?String(t.v):t.v.toFixed(1),d.x0-6,py+3);}});}
+function coGrid(ctx,d,sc){
+  ctx.font="10px system-ui,sans-serif";ctx.fillStyle="#7f93b3";ctx.lineWidth=1;
+  for(let v=0;v<=sc.xmax+1e-9;v+=0.5){const px=sc.sx(v);ctx.strokeStyle="rgba(120,150,200,.12)";
+    ctx.beginPath();ctx.moveTo(px,d.y0);ctx.lineTo(px,d.y1);ctx.stroke();ctx.textAlign="center";ctx.fillText(v.toFixed(1),px,d.y1+14);}
+  coYGrid(ctx,d,sc);
+  ctx.fillStyle="#9fb0cc";ctx.textAlign="center";ctx.fillText("Coplanar Angle (\u00b0)",(d.x0+d.x1)/2,d.H-7);
+  ctx.save();ctx.translate(15,(d.y0+d.y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText("|Longitude Difference| (\u00b0)",0,0);ctx.restore();}
+function coArcs(ctx,d,sc){
+  CO_ARCS.forEach(a=>{const xr=sc.sx(a.cop)-d.x0,yr=d.y1-sc.sy(a.lon);if(xr<=0||yr<=0){return;}
+    ctx.beginPath();ctx.ellipse(d.x0,d.y1,xr,yr,0,-Math.PI/2,0);
+    ctx.fillStyle=`rgba(${a.c},.05)`;ctx.fill();
+    ctx.setLineDash([4,4]);ctx.strokeStyle=`rgba(${a.c},.7)`;ctx.lineWidth=1.1;ctx.stroke();ctx.setLineDash([]);});}
+function coPlot(ctx,d,sc,data,cols){
+  data.tracks.forEach((t,i)=>{const col=cols[i],pts=t.points;
+    if(pts.length>1){ctx.strokeStyle=col;ctx.globalAlpha=.7;ctx.lineWidth=1.3;ctx.beginPath();
+      pts.forEach((pt,k)=>{const X=sc.sx(pt.coplanar_deg),Y=sc.sy(pt.lon_diff_deg);if(k===0){ctx.moveTo(X,Y);}else{ctx.lineTo(X,Y);}});ctx.stroke();ctx.globalAlpha=1;}
+    const last=pts[pts.length-1],X=sc.sx(last.coplanar_deg),Y=sc.sy(last.lon_diff_deg);
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,4,0,7);ctx.fill();ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle="#c7d4ea";ctx.font="9.5px system-ui,sans-serif";ctx.textAlign="left";ctx.fillText(esc(t.id),X+7,Y+3);});}
+function coLegend(ctx,d,data,cols){
+  const items=data.tracks.slice(0,12),lh=14,w=124,x=d.x1-w-6,y0=d.y0+6;if(!items.length){return;}
+  ctx.fillStyle="rgba(8,14,28,.80)";ctx.strokeStyle="rgba(120,150,200,.25)";ctx.lineWidth=1;
+  ctx.beginPath();ctx.rect(x,y0,w,items.length*lh+8);ctx.fill();ctx.stroke();
+  ctx.textAlign="left";ctx.font="9.5px system-ui,sans-serif";
+  items.forEach((t,i)=>{const yy=y0+11+i*lh;ctx.fillStyle=cols[i];ctx.beginPath();ctx.arc(x+9,yy-3,4,0,7);ctx.fill();
+    ctx.fillStyle="#c7d4ea";ctx.fillText(esc(t.id)+" "+esc((t.name||"").slice(0,13)),x+18,yy);});}
+function drawCoplanar(ctx,W,H,data){
+  ctx.clearRect(0,0,W,H);const d=coDims(W,H),sc=coScales(data,d),cols=data.tracks.map((t,i)=>coColour(i));
+  coArcs(ctx,d,sc);coGrid(ctx,d,sc);coPlot(ctx,d,sc,data,cols);coLegend(ctx,d,data,cols);
+  if(!data.tracks.length){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.font="12px system-ui,sans-serif";
+    ctx.fillText("No co-planar neighbours within \u00b1"+data.half_width_deg+"\u00b0",(d.x0+d.x1)/2,(d.y0+d.y1)/2);}}
+function sizeCo(){const c=document.getElementById("cocanvas");if(COPLANAR===null){return;}
+  const r=c.getBoundingClientRect();if(r.width<2){return;}const dpr=Math.min(2,globalThis.devicePixelRatio||1);
+  c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);
+  const x=c.getContext("2d");x.setTransform(dpr,0,0,dpr,0,0);drawCoplanar(x,r.width,r.height,COPLANAR);}
+function openCoplanar(id){if(!id){return;}document.getElementById("comodal").classList.add("show");
+  document.getElementById("comsg").textContent="computing\u2026";document.getElementById("comodal-ttl").textContent="Co-Planar view";
+  fetch("/api/coplanar?target="+encodeURIComponent(id)).then(r=>r.json()).then(j=>{
+    if(!j.primary){COPLANAR=null;document.getElementById("comsg").textContent=j.detail||"no element set for this object";return;}
+    document.getElementById("comsg").textContent="";
+    document.getElementById("comodal-ttl").textContent="Co-Planar \u00b7 "+esc(j.primary.name||j.primary.id)+"  ("+j.tracks.length+" in \u00b1"+j.half_width_deg+"\u00b0)";
+    COPLANAR=j;sizeCo();}).catch(()=>{document.getElementById("comsg").textContent="co-planar service unavailable";});}
+document.getElementById("comodal-x").addEventListener("click",()=>{document.getElementById("comodal").classList.remove("show");});
+document.getElementById("insp").addEventListener("click",ev=>{if(ev.target.closest("#cobtn")){openCoplanar(state.sel);}});
+(function(){const im=document.getElementById("comodal"),hd=document.getElementById("comodal-hd");let md=null;
+  hd.addEventListener("mousedown",ev=>{if(ev.target.closest("#comodal-x")){return;}const r=im.getBoundingClientRect();md={dx:ev.clientX-r.left,dy:ev.clientY-r.top};
+    im.style.left=r.left+"px";im.style.top=r.top+"px";ev.preventDefault();});
+  globalThis.addEventListener("mousemove",ev=>{if(md===null){return;}
+    const L=clamp(ev.clientX-md.dx,0,globalThis.innerWidth-im.offsetWidth),T=clamp(ev.clientY-md.dy,0,globalThis.innerHeight-im.offsetHeight);
+    im.style.left=L+"px";im.style.top=T+"px";});
+  globalThis.addEventListener("mouseup",()=>{md=null;});})();
+globalThis.addEventListener("resize",()=>{if(document.getElementById("comodal").classList.contains("show")){sizeCo();}});
 document.getElementById("insp").addEventListener("click",ev=>{const b=ev.target.closest("[data-l1]");if(b===null){return;}
   const t=b.dataset.l1+"\n"+b.dataset.l2;
   navigator.clipboard.writeText(t).then(()=>{const o=b.textContent;b.textContent="Copied \u2713";setTimeout(()=>{b.textContent=o;},1200);}).catch(()=>{b.textContent="Copy failed";});});

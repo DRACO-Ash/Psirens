@@ -347,3 +347,14 @@ def test_scheduler_seeds_on_first_tick(tmp_path):
 
     asyncio.run(run())
     assert refresher.store.load().get("objects")  # first tick seeded the belt
+
+
+def test_coplanar_requires_target(client):
+    assert client.get("/api/coplanar").status_code == 400
+
+
+def test_coplanar_endpoint_returns_primary_and_tracks(client):
+    r = client.get("/api/coplanar?target=41836")  # a demo anchor with an elset
+    assert r.status_code == 200
+    j = r.json()
+    assert "primary" in j and "tracks" in j and "half_width_deg" in j
