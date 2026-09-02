@@ -13,6 +13,28 @@ from pydantic import BaseModel, Field, field_validator
 
 SCHEMA_VERSION = 1
 
+
+def display_name(object_id: str, stored_name: object, names: dict | None = None) -> str:
+    """The human name to show for an object, best source first.
+
+    The store's name for a UDL record comes from `origObjectId`, which this
+    tenant leaves empty, so it falls back to `satNo` and the record ends up
+    named after its own catalogue number. A row then reads "63157 63157"
+    instead of "TJS-15 63157".
+
+    The JCO HRR list is the naming authority (it carries `commonName`), so it
+    wins. The stored name is used only when it is genuinely a name rather than
+    the catalogue number repeated back. Failing both, the id stands alone: an
+    unnamed object should show its id once, never twice.
+    """
+    from_hrr = str((names or {}).get(object_id) or "").strip()
+    if from_hrr:
+        return from_hrr
+    stored = str(stored_name or "").strip()
+    if stored and stored != str(object_id):
+        return stored
+    return str(object_id)
+
 # The four accepted UDL data modes (confirmed by owner, 20 July 2026).
 class DataMode(str, enum.Enum):
     REAL = "REAL"

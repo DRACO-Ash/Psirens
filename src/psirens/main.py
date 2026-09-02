@@ -311,6 +311,12 @@ def _pull(request: Request) -> JSONResponse:
     return _cors(JSONResponse(result), request.app.state.cfg)
 
 
+def _hrr_names(request: Request) -> dict[str, str]:
+    """satNo -> JCO common name. The HRR list is the naming authority; without
+    it a UDL record shows its catalogue number twice."""
+    return request.app.state.hrr.names()
+
+
 def _coplanar(request: Request) -> JSONResponse:
     """Coplanar angle vs |longitude difference| for the primary's neighbourhood.
     On-demand: computed when the operator opens the Co-Planar view."""
@@ -319,7 +325,8 @@ def _coplanar(request: Request) -> JSONResponse:
     if not target:
         return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
     data = request.app.state.store.load()
-    payload = coplanar_for(data, target, half_width_deg=cfg.coplanar_half_width_deg)
+    payload = coplanar_for(data, target, half_width_deg=cfg.coplanar_half_width_deg,
+                           names=_hrr_names(request))
     return _cors(JSONResponse(payload), cfg)
 
 
@@ -332,7 +339,8 @@ def _conjunctions(request: Request) -> JSONResponse:
         return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
     data = request.app.state.store.load()
     payload = conjunctions_for(data, target, window_hours=cfg.conj_window_hours,
-                               priority=parse_priority(cfg.tle_source_priority))
+                               priority=parse_priority(cfg.tle_source_priority),
+                               names=_hrr_names(request))
     return _cors(JSONResponse(payload), cfg)
 
 
@@ -398,7 +406,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.0", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.1", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

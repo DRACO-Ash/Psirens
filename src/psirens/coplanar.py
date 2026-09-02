@@ -29,6 +29,8 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from .models import display_name
+
 
 def coplanar_angle_deg(inc1: float, raan1: float,
                        inc2: float, raan2: float) -> float:
@@ -101,7 +103,8 @@ def _latest_epoch(obj: dict) -> str | None:
 
 def coplanar_for(store_data: dict, primary_id: str, *,
                  half_width_deg: float = 20.0, cap: int = 40,
-                 now: datetime | None = None) -> dict:
+                 now: datetime | None = None,
+                 names: dict | None = None) -> dict:
     """Coplanar angle and absolute longitude difference of every stored object
     within +/-half_width longitude of the primary that carries an element set.
     Sorted nearest-plane first (then nearest in longitude) and capped."""
@@ -130,11 +133,13 @@ def coplanar_for(store_data: dict, primary_id: str, *,
             continue
         point = CoplanarPoint(round(p_plane.angle_to(plane), 4),
                               round(lon_diff, 4), _latest_epoch(obj))
-        tracks.append(CoplanarTrack(oid, obj.get("name", oid), [point]))
+        tracks.append(CoplanarTrack(
+            oid, display_name(oid, obj.get("name"), names), [point]))
     tracks.sort(key=lambda t: (t.latest.coplanar_deg, t.latest.lon_diff_deg))
     return {
         "primary": {
-            "id": primary_id, "name": primary.get("name", primary_id),
+            "id": primary_id,
+            "name": display_name(primary_id, primary.get("name"), names),
             "inclination_deg": round(p_plane.inclination_deg, 4),
             "raan_deg": round(p_plane.raan_deg, 4),
             "sub_lon_deg": round(p_lon, 4),

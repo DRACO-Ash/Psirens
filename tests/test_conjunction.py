@@ -136,3 +136,21 @@ def test_a_healthy_target_is_unaffected_by_the_guard():
     payload = conjunctions_for(_target_with(_el("29349", 100.0)), "29349", now=EP)
     assert payload["target"] is not None
     assert payload.get("detail") is None
+
+
+def test_neighbour_and_target_names_come_from_the_hrr_list():
+    """Same defect as the coplanar list: without the HRR join a neighbour row
+    shows its catalogue number as its name."""
+    store = {"objects": {
+        "41836": _obj("41836", 0.0, 100.0),
+        "28924": _obj("28924", 1.0, 101.0),
+    }}
+    store["objects"]["41836"]["name"] = "41836"
+    store["objects"]["28924"]["name"] = "28924"
+    named = conjunctions_for(store, "41836", now=EP,
+                             names={"41836": "SES-10", "28924": "EUTELSAT 174A"})
+    assert named["target"]["name"] == "SES-10"
+    assert named["neighbours"][0]["name"] == "EUTELSAT 174A"
+    bare = conjunctions_for(store, "41836", now=EP)
+    assert bare["target"]["name"] == "41836"
+    assert bare["neighbours"][0]["name"] == "28924"

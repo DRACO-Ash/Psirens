@@ -28,6 +28,7 @@ from sgp4.api import WGS72, Satrec, jday
 from sgp4.exporter import export_tle
 
 from .astro import _days_since_1949
+from .models import display_name
 from .tle import DEFAULT_PRIORITY, provenance_of, select_elset, validate_native
 
 _log = logging.getLogger("psirens.conjunction")
@@ -174,7 +175,8 @@ def _sep_deg(a: float, b: float) -> float:
 
 def _neighbour_entry(target_sat: Satrec, oid: str, obj: dict, start: datetime,
                      window_hours: int,
-                     priority: tuple[str, ...] = DEFAULT_PRIORITY) -> dict | None:
+                     priority: tuple[str, ...] = DEFAULT_PRIORITY,
+                     names: dict | None = None) -> dict | None:
     el, lines, prov = tle_for(obj, priority)
     if not el:
         return None
@@ -186,7 +188,7 @@ def _neighbour_entry(target_sat: Satrec, oid: str, obj: dict, start: datetime,
                                             window_hours=window_hours)
     entry = {
         "id": oid,
-        "name": obj.get("name", oid),
+        "name": display_name(oid, obj.get("name"), names),
         "sub_lon_deg": _sub_lon(obj),
         "range_now_km": None if now_km is None else round(now_km, 1),
         "min_km": None if min_km is None else round(min_km, 1),
@@ -207,7 +209,8 @@ def _no_target(now: datetime, window_hours: int, detail: str) -> dict:
 def conjunctions_for(store_data: dict, target_id: str, *,
                      half_width_deg: float = 10.0, window_hours: int = 168,
                      cap: int = 20, now: datetime | None = None,
-                     priority: tuple[str, ...] = DEFAULT_PRIORITY) -> dict:
+                     priority: tuple[str, ...] = DEFAULT_PRIORITY,
+                     names: dict | None = None) -> dict:
     """Compute closest approach and TLEs for the target and every stored object
     within +/-half_width longitude that carries an elset. Neighbours are sorted
     by current range (nearest first) and capped.
@@ -239,12 +242,14 @@ def conjunctions_for(store_data: dict, target_id: str, *,
         lon = _sub_lon(obj)
         if lon is None or t_lon is None or _sep_deg(lon, t_lon) > half_width_deg:
             continue
-        entry = _neighbour_entry(target_sat, oid, obj, now, window_hours, priority)
+        entry = _neighbour_entry(target_sat, oid, obj, now, window_hours,
+                                 priority, names)
         if entry is not None:
             neighbours.append(entry)
     neighbours.sort(key=lambda e: (e["range_now_km"] is None, e["range_now_km"] or 0.0))
     return {
-        "target": {"id": target_id, "name": target.get("name", target_id),
+        "target": {"id": target_id,
+                   "name": display_name(target_id, target.get("name"), names),
                    "tle": t_tle, "tle_provenance": t_prov},
         "neighbours": neighbours[:cap],
         "window_hours": window_hours,

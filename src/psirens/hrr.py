@@ -48,6 +48,29 @@ _RANK_KEYS = ("rank", "priority", "hrrRank", "tier")
 _REGIME_KEYS = ("orbitRegime", "regime", "orbit", "orbitType")
 
 
+def _normalise_names(objects: dict) -> dict:
+    """Guarantee every cached entry carries a `name`.
+
+    The cache is written by `_persist` from an already-normalised map, but it
+    is read back verbatim, and the bundled snapshot and a raw JCO record
+    disagree on the key (`name` versus `commonName`). Every consumer then has
+    to know both, and the SPA only knows one, so a cache in the other shape
+    silently strips names from the plot, the watchlist and the inspector.
+    Normalising once on load is cheaper and safer than teaching each consumer.
+    """
+    out = {}
+    for oid, meta in objects.items():
+        if not isinstance(meta, dict):
+            continue
+        entry = dict(meta)
+        # Empty, never the id: consumers fall back through their own chain
+        # (`meta.name || track.name || id`), and filling in the id here would
+        # shadow a genuine stored name for a manual or demo object.
+        entry["name"] = str(_first(meta, _NAME_KEYS) or "")
+        out[oid] = entry
+    return out
+
+
 def _first(d: dict, keys: tuple[str, ...]):
     for k in keys:
         if k in d and d[k] not in (None, ""):
@@ -148,7 +171,7 @@ class HrrStore:
         try:
             with open(self._path, encoding="utf-8") as fh:
                 d = json.load(fh)
-            self._map = d.get("objects", {}) or {}
+            self._map = _normalise_names(d.get("objects", {}) or {})
             self._marking = d.get("marking", "U")
             self._generated = d.get("generated")
             if self._map:
@@ -181,6 +204,27 @@ class HrrStore:
             self._loaded = True
 
     # -- accessors --------------------------------------------------------
+    def names(self) -> dict[str, str]:
+        """satNo -> common name, for display.
+
+        Tolerant of the key the entry happens to carry. `_load_cache` reads a
+        cache file verbatim without normalising, and the bundled snapshot uses
+        `name` while a raw JCO record uses `commonName`, so the join has to be
+        as forgiving here as the parser already is via `_NAME_KEYS`. Reading
+        one key only would silently yield no names and leave every row showing
+        its catalogue number twice.
+        """
+        out = {}
+        for oid, meta in self.map().items():
+            if not isinstance(meta, dict):
+                continue
+            name = str(_first(meta, _NAME_KEYS) or "").strip()
+            # A name equal to the catalogue number is not a name. The parse
+            # path defaults an unnamed record to its satNo, so treat that as
+            # absent rather than letting it beat a real stored name.
+            out[oid] = "" if name == str(oid) else name
+        return out
+
     def map(self) -> dict[str, dict]:
         self.ensure_loaded()
         return self._map

@@ -38,11 +38,11 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.0; DEPLOYED 1.5.3)
+## Current state (repo 1.6.1; DEPLOYED 1.6.0)
 
-Keep these apart. **1.5.3 is the build on the App Store**: uploaded, passed all
-TEN pipeline stages including Deploy, status Active. **1.6.0 is committed here
-but has never been uploaded**; it adds the Co-Planar view on top of 1.5.3.
+Keep these apart. **1.6.0 is the build on the App Store**: uploaded, passed all TEN
+pipeline stages including Deploy, status Active. **1.6.1 is committed here but
+has never been uploaded**; it fixes object naming (see Open items).
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -149,7 +149,8 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
 ## Architecture (src/psirens/)
 
 - `models.py` — Pydantic models; DataMode enum; `VIEW_MODES` (real/sim/combined);
-  Sample and Track shapes.
+  Sample and Track shapes; `display_name` (HRR name, then a stored name that is
+  not just the id, then the id alone: never the id twice).
 - `astro.py` — SGP4-based sub-satellite longitude and `drift_deg_per_day` (with
   the physical-rate guard).
 - `config.py` — env-only config (UDL base/path, epoch param, retention, HRR
@@ -165,7 +166,13 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   overall, and `elset_candidates`, newest per provider).
 - `tle.py` — native line validation (checksum and satNo cross-check), source
   classification, the selection policy, and the copy-out gate.
-- `hrr.py` — dynamic JCO HRR list pull and store.
+- `hrr.py` — dynamic JCO HRR list pull and store. THE NAMING AUTHORITY: a UDL
+  record's stored name comes from `origObjectId`, which this tenant leaves
+  empty, so it collapses to the catalogue number. `names()` returns satNo ->
+  common name for display, tolerant of the key shape and treating a name equal
+  to the id as absent. `_normalise_names` guarantees a `name` key at cache load
+  because the cache is otherwise read verbatim and the bundled snapshot and a
+  raw JCO record disagree on the key.
 - `coplanar.py` — coplanar angle from inclination and RAAN, the longitude-
   difference wrap, and `coplanar_for` (the neighbourhood payload). Reads the
   plane from `elset`, the newest fix overall, which is what the plot head and RA
@@ -261,6 +268,14 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   shadows a usable legacy fix), the target build is guarded, every path returns
   JSON with a `detail`, and the SPA checks `response.ok` and renders the stated
   reason instead of a catch-all.
+- Object naming: FIXED in 1.6.1. The neighbourhood list and the coplanar legend
+  showed the catalogue number as the name ("63157 63157"), because both served
+  `obj["name"]` straight from the store while the plot and watchlist already
+  joined the HRR list client-side. Now `/api/conjunctions` and `/api/coplanar`
+  resolve names server-side via `HrrStore.names()`, so the API is correct for
+  any consumer and all five display sites agree. Coplanar CHART POINT labels
+  still show the id alone, matching the reference render, with the name in the
+  legend beside them; say if you want names on the points too.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

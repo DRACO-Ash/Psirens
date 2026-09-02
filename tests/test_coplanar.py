@@ -84,3 +84,39 @@ def test_coplanar_for_primary_without_elset():
 def test_coplanar_for_unknown_primary():
     res = coplanar_for({"objects": {}}, "nope", now=EP)
     assert res["primary"] is None and res["tracks"] == []
+
+
+# -- display names: never show the catalogue number twice -------------------
+def _named_store():
+    """Two objects whose stored name is their own catalogue number, which is
+    what a UDL record looks like on a tenant that leaves origObjectId empty."""
+    return {"objects": {
+        "63157": {"name": "63157", "samples": [
+            {"epoch": EP.isoformat(), "sub_lon_deg": 89.5, "inclination_deg": 0.4}],
+            "elset": {"inclination_deg": 0.4, "raan_deg": 85.0}},
+        "39017": {"name": "39017", "samples": [
+            {"epoch": EP.isoformat(), "sub_lon_deg": 90.5, "inclination_deg": 1.2}],
+            "elset": {"inclination_deg": 1.2, "raan_deg": 88.0}},
+    }}
+
+
+def test_hrr_names_replace_the_catalogue_number():
+    names = {"63157": "TJS-15", "39017": "ZHONGXING-12"}
+    out = coplanar_for(_named_store(), "63157", names=names)
+    assert out["primary"]["name"] == "TJS-15"
+    assert out["tracks"][0]["name"] == "ZHONGXING-12"
+
+
+def test_without_hrr_the_id_shows_once_not_twice():
+    """The defect: a row read "63157 63157". With no name available the id
+    stands alone, so the interface never repeats it."""
+    out = coplanar_for(_named_store(), "63157")
+    assert out["primary"]["name"] == "63157"
+    assert out["tracks"][0]["name"] == "39017"
+
+
+def test_a_genuine_stored_name_survives_when_hrr_has_none():
+    store = _named_store()
+    store["objects"]["39017"]["name"] = "ZHONGXING-12"
+    out = coplanar_for(store, "63157", names={})
+    assert out["tracks"][0]["name"] == "ZHONGXING-12"

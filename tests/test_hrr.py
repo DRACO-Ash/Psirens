@@ -215,3 +215,27 @@ def test_refresher_offline_keeps_all(tmp_path):
     r.run_once(now=datetime(2026, 8, 5, 12, tzinfo=timezone.utc))
     assert set(store.load()["objects"]) == {"100172", "45011"}   # unfiltered
     assert hrr.refreshed == 0            # no pull when UDL disabled
+
+
+# -- name extraction for display -------------------------------------------
+def test_names_tolerates_either_key_shape(tmp_path):
+    """`_load_cache` reads a cache file verbatim, and the bundled snapshot uses
+    `name` while a raw JCO record uses `commonName`. Both must yield names, or
+    every neighbour row shows its catalogue number twice."""
+    import json
+    from psirens.hrr import HrrStore
+    (tmp_path / "hrr.json").write_text(json.dumps({
+        "marking": "U", "objects": {
+            "63157": {"commonName": "TJS-15", "rank": 1},
+            "39216": {"name": "INSAT 3D", "rank": 4},
+            "44903": {"rank": 3},
+            "41021": {"name": "41021", "rank": 2},
+        }}))
+    store = HrrStore(_cfg(tmp_path))
+    got = store.names()
+    assert got["63157"] == "TJS-15"      # raw JCO key
+    assert got["39216"] == "INSAT 3D"    # bundled-snapshot key
+    assert got["44903"] == ""            # no name at all, never invented
+    # A name that is just the catalogue number is not a name: reporting it
+    # would shadow a genuine stored name downstream.
+    assert got["41021"] == ""
