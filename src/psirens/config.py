@@ -83,6 +83,7 @@ class Config:
     # TLE source selection: ordered classes, first non-empty class wins, newest
     # epoch within it. `any` disables class ranking (plain newest-fix-wins).
     tle_source_priority: str = "commercial,government,unknown"
+    coplanar_half_width_deg: float = 20.0  # +/- longitude window for the coplanar view
     scheduler_enabled: bool = True  # background refresh loop; off in tests
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
@@ -125,4 +126,5 @@ def load_config() -> Config:
         conj_window_hours=int(_env("CONJ_WINDOW_HOURS", "168") or "168"),
         tle_source_priority=_env("TLE_SOURCE_PRIORITY",
                                  "commercial,government,unknown"),
+        coplanar_half_width_deg=float(_env("COPLANAR_HALF_WIDTH_DEG", "20") or "20"),
     )

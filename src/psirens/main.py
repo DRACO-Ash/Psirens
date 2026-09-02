@@ -27,6 +27,7 @@ from .astro import drift_deg_per_day
 from .config import Config, load_config
 from .models import VIEW_MODES, DataMode, ManualElsetIn
 from .conjunction import conjunctions_for
+from .coplanar import coplanar_for
 from .tle import parse_priority
 from .hrr import HrrStore
 from .refresh import Refresher
@@ -310,6 +311,18 @@ def _pull(request: Request) -> JSONResponse:
     return _cors(JSONResponse(result), request.app.state.cfg)
 
 
+def _coplanar(request: Request) -> JSONResponse:
+    """Coplanar angle vs |longitude difference| for the primary's neighbourhood.
+    On-demand: computed when the operator opens the Co-Planar view."""
+    cfg = request.app.state.cfg
+    target = request.query_params.get("target", "").strip()
+    if not target:
+        return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
+    data = request.app.state.store.load()
+    payload = coplanar_for(data, target, half_width_deg=cfg.coplanar_half_width_deg)
+    return _cors(JSONResponse(payload), cfg)
+
+
 def _conjunctions(request: Request) -> JSONResponse:
     """Closest approach and TLEs for the target and its +/-10deg neighbours.
     On-demand: computed when an object is selected, not on every refresh."""
@@ -385,7 +398,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.5.3", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.0", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual
@@ -408,6 +421,8 @@ def create_app(cfg: Config | None = None,
     app.add_api_route("/api/hrr", _hrr, methods=["GET"],
                       dependencies=[Depends(_global_gate)])
     app.add_api_route("/api/conjunctions", _conjunctions, methods=["GET"],
+                      dependencies=[Depends(_global_gate)])
+    app.add_api_route("/api/coplanar", _coplanar, methods=["GET"],
                       dependencies=[Depends(_global_gate)])
     app.add_api_route("/api/manual-elset", _add_manual, methods=["POST"],
                       dependencies=[Depends(_require_token)], responses=_rl)
