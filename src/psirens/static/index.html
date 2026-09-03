@@ -121,8 +121,14 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   .comodal.show{display:flex}
   .comodal-hd{display:flex;align-items:center;gap:8px;padding:9px 8px 9px 12px;cursor:move;user-select:none;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(56,95,175,.22),rgba(56,95,175,.04));border-radius:8px 8px 0 0}
   .comodal-ttl{flex:1;font-weight:600;font-size:13px}
-  .comodal-bd{flex:1;position:relative;background:#05070d}
-  #cocanvas{width:100%;height:100%;display:block}
+  /* min-height/min-width 0: a flex item defaults to min-*:auto, which takes
+     the canvas element's width/height ATTRIBUTES as a floor. sizeCo sets
+     those from the measured box every redraw, so the body could only
+     ratchet larger and never shrink, overflowing the modal and clipping
+     the plot. Taking the canvas out of flow as well makes that
+     impossible rather than merely unlikely. */
+  .comodal-bd{flex:1;min-height:0;min-width:0;position:relative;background:#05070d;overflow:hidden}
+  #cocanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   .comuted{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:13px;pointer-events:none}
   .nb2{border:1px solid var(--line);border-radius:4px;margin:4px 0;background:rgba(255,255,255,.02)}
   .nb2>summary{list-style:none;cursor:pointer;padding:6px 8px;display:flex;align-items:center;gap:7px;font-size:12px}
@@ -598,9 +604,15 @@ function openCoplanar(id){if(!id){return;}document.getElementById("comodal").cla
 function closeCoplanar(){document.getElementById("comodal").classList.remove("show");COPLANAR=null;}
 document.getElementById("comodal-x").addEventListener("click",closeCoplanar);
 // Keep the canvas sharp when the operator drags the modal's resize corner.
+// Redraw only when the measured box actually changed: resizing the canvas is
+// itself a layout change, and an unguarded observer would feed its own events.
 (function(){const m=document.getElementById("comodal");
   if(typeof ResizeObserver!=="function"){return;}
-  new ResizeObserver(()=>{sizeCo();}).observe(m);})();
+  let last="";
+  new ResizeObserver(()=>{const c=document.getElementById("cocanvas");
+    const r=c.getBoundingClientRect(),key=Math.round(r.width)+"x"+Math.round(r.height);
+    if(key===last){return;}
+    last=key;sizeCo();}).observe(m);})();
 document.getElementById("insp").addEventListener("click",ev=>{if(ev.target.closest("#cobtn")){openCoplanar(state.sel);}});
 (function(){const im=document.getElementById("comodal"),hd=document.getElementById("comodal-hd");let md=null;
   hd.addEventListener("mousedown",ev=>{if(ev.target.closest("#comodal-x")){return;}const r=im.getBoundingClientRect();md={dx:ev.clientX-r.left,dy:ev.clientY-r.top};

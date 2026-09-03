@@ -38,11 +38,11 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.2; DEPLOYED 1.6.1)
+## Current state (repo 1.6.3; DEPLOYED 1.6.2)
 
-Keep these apart. **1.6.1 is the build on the App Store**: uploaded, passed all TEN
-pipeline stages including Deploy, status Active. **1.6.2 is committed here but
-has never been uploaded**; it reworks the Co-Planar view (see Open items).
+Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
+pipeline stages including Deploy, status Active. **1.6.3 is committed here but
+has never been uploaded**; it fixes the co-planar modal resize (see Open items).
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -83,7 +83,9 @@ Shipped features:
   sits on the left edge, which reads as "coplanar" and is correct. Points are
   labelled with the satellite name. The modal is draggable and resizable, and
   redraws on resize via a ResizeObserver. It closes with the object panel, but
-  closing it leaves the panel open.
+  closing it leaves the panel open. The canvas is absolutely positioned and the
+  modal body carries `min-height:0`/`min-width:0`: see the resize note in Open
+  items before touching that CSS.
 
 ## Pushing to origin
 
@@ -290,6 +292,20 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   any consumer and all five display sites agree. Coplanar CHART POINT labels
   still show the id alone, matching the reference render, with the name in the
   legend beside them; say if you want names on the points too.
+- Co-Planar modal resize: FIXED in 1.6.3. The modal resized in one direction
+  only and appeared to zoom into the plot, clipping data. Cause: `.comodal-bd`
+  is a flex item, so it defaulted to `min-height:auto`, which takes the CANVAS
+  ELEMENT'S width/height ATTRIBUTES as a floor. `sizeCo` sets those from the
+  measured box on every redraw, so the body could only ratchet larger, never
+  smaller; it overflowed the modal and `overflow:hidden` clipped the plot to its
+  top slice. Measured: resizing the modal to 800px tall gave a 910px body, and
+  shrinking to 420px left the body at 910px. Now the canvas is
+  `position:absolute;inset:0` so it contributes no intrinsic size at all, the
+  body carries `min-height:0`/`min-width:0`, and the ResizeObserver redraws only
+  on a real size change so it cannot feed its own events. LESSON, recorded
+  because it nearly slipped: the first check asserted only that the canvas CSS
+  box changed, which it always did. A resize check must assert the BACKING STORE
+  matches the box AND that the body shrinks as well as grows.
 - Co-Planar chart furniture (two observations for Ash, nothing changed). With
   the angle axis now logarithmic the dashed threshold arcs sweep much wider,
   because they are drawn as screen-space ellipses whose intercepts sit at the
