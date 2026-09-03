@@ -38,11 +38,11 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.1; DEPLOYED 1.6.0)
+## Current state (repo 1.6.2; DEPLOYED 1.6.1)
 
-Keep these apart. **1.6.0 is the build on the App Store**: uploaded, passed all TEN
-pipeline stages including Deploy, status Active. **1.6.1 is committed here but
-has never been uploaded**; it fixes object naming (see Open items).
+Keep these apart. **1.6.1 is the build on the App Store**: uploaded, passed all TEN
+pipeline stages including Deploy, status Active. **1.6.2 is committed here but
+has never been uploaded**; it reworks the Co-Planar view (see Open items).
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -71,11 +71,25 @@ Shipped features:
 - Copy-out gate (1.5.0). The copy control is offered only for a plain
   unclassified, caveat-free marking. A proprietary commercial line (`U//PR-...`)
   is displayed with the control withheld and the reason stated. Fail-closed.
-- Co-Planar view (1.6.0). An inspector button opens a modal chart of coplanar
-  angle (the mutual inclination between two orbital planes) against absolute
-  longitude difference on a log axis, for every stored object within
+- Co-Planar view (1.6.0, reworked 1.6.2). An inspector button opens a modal
+  chart of coplanar angle (the mutual inclination between two orbital planes)
+  against absolute longitude difference, for every stored object within
   `COPLANAR_HALF_WIDTH_DEG` (default 20) of the primary. Small angle plus small
   longitude separation is the co-orbital / RPO geometry an operator watches for.
+  BOTH axes are logarithmic. The coplanar angle went log in 1.6.2 because the
+  objects that matter cluster within a degree of zero and a linear axis piled
+  them against the origin. A perfectly coplanar object has an angle of exactly
+  zero, which no log axis can place: it is clamped to `CO_XMIN` (0.01deg) and
+  sits on the left edge, which reads as "coplanar" and is correct. Points are
+  labelled with the satellite name. The modal is draggable and resizable, and
+  redraws on resize via a ResizeObserver. It closes with the object panel, but
+  closing it leaves the panel open.
+
+## Pushing to origin
+
+Owner rule, 3 September 2026: once a build has a GREEN TEN-GATE DEPLOY on the
+App Store, the repository may be pushed to origin without asking. Before that
+milestone, commit locally and leave the push to Ash.
 
 ## Golden verify loop (run before ANY packaging or upload)
 
@@ -276,6 +290,13 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   any consumer and all five display sites agree. Coplanar CHART POINT labels
   still show the id alone, matching the reference render, with the name in the
   legend beside them; say if you want names on the points too.
+- Co-Planar chart furniture (two observations for Ash, nothing changed). With
+  the angle axis now logarithmic the dashed threshold arcs sweep much wider,
+  because they are drawn as screen-space ellipses whose intercepts sit at the
+  threshold values; on log-log axes that shape is decorative rather than a
+  locus. Axis-aligned bands would be geometrically honest. Separately, now that
+  every point carries its satellite name the legend largely repeats them and
+  can sit over a point. Both are design calls, so they were left alone.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

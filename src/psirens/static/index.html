@@ -117,7 +117,7 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   .cobtn{margin:10px 0 2px;font:inherit;font-size:11.5px;background:rgba(56,95,175,.20);border:1px solid var(--line2);color:var(--ink);border-radius:6px;padding:6px 13px;cursor:pointer}
   .cobtn:hover{border-color:var(--accent);color:#fff}
   .cobtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-  .comodal{position:fixed;display:none;flex-direction:column;top:70px;left:70px;width:780px;max-width:95vw;height:580px;max-height:90vh;background:#0a1120;border:1px solid var(--line2);border-radius:9px;box-shadow:0 18px 60px rgba(0,0,0,.6);z-index:40;overflow:hidden}
+  .comodal{position:fixed;display:none;flex-direction:column;top:70px;left:70px;width:975px;max-width:95vw;height:725px;max-height:90vh;min-width:420px;min-height:320px;background:#0a1120;border:1px solid var(--line2);border-radius:9px;box-shadow:0 18px 60px rgba(0,0,0,.6);z-index:40;overflow:hidden;resize:both}
   .comodal.show{display:flex}
   .comodal-hd{display:flex;align-items:center;gap:8px;padding:9px 8px 9px 12px;cursor:move;user-select:none;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(56,95,175,.22),rgba(56,95,175,.04));border-radius:8px 8px 0 0}
   .comodal-ttl{flex:1;font-weight:600;font-size:13px}
@@ -485,7 +485,13 @@ cv.addEventListener("click",e=>{if(justPanned){justPanned=false;return;}const o=
 // --- inspector modal: floating, draggable; shown on select, hidden on deselect ---
 function syncInspector(){
   const im=document.getElementById("imodal");
-  if(!state.sel){im.classList.remove("show");return;}
+  if(!state.sel){
+    im.classList.remove("show");
+    // The co-planar chart belongs to the selected object, so it goes with the
+    // panel. Closing the chart on its own leaves the panel alone (see the
+    // #comodal-x handler), which is the asymmetry the operator asked for.
+    closeCoplanar();
+    return;}
   const o=findObj(state.sel);
   document.getElementById("insp").innerHTML=o?inspectHTML(o):`<div class="ph">Object no longer in view.</div>`;
   document.getElementById("imodal-ttl").textContent=o?(o.name||o.id):"Inspector";
@@ -508,26 +514,42 @@ const CO_ARCS=[{cop:1,lon:10,c:"217,178,58"},{cop:0.5,lon:5,c:"233,134,58"},{cop
 const coColour=i=>`hsl(${(i*57)%360} 72% 62%)`;
 function coDims(W,H){return {padL:56,padR:20,padT:30,padB:42,x0:56,x1:W-20,y0:30,y1:H-42,W,H};}
 function coYMax(maxl){if(maxl<=10){return 10;}if(maxl<=20){return 20;}return Math.pow(10,Math.ceil(Math.log10(maxl)));}
-function coScales(data,d){
-  let maxc=4,maxl=1;data.tracks.forEach(t=>t.points.forEach(pt=>{maxc=Math.max(maxc,pt.coplanar_deg);maxl=Math.max(maxl,pt.lon_diff_deg);}));
-  const xmax=Math.max(4,Math.ceil((maxc+0.4)*2)/2),ymin=0.1,ymax=coYMax(maxl);
-  const lymin=Math.log10(ymin),lymax=Math.log10(ymax);
-  const sx=v=>d.x0+(v/xmax)*(d.x1-d.x0);
-  const sy=v=>{const lv=Math.log10(Math.min(ymax,Math.max(ymin,v)));return d.y1-(lv-lymin)/(lymax-lymin)*(d.y1-d.y0);};
-  return {xmax,ymin,ymax,lymin,lymax,sx,sy};}
-function coYTicks(sc){const out=[];
-  for(let p=Math.floor(sc.lymin);p<=Math.ceil(sc.lymax);p++){const base=Math.pow(10,p);
-    for(let m=1;m<10;m++){const v=base*m;if(v>=sc.ymin-1e-9&&v<=sc.ymax+1e-9){out.push({v,major:m===1});}}}
+function coXMax(maxc){if(maxc<=1){return 1;}if(maxc<=10){return 10;}return Math.pow(10,Math.ceil(Math.log10(maxc)));}
+// Both axes are logarithmic. The coplanar angle (the inclination difference
+// between the two planes) spans three decades from CO_XMIN, because the
+// objects that matter cluster within a degree of zero and a linear axis piles
+// them all against the origin. A perfectly coplanar object has an angle of
+// exactly zero, which no log axis can place, so it is clamped to CO_XMIN and
+// sits on the left edge: the edge reads as "coplanar", which is correct.
+const CO_XMIN=0.01,CO_YMIN=0.1;
+function logScale(lo,hi,p0,p1,invert){
+  const llo=Math.log10(lo),lhi=Math.log10(hi);
+  return v=>{const lv=Math.log10(Math.min(hi,Math.max(lo,v))),f=(lv-llo)/(lhi-llo);
+    return invert?p1-f*(p1-p0):p0+f*(p1-p0);};}
+function logTicks(lo,hi){const out=[];
+  for(let p=Math.floor(Math.log10(lo));p<=Math.ceil(Math.log10(hi));p++){const base=Math.pow(10,p);
+    for(let m=1;m<10;m++){const v=base*m;if(v>=lo-1e-12&&v<=hi+1e-12){out.push({v,major:m===1});}}}
   return out;}
+function coFmt(v){if(v>=1){return String(v);}if(v>=0.1){return v.toFixed(1);}return v.toFixed(2);}
+function coScales(data,d){
+  let maxc=0.1,maxl=1;data.tracks.forEach(t=>t.points.forEach(pt=>{maxc=Math.max(maxc,pt.coplanar_deg);maxl=Math.max(maxl,pt.lon_diff_deg);}));
+  const xmin=CO_XMIN,xmax=coXMax(maxc),ymin=CO_YMIN,ymax=coYMax(maxl);
+  return {xmin,xmax,ymin,ymax,
+    sx:logScale(xmin,xmax,d.x0,d.x1,false),
+    sy:logScale(ymin,ymax,d.y0,d.y1,true)};}
 function coYGrid(ctx,d,sc){
-  coYTicks(sc).forEach(t=>{const py=sc.sy(t.v);
+  logTicks(sc.ymin,sc.ymax).forEach(t=>{const py=sc.sy(t.v);
     ctx.strokeStyle=t.major?"rgba(120,150,200,.18)":"rgba(120,150,200,.06)";
     ctx.beginPath();ctx.moveTo(d.x0,py);ctx.lineTo(d.x1,py);ctx.stroke();
-    if(t.major){ctx.fillStyle="#7f93b3";ctx.textAlign="right";ctx.fillText(t.v>=1?String(t.v):t.v.toFixed(1),d.x0-6,py+3);}});}
+    if(t.major){ctx.fillStyle="#7f93b3";ctx.textAlign="right";ctx.fillText(coFmt(t.v),d.x0-6,py+3);}});}
+function coXGrid(ctx,d,sc){
+  logTicks(sc.xmin,sc.xmax).forEach(t=>{const px=sc.sx(t.v);
+    ctx.strokeStyle=t.major?"rgba(120,150,200,.18)":"rgba(120,150,200,.06)";
+    ctx.beginPath();ctx.moveTo(px,d.y0);ctx.lineTo(px,d.y1);ctx.stroke();
+    if(t.major){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.fillText(coFmt(t.v),px,d.y1+14);}});}
 function coGrid(ctx,d,sc){
   ctx.font="10px system-ui,sans-serif";ctx.fillStyle="#7f93b3";ctx.lineWidth=1;
-  for(let v=0;v<=sc.xmax+1e-9;v+=0.5){const px=sc.sx(v);ctx.strokeStyle="rgba(120,150,200,.12)";
-    ctx.beginPath();ctx.moveTo(px,d.y0);ctx.lineTo(px,d.y1);ctx.stroke();ctx.textAlign="center";ctx.fillText(v.toFixed(1),px,d.y1+14);}
+  coXGrid(ctx,d,sc);
   coYGrid(ctx,d,sc);
   ctx.fillStyle="#9fb0cc";ctx.textAlign="center";ctx.fillText("Coplanar Angle (\u00b0)",(d.x0+d.x1)/2,d.H-7);
   ctx.save();ctx.translate(15,(d.y0+d.y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText("|Longitude Difference| (\u00b0)",0,0);ctx.restore();}
@@ -536,13 +558,20 @@ function coArcs(ctx,d,sc){
     ctx.beginPath();ctx.ellipse(d.x0,d.y1,xr,yr,0,-Math.PI/2,0);
     ctx.fillStyle=`rgba(${a.c},.05)`;ctx.fill();
     ctx.setLineDash([4,4]);ctx.strokeStyle=`rgba(${a.c},.7)`;ctx.lineWidth=1.1;ctx.stroke();ctx.setLineDash([]);});}
+function coPointLabel(t){
+  // The name where the HRR list supplies one, else the catalogue number. The
+  // server already resolves this, so `name` equalling `id` means genuinely
+  // unnamed rather than a missing join.
+  const n=String(t.name||"").trim();
+  if(n&&n!==String(t.id)){return n.slice(0,18);}
+  return String(t.id);}
 function coPlot(ctx,d,sc,data,cols){
   data.tracks.forEach((t,i)=>{const col=cols[i],pts=t.points;
     if(pts.length>1){ctx.strokeStyle=col;ctx.globalAlpha=.7;ctx.lineWidth=1.3;ctx.beginPath();
       pts.forEach((pt,k)=>{const X=sc.sx(pt.coplanar_deg),Y=sc.sy(pt.lon_diff_deg);if(k===0){ctx.moveTo(X,Y);}else{ctx.lineTo(X,Y);}});ctx.stroke();ctx.globalAlpha=1;}
     const last=pts[pts.length-1],X=sc.sx(last.coplanar_deg),Y=sc.sy(last.lon_diff_deg);
     ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,4,0,7);ctx.fill();ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
-    ctx.fillStyle="#c7d4ea";ctx.font="9.5px system-ui,sans-serif";ctx.textAlign="left";ctx.fillText(esc(t.id),X+7,Y+3);});}
+    ctx.fillStyle="#c7d4ea";ctx.font="9.5px system-ui,sans-serif";ctx.textAlign="left";ctx.fillText(coPointLabel(t),X+7,Y+3);});}
 function coLegend(ctx,d,data,cols){
   const items=data.tracks.slice(0,12),lh=14,w=124,x=d.x1-w-6,y0=d.y0+6;if(!items.length){return;}
   ctx.fillStyle="rgba(8,14,28,.80)";ctx.strokeStyle="rgba(120,150,200,.25)";ctx.lineWidth=1;
@@ -566,7 +595,12 @@ function openCoplanar(id){if(!id){return;}document.getElementById("comodal").cla
     document.getElementById("comsg").textContent="";
     document.getElementById("comodal-ttl").textContent="Co-Planar \u00b7 "+esc(j.primary.name||j.primary.id)+"  ("+j.tracks.length+" in \u00b1"+j.half_width_deg+"\u00b0)";
     COPLANAR=j;sizeCo();}).catch(()=>{document.getElementById("comsg").textContent="co-planar service unavailable";});}
-document.getElementById("comodal-x").addEventListener("click",()=>{document.getElementById("comodal").classList.remove("show");});
+function closeCoplanar(){document.getElementById("comodal").classList.remove("show");COPLANAR=null;}
+document.getElementById("comodal-x").addEventListener("click",closeCoplanar);
+// Keep the canvas sharp when the operator drags the modal's resize corner.
+(function(){const m=document.getElementById("comodal");
+  if(typeof ResizeObserver!=="function"){return;}
+  new ResizeObserver(()=>{sizeCo();}).observe(m);})();
 document.getElementById("insp").addEventListener("click",ev=>{if(ev.target.closest("#cobtn")){openCoplanar(state.sel);}});
 (function(){const im=document.getElementById("comodal"),hd=document.getElementById("comodal-hd");let md=null;
   hd.addEventListener("mousedown",ev=>{if(ev.target.closest("#comodal-x")){return;}const r=im.getBoundingClientRect();md={dx:ev.clientX-r.left,dy:ev.clientY-r.top};
