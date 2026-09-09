@@ -3,7 +3,16 @@
 # runs it: install ONLY requirements.txt (never requirements-dev.txt), then run
 # the platform's exact pytest command. A divergence here once let a green local
 # run fail the platform with `pytest: command not found`; this must not drift.
+#
+# Every gate below was added after the upload failure that taught it, and each
+# one now runs TWICE: once against a deliberately bad case in gate-cases/ that
+# it MUST reject, and once against the real source, which it must accept. That
+# is not belt and braces. Two checks in this project have reported success
+# while examining nothing (an eslint run from the wrong working directory, and
+# a resize assertion that was true by construction), and both passed while real
+# bugs were live. A gate nobody has watched fail is not a gate.
 set -eu
+ROOT="$(pwd)"
 SIM="$(mktemp -d)"
 cp -r Dockerfile requirements.txt pyproject.toml sonar-project.properties src tests "$SIM"/
 cd "$SIM"
@@ -12,67 +21,93 @@ python3 -m venv .venv
 pip install -r requirements.txt            # platform step 1 (this file only)
 pytest --cov --cov-report=xml:coverage.xml  # platform step 2 (exact command)
 test -s coverage.xml || { echo "FAIL: coverage.xml missing/empty"; exit 1; }
-# SonarQube python:S3776 proxy: no function may exceed cognitive complexity 15.
-# Plus python:S107: no function may exceed 13 parameters. Both are flagged
-# server-side only; check them here so a green local run cannot pass a smell
-# the gate will reject (a real 1.4.0 miss on parse_hrr, and a real 1.5.0 miss
-# on _elset_dict at 18 parameters, which cost a full upload cycle).
+
+# What the coverage figure does NOT cover. The number is high (94 per cent) and
+# the served SPA is excluded from it entirely, which is the surface that
+# produced both of the defects that reached a deployed build. Print the
+# exclusions next to the figure so the percentage is never read as full cover.
+COV_EXCL="$(sed -n 's/^sonar\.coverage\.exclusions=//p' "$ROOT/sonar-project.properties")"
+echo "COVERAGE SCOPE: excluded from the figure above: ${COV_EXCL:-nothing}"
+echo "                the SPA is guarded by the text gates and eslint below,"
+echo "                NOT by the coverage percentage."
+
+# ---------------------------------------------------------------------------
+# SonarQube AST proxies: python:S3776 (cognitive complexity 15) and python:S107
+# (13 parameters). Both are server-side only. S107 failed the 1.5.0 upload on
+# _elset_dict at 18 parameters, which cost a full upload cycle.
+# Red case FIRST: if the checker no longer flags gate-cases/, a clean result
+# against src/ proves nothing at all.
+# ---------------------------------------------------------------------------
 pip install -q cognitive_complexity >/dev/null 2>&1
-python3 - <<'PY' || { echo "FAIL: cognitive complexity >15 or parameters >13 (see above)"; exit 1; }
-import ast, glob, sys
-from cognitive_complexity.api import get_cognitive_complexity
-MAX_CC, MAX_PARAMS = 15, 13
-over = []
-for f in sorted(glob.glob("src/psirens/*.py")):
-    for n in ast.walk(ast.parse(open(f).read())):
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            cc = get_cognitive_complexity(n)
-            if cc > MAX_CC:
-                over.append(f"{f}:{n.lineno} {n.name} cc={cc} (max {MAX_CC}, S3776)")
-            a = n.args
-            params = (len(a.posonlyargs) + len(a.args) + len(a.kwonlyargs)
-                      + (1 if a.vararg else 0) + (1 if a.kwarg else 0))
-            if params > MAX_PARAMS:
-                over.append(f"{f}:{n.lineno} {n.name} params={params} (max {MAX_PARAMS}, S107)")
-if over:
-    print("\n".join(over)); sys.exit(1)
-print(f"cognitive complexity OK (<={MAX_CC}) and parameter counts OK (<={MAX_PARAMS})")
-PY
-# SonarQube JS "prefer globalThis over window" (S6643) proxy: eslint-plugin-sonarjs
-# does not carry this rule, so grep the served SPA for window.* member access.
-if grep -nE "\bwindow\." src/psirens/static/index.html; then
-  echo "FAIL: use globalThis instead of window.* in the SPA (SonarQube S6643)"; exit 1
-fi
-# SonarQube Web:S6819 proxy: prefer native elements over ARIA landmark roles
-# (region->section, banner->header, navigation->nav, main->main, etc.). The
-# eslint proxy cannot parse HTML a11y, so grep the SPA for these roles.
-if grep -nE 'role="(region|banner|navigation|main|contentinfo|complementary|form)"' src/psirens/static/index.html; then
-  echo "FAIL: use the native element instead of the ARIA role above (SonarQube S6819)"; exit 1
-fi
-# SonarQube "prefer dataset over getAttribute" proxy: a data-* attribute read
-# via getAttribute should use element.dataset.* instead.
-if grep -nE 'getAttribute\("data-' src/psirens/static/index.html; then
-  echo "FAIL: use element.dataset.* instead of getAttribute(\"data-...\") above (SonarQube prefer-dataset)"; exit 1
-fi
-# SPA lint gates.
-# The grep below is the one that matters for the rule that failed the 1.5.2
-# upload ("prefer throw over a returned rejected promise"). MEASURED, not
-# assumed: eslint-plugin-sonarjs does NOT carry that rule, even with all 279
-# of its rules enabled, so running eslint would NOT have caught it. Only a
-# real sonar-scanner or this grep will.
-# eslint still runs below because it covers a different, wider set of JS
-# smells, and it carries its own canary so it can never report a silent pass.
-if grep -nE "Promise\.reject" src/psirens/static/index.html; then
-  echo "FAIL: prefer 'throw error' over 'return Promise.reject(error)' above (SonarJS)"; exit 1
-fi
+python3 "$ROOT/tools/ast_gates.py" "$ROOT/gate-cases/*.py" --expect flagged --require 2 \
+  || { echo "FAIL: the AST gate did not reject its own red case"; exit 1; }
+python3 "$ROOT/tools/ast_gates.py" 'src/psirens/*.py' --expect clean \
+  || { echo "FAIL: cognitive complexity >15 or parameters >13 (see above)"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# The four text rules the eslint plugin does not carry. MEASURED, not assumed:
+# eslint-plugin-sonarjs does NOT carry the throw-versus-rejected-promise rule
+# even with all 279 of its rules enabled, so running eslint would NOT have
+# caught the failure that rejected the 1.5.2 upload. Only a real scanner or
+# these patterns will.
+# Each pattern is checked against the red case (must match) before the real
+# page (must not). One of these once matched its own explanatory comment, so
+# they are fragile enough to deserve testing.
+# ---------------------------------------------------------------------------
+SPA="src/psirens/static/index.html"
+CASE="$ROOT/gate-cases/spa_case.html"
+spa_rule() {  # $1 = pattern, $2 = the message if the real page matches
+  if ! grep -qE "$1" "$CASE"; then
+    echo "FAIL: pattern [$1] did not match the red case gate-cases/spa_case.html."
+    echo "      The check is broken, so a clean SPA proves nothing."
+    exit 1
+  fi
+  if grep -nE "$1" "$SPA"; then
+    echo "FAIL: $2"
+    exit 1
+  fi
+}
+spa_rule '\bwindow\.' \
+  'use globalThis instead of window.* in the SPA (SonarQube S6643)'
+spa_rule 'role="(region|banner|navigation|main|contentinfo|complementary|form)"' \
+  'use the native element instead of the ARIA role above (SonarQube S6819)'
+spa_rule 'getAttribute\("data-' \
+  'use element.dataset.* instead of getAttribute("data-...") above (prefer-dataset)'
+spa_rule 'Promise\.reject' \
+  "prefer 'throw error' over a returned rejected promise above (SonarJS)"
+echo "SPA text gates OK (all four bit the red case, none matched the SPA)"
+
+# ---------------------------------------------------------------------------
+# eslint covers a wider set of JS smells. It carries its own canary because an
+# eslint run from the wrong working directory silently ignores the file and
+# reports success.
+# A skipped run is a FAILURE, not a pass: a machine that cannot run a check
+# must not be able to report one. Override deliberately with
+# ALLOW_SKIPPED_SPA_LINT=1 if you accept the gap for this run.
+# ---------------------------------------------------------------------------
 SPA_LINT_CACHE="${SPA_LINT_CACHE:-$HOME/.cache/psirens-spa-lint}"
-if command -v node >/dev/null 2>&1; then
+spa_lint_unavailable() {
+  echo "SPA lint could not run: $1"
+  if [ "${ALLOW_SKIPPED_SPA_LINT:-0}" = "1" ]; then
+    echo "WARNING: skipping it because ALLOW_SKIPPED_SPA_LINT=1."
+    echo "         This build has NOT been linted. Two gate failures came from here."
+    return 0
+  fi
+  echo "FAIL: a check that cannot run must not report a pass."
+  echo "      Install node, or re-run with ALLOW_SKIPPED_SPA_LINT=1 to accept the gap."
+  exit 1
+}
+if ! command -v node >/dev/null 2>&1; then
+  spa_lint_unavailable "no node on this machine"
+else
   mkdir -p "$SPA_LINT_CACHE"
   if [ ! -x "$SPA_LINT_CACHE/node_modules/.bin/eslint" ]; then
     (cd "$SPA_LINT_CACHE" && npm init -y >/dev/null 2>&1 \
       && npm install --no-audit --no-fund --loglevel=error eslint@9 eslint-plugin-sonarjs >/dev/null 2>&1) || true
   fi
-  if [ -x "$SPA_LINT_CACHE/node_modules/.bin/eslint" ]; then
+  if [ ! -x "$SPA_LINT_CACHE/node_modules/.bin/eslint" ]; then
+    spa_lint_unavailable "could not install eslint-plugin-sonarjs"
+  else
     # eslint resolves its plugin and its base path from the working directory,
     # so the config, the node_modules and the extracted script must all sit in
     # $SIM. Linting from elsewhere makes eslint silently ignore the file and
@@ -114,12 +149,9 @@ EXTRACT
       echo "FAIL: SonarJS findings in the SPA (see above)"; exit 1
     fi
     rm -f _spa_lint.js _spa_lint_canary.js eslint.config.mjs node_modules
-  else
-    echo "WARNING: SPA lint SKIPPED (could not install eslint-plugin-sonarjs)."
-    echo "         Run it by hand before upload; two gate failures came from here."
   fi
-else
-  echo "WARNING: SPA lint SKIPPED (no node on this machine)."
-  echo "         Run it by hand before upload; two gate failures came from here."
 fi
 echo "SIMULATION GREEN (matches platform): tests passed, coverage.xml at $SIM/coverage.xml"
+echo "Every gate above was run against a case it MUST reject before being"
+echo "trusted against the real source. Still not covered here: a real"
+echo "sonar-scanner, and any layout or runtime behaviour of the SPA."

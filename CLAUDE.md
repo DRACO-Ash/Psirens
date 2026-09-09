@@ -111,8 +111,21 @@ The SPA is linted automatically: `simulate-pipeline.sh` extracts the inline
 script, runs `node --check`, then eslint with eslint-plugin-sonarjs. That step
 carries a CANARY (a deliberate `sonarjs/no-invariant-returns` violation) and
 fails if the canary is not flagged, because an eslint run from the wrong
-working directory silently ignores the file and reports success. If node is
-absent the step prints a loud SKIPPED warning rather than passing quietly.
+working directory silently ignores the file and reports success.
+
+EVERY gate now runs TWICE: once against a deliberately bad case in
+`gate-cases/` that it MUST reject, then against the real source, which it must
+accept. `tools/ast_gates.py` carries the two Python rules and takes
+`--expect flagged|clean`; the four SPA text rules check the red case before the
+page. A gate that stops rejecting its own case fails the build, because a clean
+result from a broken checker proves nothing. `gate-cases/` is not imported, not
+collected by pytest, not analysed by SonarQube (`sonar.sources=src`) and not
+packaged.
+
+A check that CANNOT RUN is a failure, not a pass. With no node the loop stops;
+`ALLOW_SKIPPED_SPA_LINT=1` accepts the gap deliberately and says so in the
+output. The loop also prints what the coverage figure excludes, because 94% with
+the SPA excluded is not 94% of the risk.
 
 ## App Store deploy contract (understand before packaging)
 
@@ -306,6 +319,13 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   because it nearly slipped: the first check asserted only that the canvas CSS
   box changed, which it always did. A resize check must assert the BACKING STORE
   matches the box AND that the body shrinks as well as grows.
+  PARTLY CLOSED, 9 September 2026: the retrospective audit found only ONE of
+  nine guards had a committed case proving it could go red. The AST gates and
+  the four SPA text rules now have one (`gate-cases/`), and a skipped check is
+  now fatal. Still open, and the reason this item stays open: THERE IS STILL NO
+  LAYOUT GUARD. The check that found this bug was never committed, so the
+  protection standing today is the same prose that let 1.6.2 through. That is
+  item G3 in `IMPROVEMENT-PLAN.md`.
 - Co-Planar chart furniture (two observations for Ash, nothing changed). With
   the angle axis now logarithmic the dashed threshold arcs sweep much wider,
   because they are drawn as screen-space ellipses whose intercepts sit at the

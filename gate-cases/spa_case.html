@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- Red case for the four SonarQube text rules the eslint proxy cannot see.
+     One violation of each, one per line. The loop greps this file and FAILS if
+     any pattern is missing, then greps the real page and fails if any is
+     present. Do not tidy this file. -->
+<html lang="en-GB">
+<body>
+<section role="region" aria-label="S6819: prefer the native element"></section>
+<div id="x" data-thing="1"></div>
+<script>
+var w = window.innerWidth;                       // S6643: prefer globalThis
+var d = document.getElementById("x").getAttribute("data-thing");  // prefer dataset
+function bad(p){ return p.then(function(){ return Promise.reject(new Error("x")); }); }
+</script>
+</body>
+</html>

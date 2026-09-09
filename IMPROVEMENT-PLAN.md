@@ -258,6 +258,18 @@ ride along with any batch.
 
 ## Loop record
 
-Applied: none yet. This file is the proposal step.
-Declined: D1, D2, D3, D4, with the measurements above, so a later synthesis does
-not re-propose them.
+**Applied, 2026-09-09, one batched change, approved by Ash Higgins:**
+G1, G2, T1, G4. Each new gate was demonstrated to fail before being trusted:
+loosening the AST caps makes the red case fail; an empty glob fails rather than
+passing by examining nothing; a typo in an SPA pattern fails on the red case;
+and with node absent the loop stops instead of warning and going green. The
+audited count moves from one guard in nine with a committed red case to six.
+
+**Still open:** T2 (declare the loop's blind spots in its summary line) was
+partly delivered by G4 and the closing lines of the loop, but was not in the
+approved batch and is not claimed as done. G3 (the layout probe) is the one that
+matters and is untouched: the class that actually shipped a defect is still
+unguarded. T3 and L1 need the owner. L2 and L3 are unapplied prose.
+
+**Declined:** D1, D2, D3, D4, with the measurements above, so a later synthesis
+does not re-propose them.
