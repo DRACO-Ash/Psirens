@@ -127,6 +127,15 @@ A check that CANNOT RUN is a failure, not a pass. With no node the loop stops;
 output. The loop also prints what the coverage figure excludes, because 94% with
 the SPA excluded is not 94% of the risk.
 
+LAYOUT is guarded too (`tools/layout_check.sh` and `tools/layout_probe.js`).
+The loop serves the app offline, seeds a small watchlist so the real controls
+exist, drives Chromium headless, and asserts three things about the co-planar
+modal: the canvas BACKING STORE tracks its box, the body never overflows the
+modal, and shrinking actually shrinks. Skippable only via
+`ALLOW_SKIPPED_LAYOUT_PROBE=1`. It uses the globally installed node playwright,
+never `requirements.txt`: the platform test stage installs that file and does
+not run a browser.
+
 ## App Store deploy contract (understand before packaging)
 
 None of this is fully discoverable from the platform docs; each line cost a build
@@ -319,13 +328,16 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   because it nearly slipped: the first check asserted only that the canvas CSS
   box changed, which it always did. A resize check must assert the BACKING STORE
   matches the box AND that the body shrinks as well as grows.
-  PARTLY CLOSED, 9 September 2026: the retrospective audit found only ONE of
-  nine guards had a committed case proving it could go red. The AST gates and
-  the four SPA text rules now have one (`gate-cases/`), and a skipped check is
-  now fatal. Still open, and the reason this item stays open: THERE IS STILL NO
-  LAYOUT GUARD. The check that found this bug was never committed, so the
-  protection standing today is the same prose that let 1.6.2 through. That is
-  item G3 in `IMPROVEMENT-PLAN.md`.
+  CLOSED, 11 September 2026. The retrospective audit found only ONE of nine
+  guards had a committed case proving it could go red. The AST gates and the
+  four SPA text rules now have one (`gate-cases/`), a skipped check is fatal,
+  and the layout probe is committed and wired into the loop. PROVEN: reverting
+  the two CSS rules above to their byte-identical 1.6.2 form (`abf78de`) makes
+  the probe report a 437px body inside a 420px modal and fail the build.
+  SECOND LESSON, and the sharper one: my FIRST attempt to prove the probe was
+  a RECONSTRUCTION of the 1.6.2 CSS from memory, and the probe PASSED against
+  it. A reconstructed bug is not the bug. Revert from git history, byte for
+  byte, or the proof proves nothing.
 - Co-Planar chart furniture (two observations for Ash, nothing changed). With
   the angle axis now logarithmic the dashed threshold arcs sweep much wider,
   because they are drawn as screen-space ellipses whose intercepts sit at the

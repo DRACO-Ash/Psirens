@@ -151,7 +151,35 @@ EXTRACT
     rm -f _spa_lint.js _spa_lint_canary.js eslint.config.mjs node_modules
   fi
 fi
+# ---------------------------------------------------------------------------
+# The layout guard. Serves the app offline and drives it in a real browser.
+# 1.6.2 reached Active carrying a modal-resize defect because the check written
+# to catch it asserted only that the canvas CSS box changed, which is true by
+# construction. This probe asserts the backing store tracks the box, the body
+# never overflows the modal, and shrinking actually shrinks. PROVEN: reverting
+# the two 1.6.3 CSS rules to their 1.6.2 form makes it fail.
+# Like the lint, a probe that cannot run is a failure, not a pass.
+# ---------------------------------------------------------------------------
+set +e
+sh "$ROOT/tools/layout_check.sh" "$ROOT"
+LAYOUT_RC=$?
+set -e
+if [ "$LAYOUT_RC" -eq 2 ]; then
+  if [ "${ALLOW_SKIPPED_LAYOUT_PROBE:-0}" = "1" ]; then
+    echo "WARNING: layout probe skipped because ALLOW_SKIPPED_LAYOUT_PROBE=1."
+    echo "         This build's layout has NOT been checked. A defect of exactly"
+    echo "         this class reached a deployed build once."
+  else
+    echo "FAIL: the layout probe could not run, and a check that cannot run must"
+    echo "      not report a pass. Install node and playwright, or re-run with"
+    echo "      ALLOW_SKIPPED_LAYOUT_PROBE=1 to accept the gap."
+    exit 1
+  fi
+elif [ "$LAYOUT_RC" -ne 0 ]; then
+  echo "FAIL: the layout probe found a defect (see above)"; exit 1
+fi
+
 echo "SIMULATION GREEN (matches platform): tests passed, coverage.xml at $SIM/coverage.xml"
 echo "Every gate above was run against a case it MUST reject before being"
 echo "trusted against the real source. Still not covered here: a real"
-echo "sonar-scanner, and any layout or runtime behaviour of the SPA."
+echo "sonar-scanner against the tenant host."
