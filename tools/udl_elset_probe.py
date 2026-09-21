@@ -218,33 +218,65 @@ def fetch_elsets(base: str, user: str, password: str, *, hours: int,
 # --------------------------------------------------------------------------
 # Analysis
 # --------------------------------------------------------------------------
+class _Tally:
+    """The counters one pass over the records fills in.
+
+    Split out of `analyse`, which reached cognitive complexity 18 against the
+    cap of 15 (python:S3776). It sat in `tools/`, which SonarQube does not
+    analyse (`sonar.sources=src`), so the platform would never have rejected
+    it: it was found by running our own published checker over our own tree,
+    which is the only reason it is fixed rather than an item in a document
+    telling other teams to do better.
+    """
+
+    def __init__(self) -> None:
+        self.verdicts: Counter = Counter()
+        self.sources: Counter = Counter()
+        self.classes: Counter = Counter()
+        self.markings: Counter = Counter()
+        self.optional: Counter = Counter()
+        self.mismatches: List[Dict[str, Any]] = []
+        self.copyable = 0
+
+    def add(self, row: Dict[str, Any]) -> None:
+        verdict, claimed = line_verdict(row)
+        self.verdicts[verdict] += 1
+        self._note_mismatch(row, verdict, claimed)
+        source = str(row.get("source") or "")
+        self.sources[source] += 1
+        self.classes[classify_source(source)] += 1
+        marking = str(row.get("classificationMarking") or "")
+        self.markings[marking] += 1
+        if is_copyable(marking):
+            self.copyable += 1
+        self._note_optional(row)
+
+    def _note_mismatch(self, row: Dict[str, Any], verdict: str,
+                       claimed: Optional[str]) -> None:
+        if verdict == "satno_mismatch" and len(self.mismatches) < 20:
+            self.mismatches.append({"satNo": row.get("satNo"),
+                                    "claimed": claimed,
+                                    "source": row.get("source")})
+
+    def _note_optional(self, row: Dict[str, Any]) -> None:
+        for field in ("revNo", "meanMotionDot", "meanMotionDDot", "ephemType"):
+            if row.get(field) not in (None, ""):
+                self.optional[field] += 1
+
+
 def analyse(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Reduce a window of elset records to the four assumption verdicts."""
     total = len(rows)
-    verdicts: Counter = Counter()
-    sources: Counter = Counter()
-    classes: Counter = Counter()
-    markings: Counter = Counter()
-    optional: Counter = Counter()
-    mismatches: List[Dict[str, Any]] = []
-    copyable = 0
-
+    tally = _Tally()
     for row in rows:
-        verdict, claimed = line_verdict(row)
-        verdicts[verdict] += 1
-        if verdict == "satno_mismatch" and len(mismatches) < 20:
-            mismatches.append({"satNo": row.get("satNo"), "claimed": claimed,
-                               "source": row.get("source")})
-        source = str(row.get("source") or "")
-        sources[source] += 1
-        classes[classify_source(source)] += 1
-        marking = str(row.get("classificationMarking") or "")
-        markings[marking] += 1
-        if is_copyable(marking):
-            copyable += 1
-        for field in ("revNo", "meanMotionDot", "meanMotionDDot", "ephemType"):
-            if row.get(field) not in (None, ""):
-                optional[field] += 1
+        tally.add(row)
+    verdicts = tally.verdicts
+    sources = tally.sources
+    classes = tally.classes
+    markings = tally.markings
+    optional = tally.optional
+    mismatches = tally.mismatches
+    copyable = tally.copyable
 
     present = total - verdicts["absent"]
     usable = verdicts["ok"]

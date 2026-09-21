@@ -45,6 +45,18 @@ python3 "$ROOT/tools/ast_gates.py" 'src/psirens/*.py' --expect clean \
   || { echo "FAIL: cognitive complexity >15 or parameters >13 (see above)"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# The portable sniff checker (SNIFFS.md). Self-test FIRST: it asserts that
+# every rule rejects a case it must reject and accepts one it must not flag,
+# including that no text rule fires on a comment describing it. Then the real
+# tree. This overlaps the AST gate above on two rules and adds the Python
+# correctness sniffs; the overlap is deliberate, because this file is the one
+# handed to other projects and it must be known to work.
+# ---------------------------------------------------------------------------
+python3 "$ROOT/tools/sniff_check.py" --self-test > /dev/null   || { echo "FAIL: sniff_check self-test failed; the checker is broken"; exit 1; }
+python3 "$ROOT/tools/sniff_check.py" src tests   || { echo "FAIL: sniff findings above (see SNIFFS.md)"; exit 1; }
+echo "sniff_check OK (self-test passed, no findings in src or tests)"
+
+# ---------------------------------------------------------------------------
 # The four text rules the eslint plugin does not carry. MEASURED, not assumed:
 # eslint-plugin-sonarjs does NOT carry the throw-versus-rejected-promise rule
 # even with all 279 of its rules enabled, so running eslint would NOT have

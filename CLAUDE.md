@@ -402,6 +402,18 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   raced the pull for the single-flight lock in tests; it is now gated by
   `SCHEDULER_ENABLED` (default True in production, False in the test fixture) and
   a direct scheduler test keeps the loop covered.
+- Sniff compendium: ADDED 21 September 2026. `SNIFFS.md` plus
+  `tools/sniff_check.py`, wired into the loop (self-test first, then `src` and
+  `tests`). Checking our own tree against it took two fixes: a FALSE POSITIVE
+  in the zero-fraction pattern, where `\d+\.0` matched `127.0.0.1`, and one
+  REAL violation, `analyse` in `tools/udl_elset_probe.py` at cognitive
+  complexity 18. That file sits outside `sonar.sources=src`, so the platform
+  would never have rejected it: it was found only by running our own published
+  rules over our own tree. `src`, `tests` and `tools` are now clean, 0 findings
+  across 27 files. The checker's complexity engine is named in its output: it
+  uses the reference `cognitive_complexity` package when installed and a
+  stdlib fallback otherwise, and the fallback OVER-counts deeply nested
+  if/elif chains, so it is labelled rather than trusted silently.
 - `README.md` predates several features (RA needles, Simulation view, timescale/
   range pull, conjunctions, deep zoom). Refresh when convenient.
 
@@ -416,5 +428,11 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   signal, tagged FACT / INFERENCE / TBC. Read it before bumping a dependency
   or touching the Dockerfile base image, and convert its TBC items to FACT
   the first time one of those gates fails.
+- `SNIFFS.md` — the code-quality sniff compendium, written to be handed to
+  other projects, with `tools/sniff_check.py` as its runnable checker (stdlib
+  only, single file, `--self-test`). Read it before arguing with a Code Quality
+  rejection. Its headline is MEASURED: five of ten common sniffs are NOT
+  reported by eslint-plugin-sonarjs, including the one that failed 1.5.2, so a
+  green eslint run does not predict a green SonarQube gate.
 - `READINESS.md` — pre-submit App Store readiness scoring.
 - `pyproject.toml` — tool config and the coverage floor.
