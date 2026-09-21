@@ -594,13 +594,26 @@ function sizeCo(){const c=document.getElementById("cocanvas");if(COPLANAR===null
   const r=c.getBoundingClientRect();if(r.width<2){return;}const dpr=Math.min(2,globalThis.devicePixelRatio||1);
   c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);
   const x=c.getContext("2d");x.setTransform(dpr,0,0,dpr,0,0);drawCoplanar(x,r.width,r.height,COPLANAR);}
+function coplanarError(status){
+  if(status===400){return "no target selected";}
+  if(status===429){return "rate limited, retry shortly";}
+  return "server error "+status;}
 function openCoplanar(id){if(!id){return;}document.getElementById("comodal").classList.add("show");
   document.getElementById("comsg").textContent="computing\u2026";document.getElementById("comodal-ttl").textContent="Co-Planar view";
-  fetch("/api/coplanar?target="+encodeURIComponent(id)).then(r=>r.json()).then(j=>{
+  fetch("/api/coplanar?target="+encodeURIComponent(id)).then(r=>{
+    if(r.ok){return r.json();}
+    // Same guard as /api/conjunctions, for the same reason: a non-JSON error
+    // body made .json() reject and the catch below could only say "service
+    // unavailable", hiding the stated cause. Throw rather than returning a
+    // rejected promise; inside a then callback both reject identically and
+    // SonarJS flags the returned form.
+    throw new Error(coplanarError(r.status));
+  }).then(j=>{
     if(!j.primary){COPLANAR=null;document.getElementById("comsg").textContent=j.detail||"no element set for this object";return;}
     document.getElementById("comsg").textContent="";
     document.getElementById("comodal-ttl").textContent="Co-Planar \u00b7 "+esc(j.primary.name||j.primary.id)+"  ("+j.tracks.length+" in \u00b1"+j.half_width_deg+"\u00b0)";
-    COPLANAR=j;sizeCo();}).catch(()=>{document.getElementById("comsg").textContent="co-planar service unavailable";});}
+    COPLANAR=j;sizeCo();}).catch(e=>{COPLANAR=null;
+    document.getElementById("comsg").textContent="co-planar unavailable: "+e.message;});}
 function closeCoplanar(){document.getElementById("comodal").classList.remove("show");COPLANAR=null;}
 document.getElementById("comodal-x").addEventListener("click",closeCoplanar);
 // Keep the canvas sharp when the operator drags the modal's resize corner.

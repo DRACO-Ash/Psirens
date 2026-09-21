@@ -38,11 +38,12 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.3; DEPLOYED 1.6.2)
+## Current state (repo 1.6.4; DEPLOYED 1.6.2)
 
 Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
-pipeline stages including Deploy, status Active. **1.6.3 is committed here but
-has never been uploaded**; it fixes the co-planar modal resize (see Open items).
+pipeline stages including Deploy, status Active. **1.6.3 and 1.6.4 are committed
+here and have never been uploaded**; 1.6.3 fixes the co-planar modal resize and
+1.6.4 guards the co-planar fetch (see Open items).
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -345,6 +346,20 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   locus. Axis-aligned bands would be geometrically honest. Separately, now that
   every point carries its satellite name the legend largely repeats them and
   can sit over a point. Both are design calls, so they were left alone.
+- Co-Planar fetch robustness: FIXED in 1.6.4. `openCoplanar` called
+  `.then(r=>r.json())` with NO `response.ok` check, so a non-JSON error body
+  made `.json()` reject and the catch could only say "co-planar service
+  unavailable", hiding the stated cause. This is the SAME defect that was fixed
+  on `/api/conjunctions` in 1.5.2 and it survived on the co-planar path for two
+  builds, because the 1.5.2 fix was applied to the route that had failed rather
+  than to the pattern. Now the status is checked, the thrown message names the
+  cause, and the status-to-message mapping is a function rather than a nested
+  ternary (`sonarjs/no-nested-conditional`, which the local eslint gate caught
+  on the first attempt at this very fix). PROVEN: the layout probe now injects
+  a 500 on `/api/coplanar` and asserts the message names it; reverting
+  `openCoplanar` to its `c02462c` form makes the probe report the old catch-all
+  and fail. LESSON: when a defect is found, grep for the PATTERN across the
+  file, not just the route that failed.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

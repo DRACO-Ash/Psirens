@@ -97,9 +97,16 @@ function checkBodyFits(m, label) {
   }
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
-  page.on("console", (c) => { if (c.type() === "error") { errors.push(c.text()); } });
+  // Two buckets, because the error-path phase below injects a 500 on purpose.
+  // An uncaught exception is always a failure; a console resource error is one
+  // only while we are not deliberately breaking a request.
+  const pageErrors = [];
+  const consoleErrors = [];
+  let injectingFault = false;
+  page.on("pageerror", (e) => pageErrors.push(String(e)));
+  page.on("console", (c) => {
+    if (c.type() === "error" && !injectingFault) { consoleErrors.push(c.text()); }
+  });
 
   try {
     await page.goto(BASE, { waitUntil: "networkidle" });
@@ -169,12 +176,45 @@ function checkBodyFits(m, label) {
            `modal, still ${Math.round(shrunk.bodyH)}px at a 420px modal. The ` +
            `canvas attributes are acting as an intrinsic floor again.`);
     }
-    if (errors.length) {
-      fail("page errors during the probe: " + errors.slice(0, 3).join(" | "));
+    // ---------------------------------------------------------------------
+    // The error path. A non-JSON error body used to make .json() reject, and
+    // the catch could only say "service unavailable", hiding the stated cause.
+    // That exact defect reached production once on /api/conjunctions; this
+    // asserts the co-planar path does not repeat it.
+    // ---------------------------------------------------------------------
+    await page.click("#comodal-x");
+    injectingFault = true;
+    await page.route("**/api/coplanar*", (route) =>
+      route.fulfill({ status: 500, contentType: "text/html",
+                      body: "<html><body>502 Bad Gateway</body></html>" }));
+    await page.locator(`[data-id="${opened.id}"]`).first().click();
+    await page.click("#cobtn");
+    await page.waitForFunction(
+      () => document.getElementById("comsg").textContent.trim() !== "computing\u2026",
+      null, { timeout: 10000 }).catch(() => {});
+    const msg = (await page.textContent("#comsg") || "").trim();
+    console.log("  on a 500:    " + JSON.stringify(msg));
+    if (!/server error 500/.test(msg)) {
+      fail(`a failed /api/coplanar reported ${JSON.stringify(msg)} instead of ` +
+           `the stated cause. An unchecked response.ok turns every error into ` +
+           `one useless catch-all, which is how a 500 read as "unavailable" ` +
+           `for two builds.`);
+    }
+    await page.unroute("**/api/coplanar*");
+    injectingFault = false;
+
+    // An uncaught exception is never expected, not even while faulting: the
+    // whole point of the guard is that a bad response is HANDLED.
+    if (pageErrors.length) {
+      fail("uncaught page exceptions: " + pageErrors.slice(0, 3).join(" | "));
+    }
+    if (consoleErrors.length) {
+      fail("console errors outside the injected fault: " +
+           consoleErrors.slice(0, 3).join(" | "));
     }
     if (!process.exitCode) {
       console.log("LAYOUT PROBE OK (backing store tracks the box, body fits the " +
-                  "modal, and shrinking shrinks)");
+                  "modal, shrinking shrinks, and a failed fetch states its cause)");
     }
   } catch (e) {
     fail("probe could not complete: " + String(e).split("\n")[0]);
