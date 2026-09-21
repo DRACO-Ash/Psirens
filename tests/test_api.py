@@ -358,3 +358,80 @@ def test_coplanar_endpoint_returns_primary_and_tracks(client):
     assert r.status_code == 200
     j = r.json()
     assert "primary" in j and "tracks" in j and "half_width_deg" in j
+
+
+# --- priority-rank filtering on /api/tracks (1.6.5) -----------------------
+# First paint carries ranks 1-3 only; 4 and 5 are the bulk of the list and are
+# fetched on demand. The filter lives server-side so the bytes are never sent,
+# which is the whole point: a client-side filter would download them anyway.
+
+def _seed_ranked(client, monkeypatch):
+    """Give the app an HRR map with a known rank per demo object."""
+    ranked = {"41836": {"name": "SES-10", "rank": 1},
+              "28924": {"name": "EUTELSAT 174A", "rank": 3},
+              "43683": {"name": "BEIDOU-3 G1", "rank": 4},
+              "41748": {"name": "USA 270", "rank": 5}}
+    monkeypatch.setattr(client.app.state.hrr, "map", lambda: ranked)
+    return ranked
+
+
+def test_tracks_unfiltered_when_no_ranks_given(client, monkeypatch):
+    """Any other consumer of the API still sees everything."""
+    _seed_ranked(client, monkeypatch)
+    assert client.get("/api/tracks?view=combined").json()["ranks"] is None
+
+
+def test_tracks_limited_to_the_requested_ranks(client, monkeypatch):
+    _seed_ranked(client, monkeypatch)
+    body = client.get("/api/tracks?view=combined&ranks=1,3").json()
+    ids = {t["object_id"] for t in body["tracks"]}
+    assert ids == {"41836", "28924"}
+    assert body["ranks"] == [1, 3]
+    assert body["count"] == 2
+
+
+def test_unranked_objects_are_background(client, monkeypatch):
+    """An object absent from the list is rank 5, not rank None, so it is
+    excluded from a 1-3 request rather than leaking through."""
+    _seed_ranked(client, monkeypatch)
+    body = client.get("/api/tracks?view=combined&ranks=1,2,3").json()
+    ids = {t["object_id"] for t in body["tracks"]}
+    assert "90210" not in ids, "an unlisted demo object must count as R5"
+    body5 = client.get("/api/tracks?view=combined&ranks=5").json()
+    assert "90210" in {t["object_id"] for t in body5["tracks"]}
+
+
+def test_the_default_three_ranks_are_a_real_saving(client, monkeypatch):
+    """The reason this exists: the deferred ranks must actually be the bulk."""
+    _seed_ranked(client, monkeypatch)
+    few = client.get("/api/tracks?view=combined&ranks=1,2,3").json()["count"]
+    all_ = client.get("/api/tracks?view=combined").json()["count"]
+    assert few < all_
+
+
+def test_the_filter_is_not_quietly_widened_when_it_matches_nothing(client):
+    """The demo population is absent from the bundled high-interest list, so
+    every demo object is BACKGROUND and a 1-3 request legitimately returns
+    nothing. The server must NOT widen the request to avoid an empty result:
+    the first version of this carried an escape hatch for an empty list, which
+    was dead logic because the list seeds from a 594-object snapshot and is
+    never empty. The interface explains the empty view instead."""
+    body = client.get("/api/tracks?view=combined&ranks=1,2,3").json()
+    assert body["count"] == 0
+    assert body["ranks"] == [1, 2, 3], "the request stands as asked"
+    assert client.get("/api/tracks?view=combined").json()["count"] > 0
+
+
+def test_a_bad_rank_is_a_client_error_not_a_silent_ignore(client):
+    assert client.get("/api/tracks?view=combined&ranks=9").status_code == 400
+    assert client.get("/api/tracks?view=combined&ranks=high").status_code == 400
+
+
+def test_etag_varies_with_the_rank_set(client, monkeypatch):
+    """A narrower request must not be answered 304 from a wider one."""
+    _seed_ranked(client, monkeypatch)
+    wide = client.get("/api/tracks?view=combined&ranks=1,2,3,4,5")
+    narrow = client.get("/api/tracks?view=combined&ranks=1",
+                        headers={"If-None-Match": wide.headers["ETag"]})
+    assert narrow.status_code == 200
+    assert narrow.headers["ETag"] != wide.headers["ETag"]

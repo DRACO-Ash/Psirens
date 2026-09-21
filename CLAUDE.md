@@ -38,12 +38,13 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.4; DEPLOYED 1.6.2)
+## Current state (repo 1.6.5; DEPLOYED 1.6.2)
 
 Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
-pipeline stages including Deploy, status Active. **1.6.3 and 1.6.4 are committed
-here and have never been uploaded**; 1.6.3 fixes the co-planar modal resize and
-1.6.4 guards the co-planar fetch (see Open items).
+pipeline stages including Deploy, status Active. **1.6.3, 1.6.4 and 1.6.5 are committed
+here and have never been uploaded**; 1.6.3 fixes the co-planar modal resize,
+1.6.4 guards the co-planar fetch, and 1.6.5 adds the default rank load and the
+label/needle legibility fix (see Open items).
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -241,7 +242,11 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 
 ## API contract
 
-- `GET /api/tracks?view=real|sim|combined` — filtered tracks; ETag/304. Each
+- `GET /api/tracks?view=real|sim|combined&ranks=1,2,3` — filtered tracks;
+  ETag/304. `ranks` is OPTIONAL and omitting it returns every rank, so other
+  consumers are unaffected; the SPA always sends it. Out-of-range or
+  non-numeric values are 400, never silently ignored. The ETag covers the rank
+  set, so a narrow request is never answered 304 from a wider one. Each
   track carries `object_id, name, data_mode, classification_marking, source,
   origin, target, samples[], drift_deg_per_day, ra_deg`.
 - `GET /api/hrr` — the HRR object map.
@@ -360,6 +365,31 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `openCoplanar` to its `c02462c` form makes the probe report the old catch-all
   and fail. LESSON: when a defect is found, grep for the PATTERN across the
   file, not just the route that failed.
+- Default rank load: ADDED in 1.6.5. First paint now carries ranks 1-3 only.
+  Ranks 4 and 5 are the bulk (444 of the 594 objects in the bundled snapshot,
+  75%) and are fetched on demand when their chip is switched on, which is the
+  owner's stated preference: happy to wait for them. FACT, checked against the
+  snapshot: the feed carries ranks 1 to 5 and there is NO rank 0, so the
+  owner's "HRR 0, 1, 2 and 3" was read as ranks 1-3. Say if a rank-0 concept is
+  meant and it is a one-line change to `DEFAULT_RANKS`.
+  The filter is SERVER-side (`_tracks_payload`), because a client-side filter
+  would download the bytes anyway and the whole point is first-paint size.
+  There is deliberately no escape hatch for an empty high-interest list: the
+  first version had one and it was DEAD LOGIC, since the list seeds from the
+  bundled 594-object snapshot and is never empty. Consequence, accepted and
+  handled: the offline demo population is absent from that snapshot, so every
+  demo object is BACKGROUND and the default view is empty offline. The SPA
+  explains that in the empty overlay rather than the server widening the
+  request behind the operator's back.
+- Label and needle legibility: FIXED in 1.6.5. Reported from a live screenshot,
+  21 September 2026: satellite names and the RA bearing needles were close to
+  invisible. Cause: both multiplied their alpha by `ageAlpha`, which bottoms
+  out at 0.18 at 72 hours, so a name drew at 0.92 x 0.18 = 0.166 alpha and a
+  needle at 0.171. Age fade is meaningful for a MARKER and ruinous for TEXT.
+  Now `labelAlpha` floors at 0.82 and `needleAlpha` at 0.7, labels are 600
+  weight at 11.5px with a dark stroked halo so they read over a dense belt
+  without a box hiding data, and the needle carries a dark under-stroke before
+  the pale line. Still dimmer when stale, always readable.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

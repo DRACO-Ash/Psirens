@@ -71,9 +71,42 @@ def _banner(markings: list[str], default: str = "UNCLASSIFIED") -> str:
     return "UNCLASSIFIED" if best_rank <= 0 else best
 
 
+def _rank_of(oid: str, hrr_map: dict) -> int:
+    """The object's priority rank, defaulting to the lowest.
+
+    An object absent from the high-interest list, or present without a usable
+    rank, is BACKGROUND (5). That matches what the interface has always shown
+    and keeps the server and the client agreeing on one number.
+    """
+    entry = hrr_map.get(oid) or {}
+    rank = entry.get("rank")
+    return 5 if rank is None else int(rank)
+
+
 def _tracks_payload(cfg: Config, store: Store, view: str,
-                    modes: set[DataMode]) -> dict:
+                    modes: set[DataMode],
+                    ranks: set[int] | None = None,
+                    hrr_map: dict | None = None) -> dict:
+    """Build the tracks payload, optionally limited to a set of priority ranks.
+
+    The rank filter exists to keep first paint small: ranks 4 and 5 are the
+    bulk of the list (444 of 594 objects in the bundled snapshot) and are not
+    what an operator opens the plot to look at. They are fetched on demand.
+
+    No filter is applied when `ranks` is None, so any other consumer of this
+    API sees the whole picture.
+
+    There is deliberately NO escape hatch for an empty high-interest list. The
+    first version of this had one, and it was dead logic: the list seeds from a
+    bundled snapshot of 594 objects and is never empty, so the branch could not
+    fire and was never exercised. An object absent from the list is BACKGROUND,
+    including every object in the offline demo population, and a default view
+    of ranks 1-3 therefore shows nothing offline. The interface says so rather
+    than the server quietly widening the request.
+    """
     data = store.load()
+    hrr_map = hrr_map or {}
+    active_ranks = ranks or None
     tracks, markings = [], []
     for oid, rec in data.get("objects", {}).items():
         try:
@@ -81,6 +114,8 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
         except ValueError:
             mode = DataMode.REAL
         if mode not in modes:
+            continue
+        if active_ranks is not None and _rank_of(oid, hrr_map) not in active_ranks:
             continue
         samples = rec.get("samples", [])
         if not samples:
@@ -110,6 +145,7 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
             "inc_min": cfg.inc_min, "inc_max": cfg.inc_max,
         },
         "count": len(tracks),
+        "ranks": sorted(active_ranks) if active_ranks else None,
         "tracks": tracks,
     }
 
@@ -203,19 +239,43 @@ def _parse_modes(view: str, modes: str) -> set[DataMode]:
     return wanted
 
 
+def _parse_ranks(raw: str) -> set[int] | None:
+    """Parse `ranks=1,2,3`. Empty means no filter; anything outside 1-5 is a
+    client error rather than a silently ignored value."""
+    if not raw.strip():
+        return None
+    out: set[int] = set()
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        try:
+            rank = int(token)
+        except ValueError as exc:
+            raise HTTPException(status_code=400,
+                                detail=f"bad rank {token!r}") from exc
+        if rank < 1 or rank > 5:
+            raise HTTPException(status_code=400,
+                                detail=f"rank {rank} out of range 1-5")
+        out.add(rank)
+    return out or None
+
+
 def _tracks(request: Request, view: str = "combined", modes: str = "",
+            ranks: str = "",
             if_none_match: Annotated[str | None, Header()] = None) -> Response:
     if view not in VIEW_MODES:
         raise HTTPException(status_code=400, detail="unknown view")
     cfg: Config = request.app.state.cfg
     wanted = _parse_modes(view, modes)
-    payload = _tracks_payload(cfg, request.app.state.store, view, wanted)
+    payload = _tracks_payload(cfg, request.app.state.store, view, wanted,
+                              _parse_ranks(ranks), request.app.state.hrr.map())
     body = json.dumps(payload, separators=(",", ":"))
     # ETag is a CACHE KEY (not security): a non-crypto checksum of the stable
     # content, so an unchanged dataset returns 304 even though generated_at moves.
     stable = json.dumps(
         {k: payload[k] for k in ("view", "classification_banner", "bounds",
-                                 "count", "tracks")},
+                                 "count", "ranks", "tracks")},
         separators=(",", ":"), sort_keys=True,
     )
     etag = '"' + format(zlib.crc32(stable.encode()) & 0xFFFFFFFF, "08x") + '"'
@@ -406,7 +466,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.4", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.5", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

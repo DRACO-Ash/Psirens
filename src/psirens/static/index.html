@@ -229,7 +229,14 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 (function(){
 "use strict";
 const RANKS={1:{n:"CRITICAL",c:"#E2483D"},2:{n:"HIGH",c:"#E9863A"},3:{n:"ELEVATED",c:"#D9B23A"},4:{n:"ROUTINE",c:"#3E8FD0"},5:{n:"BACKGROUND",c:"#8199B8"}};
-const state={ranks:new Set([1,2,3,4,5]),trails:true,view:"real",filter:"",
+// First paint carries the ranks an operator actually opens the plot for.
+// 4 and 5 are the bulk (444 of 594 in the bundled list) and are fetched on
+// demand when their chip is switched on. `loadedRanks` is what the SERVER has
+// sent; `ranks` is what is currently SHOWN. Toggling a loaded rank off and on
+// again is instant; switching on an unloaded one costs a round trip.
+const DEFAULT_RANKS=[1,2,3];
+const state={ranks:new Set(DEFAULT_RANKS),loadedRanks:new Set(DEFAULT_RANKS),
+  loading:false,trails:true,view:"real",filter:"",
   sel:null,etag:null,hrr:null,loaded:false,pullHours:24,
   pullMode:"window",pullStart:"",pullStop:""};
 let OBJECTS=[];
@@ -251,6 +258,14 @@ const rankCol=r=>(RANKS[r]||RANKS[5]).c;
 const MAX_TRAIL_RATE=18;  // deg/day; a segment implying faster longitude motion is a data artifact, not a real transit
 const objCol=o=>rankCol(o.rank);
 const ageAlpha=h=>Math.max(0.18,1-Math.min(h,72)/72*0.82);
+// Age fade is meaningful for a MARKER (how stale is this fix) and ruinous for
+// TEXT. At 72h ageAlpha bottoms out at 0.18, so a name rendered at 0.92 of it
+// landed near 0.17 alpha and was effectively invisible. Labels and bearing
+// needles carry their own floor: still visibly dimmer when old, always
+// readable. Reported from a live screenshot, 21 September 2026.
+const LABEL_FLOOR=0.82,NEEDLE_FLOOR=0.7;
+const labelAlpha=h=>Math.max(LABEL_FLOOR,ageAlpha(h));
+const needleAlpha=h=>Math.max(NEEDLE_FLOOR,ageAlpha(h));
 function ageLabel(h){if(h>=900){return "\u2014";}if(h<1){return "<1h";}if(h<48){return Math.round(h)+"h";}return (h/24).toFixed(1)+"d";}
 function wrap(d){while(d>180){d-=360;}while(d<-180){d+=360;}return d;}
 function headSize(o){if(o.rank!=null&&o.rank<=2){return 6;}if(o.rank===3){return 4.4;}return 3.4;}
@@ -333,8 +348,13 @@ function drawTrails(ctx,S,vis){
 function raNeedle(ctx,px,py,o,sz,alpha){
   if(o.ra==null){return;}                       // no element set, no bearing
   const r=o.ra*Math.PI/180,dx=Math.sin(r),dy=-Math.cos(r);  // RA 0 = north, clockwise
-  const r0=sz+1.5,r1=sz+16;
-  ctx.save();ctx.globalAlpha=Math.min(1,alpha*0.95);ctx.strokeStyle="#DCE8FA";ctx.lineWidth=1.9;ctx.lineCap="round";
+  const r0=sz+1.5,r1=sz+17;
+  ctx.save();ctx.globalAlpha=needleAlpha(o.ageH);ctx.lineCap="round";
+  // Dark under-stroke first: the belt is busy and a single pale line
+  // disappears wherever it crosses a trail or another marker.
+  ctx.strokeStyle="rgba(4,8,15,.75)";ctx.lineWidth=4.2;
+  ctx.beginPath();ctx.moveTo(px+dx*r0,py+dy*r0);ctx.lineTo(px+dx*r1,py+dy*r1);ctx.stroke();
+  ctx.strokeStyle="#F2F7FF";ctx.lineWidth=2.3;
   ctx.beginPath();ctx.moveTo(px+dx*r0,py+dy*r0);ctx.lineTo(px+dx*r1,py+dy*r1);ctx.stroke();ctx.restore();
 }
 function drawHead(ctx,S,o){
@@ -357,11 +377,19 @@ function drawHead(ctx,S,o){
   return {px,py,o};
 }
 function drawLabels(ctx,S,vis){
-  const {x,y}=S;ctx.font="10px "+MONO;ctx.textAlign="left";
+  const {x,y}=S;
+  ctx.font="600 11.5px "+MONO;ctx.textAlign="left";
+  ctx.lineJoin="round";ctx.miterLimit=2;
   vis.forEach(o=>{
     if(o.rank!=null&&o.rank<=2){
-      ctx.globalAlpha=ageAlpha(o.ageH);ctx.fillStyle="rgba(234,241,251,.92)";
-      ctx.fillText(" "+o.name,x(o.lon)+6,y(o.inc)-6);ctx.globalAlpha=1;
+      const tx=x(o.lon)+7,ty=y(o.inc)-7,t=" "+o.name;
+      ctx.globalAlpha=labelAlpha(o.ageH);
+      // Halo then fill. Text over a dark, dense plot needs its own background
+      // or it competes with every trail it crosses; a stroked outline gives
+      // one without drawing a box that would hide data underneath.
+      ctx.strokeStyle="rgba(3,7,14,.92)";ctx.lineWidth=3.4;ctx.strokeText(t,tx,ty);
+      ctx.fillStyle="#FFFFFF";ctx.fillText(t,tx,ty);
+      ctx.globalAlpha=1;
     }
   });
 }
@@ -466,7 +494,11 @@ function paint(){
     `<div class="read"><div class="v">${OBJECTS.filter(o=>o.rank!=null&&o.rank<=2).length}</div><div class="k">R1–R2</div></div>`+
     `<div class="read"><div class="v">${s.drift}</div><div class="k">Drifting</div></div>`+
     `<div class="read"><div class="v">${s.meanAge?s.meanAge.toFixed(0)+"h":"—"}</div><div class="k">Mean age</div></div>`;
-  document.getElementById("chips").innerHTML=[1,2,3,4,5].map(r=>`<button class="rankchip ${state.ranks.has(r)?'':'off'}" data-rank="${r}" style="color:${RANKS[r].c}"><span class="sw" style="background:${RANKS[r].c}"></span><span style="color:var(--ink)">R${r} ${RANKS[r].n}</span></button>`).join("");
+  document.getElementById("chips").innerHTML=[1,2,3,4,5].map(r=>{
+    const off=state.ranks.has(r)?"":"off";
+    const hint=state.loadedRanks.has(r)?"":" \u00b7 tap to load";
+    return `<button class="rankchip ${off}" data-rank="${r}" style="color:${RANKS[r].c}" title="R${r} ${RANKS[r].n}${hint}"><span class="sw" style="background:${RANKS[r].c}"></span><span style="color:var(--ink)">R${r} ${RANKS[r].n}${hint}</span></button>`;
+  }).join("");
   document.getElementById("rankbars").innerHTML=wRankBars();
   document.getElementById("stats").innerHTML=[["Shown",s.shown],["Fresh <6h",s.fresh],["Stale >36h",s.stale],["Drifting",s.drift]].map(([k,v])=>`<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
   document.getElementById("country").innerHTML=wCountry();
@@ -475,8 +507,22 @@ function paint(){
   syncInspector();
   wire();
 }
+async function toggleRank(r){
+  if(state.ranks.has(r)){state.ranks.delete(r);paint();return;}
+  state.ranks.add(r);
+  if(state.loadedRanks.has(r)){paint();return;}
+  // Not downloaded yet. R4 and R5 are the bulk of the list, which is exactly
+  // why they are not in the first paint.
+  if(state.loading){return;}
+  state.loading=true;
+  state.loadedRanks.add(r);
+  state.etag=null;                       // a wider set is a different payload
+  setStatus("loading R"+r+"\u2026");
+  paint();
+  try{await load();}finally{state.loading=false;paint();}
+}
 function wire(){
-  document.querySelectorAll("[data-rank]").forEach(b=>b.onclick=()=>{const r=+b.dataset.rank;state.ranks.has(r)?state.ranks.delete(r):state.ranks.add(r);paint();});
+  document.querySelectorAll("[data-rank]").forEach(b=>{b.onclick=()=>toggleRank(+b.dataset.rank);});
   document.querySelectorAll("[data-id]").forEach(b=>b.onclick=()=>{state.sel=b.dataset.id;paint();});
 }
 // ---- interactions ----
@@ -690,11 +736,23 @@ function showOverlay(kind){const ov=document.getElementById("overlay"),spin=docu
   if(kind==="hide"){ov.classList.remove("show");return;}
   ov.classList.add("show");
   if(kind==="loading"){spin.style.display="";rb.style.display="none";msg.textContent="Acquiring the belt…";}
-  else if(kind==="empty"){spin.style.display="none";rb.style.display="";msg.textContent="No objects on the belt yet. The first refresh may still be running, or no element sets matched the current view.";}}
+  else if(kind==="empty"){spin.style.display="none";rb.style.display="";
+    msg.textContent=emptyReason();}}
+function emptyReason(){
+  // An empty plot has two very different causes and the operator cannot tell
+  // them apart from an empty screen. Say which one it is.
+  const hidden=[4,5].filter(r=>!state.loadedRanks.has(r));
+  if(hidden.length>0){
+    return "Nothing in R"+[...state.loadedRanks].sort().join("/")
+      +" for this view. R"+hidden.join(" and R")
+      +" are not loaded yet: switch a chip on to fetch them.";
+  }
+  return "No objects on the belt yet. The first refresh may still be running, or no element sets matched the current view.";}
 function setStatus(txt,off){const el=document.getElementById("laststatus");el.innerHTML=`<span class="dot ${off?'off':'go'}">\u25cf</span>${esc(txt)}`;}
 async function load(){
   try{
-    const r=await fetch(`/api/tracks?view=${encodeURIComponent(state.view)}`,state.etag?{headers:{"If-None-Match":state.etag}}:{});
+    const rk=[...state.loadedRanks].sort().join(",");
+    const r=await fetch(`/api/tracks?view=${encodeURIComponent(state.view)}&ranks=${rk}`,state.etag?{headers:{"If-None-Match":state.etag}}:{});
     if(r.status===304){setStatus(new Date().toISOString().slice(11,16)+"Z");return;}
     if(!r.ok)throw new Error("HTTP "+r.status);
     const j=await r.json();
