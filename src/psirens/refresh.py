@@ -39,6 +39,11 @@ class Refresher:
         self.last_run: datetime | None = None
         self.last_hrr: datetime | None = None
         self.last_added = 0
+        # Ingest health. Kept because the scheduler used to discard everything
+        # run_once returned, so a permanently failing pull produced no log
+        # after the first tick, no banner and no API signal.
+        self.last_errors: list[str] = []
+        self.last_ok: datetime | None = None   # last run that added something
 
     def _maybe_refresh_hrr(self, now: datetime, force: bool) -> None:
         """Refresh the dynamic HRR list on its own slow cadence (or on force).
@@ -62,7 +67,9 @@ class Refresher:
         lands deterministically even while the scheduled refresh is running
         (the store's own lock serialises the concurrent writes)."""
         now = now or datetime.now(timezone.utc)
-        start = now - timedelta(days=self.cfg.retention_days)
+        # The short lookback, for the same reason as run_once: a 90-day sweep
+        # on every manual injection is both wasteful and exposed to truncation.
+        start = now - timedelta(hours=self.cfg.refresh_lookback_hours)
         try:
             incoming = src.fetch(start, now)
         except Exception as exc:  # pragma: no cover - defensive
@@ -113,13 +120,20 @@ class Refresher:
         if not self.flight.begin():
             return {"status": "busy"}
         now = now or datetime.now(timezone.utc)
-        start = now - timedelta(days=self.cfg.retention_days)
+        # A SHORT OVERLAP, not the retention window. Asking for 90 days of
+        # every object in one hourly request is what produced a permanently
+        # truncated response; the store is cumulative, so a rolling lookback
+        # that comfortably covers the refresh cadence is all this needs.
+        start = now - timedelta(hours=self.cfg.refresh_lookback_hours)
         try:
             self._maybe_refresh_hrr(now, force_hrr)  # list first; ingest filters on it
             added, errors = self._ingest(start, now, modes=None,
                                          hrr_filter=True, prune=True)
             self.last_run = now
             self.last_added = added
+            self.last_errors = errors
+            if added > 0:
+                self.last_ok = now
             hrr_set = self.hrr.geo_set() if (self.hrr and self.cfg.udl_enabled) else None
             return {"status": "ok", "added": added, "errors": errors,
                     "hrr_count": len(hrr_set) if hrr_set is not None else None}
@@ -167,7 +181,7 @@ class Refresher:
         first = True
         while not stop.is_set():
             try:
-                await asyncio.to_thread(self.run_once)
+                self.report(await asyncio.to_thread(self.run_once))
             except Exception:  # pragma: no cover - belt and braces
                 _log.exception("scheduled refresh errored")
             if first:
@@ -177,6 +191,66 @@ class Refresher:
                 await asyncio.wait_for(stop.wait(), timeout=self.cfg.refresh_seconds)
             except asyncio.TimeoutError:
                 pass
+
+    def staleness_hours(self, now: datetime | None = None) -> float | None:
+        """Age of the newest fix held, in hours, or None when the store is
+        empty. The number the alarm is built on."""
+        newest = self.store.newest_epoch()
+        if not newest:
+            return None
+        try:
+            when = datetime.fromisoformat(str(newest).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        now = now or datetime.now(timezone.utc)
+        return (now - when).total_seconds() / 3600.0
+
+    def is_stale(self, now: datetime | None = None) -> bool:
+        age = self.staleness_hours(now)
+        return age is not None and age > self.cfg.stale_after_hours
+
+    def health(self, now: datetime | None = None) -> dict:
+        """Everything needed to tell a working feed from a frozen one."""
+        age = self.staleness_hours(now)
+        return {
+            "last_refresh": self.last_run.isoformat() if self.last_run else None,
+            "last_ingest_added": self.last_added,
+            "last_ingest_errors": list(self.last_errors),
+            "last_successful_ingest": self.last_ok.isoformat() if self.last_ok else None,
+            "newest_sample_epoch": self.store.newest_epoch(),
+            "data_age_hours": None if age is None else round(age, 2),
+            "stale_after_hours": self.cfg.stale_after_hours,
+            "stale": self.is_stale(now),
+        }
+
+    def report(self, result: dict, now: datetime | None = None) -> None:
+        """Say out loud what every refresh did. Not only the first.
+
+        A silent ingest failure is worse than a loud one: the interface keeps
+        serving the last-good picture, which is the correct behaviour, and
+        nothing else distinguishes it from a live feed.
+        """
+        if result.get("status") != "ok":
+            _log.warning("refresh did not run: %s", result.get("status"))
+            return
+        added, errors = result.get("added", 0), result.get("errors") or []
+        age = self.staleness_hours(now)
+        age_txt = "unknown" if age is None else f"{age:.1f}h"
+        if errors:
+            _log.warning("refresh added %d samples with %d source error(s): %s",
+                         added, len(errors), "; ".join(errors[:3]))
+        if self.is_stale(now):
+            _log.warning(
+                "STALE DATA: newest fix is %s old, past the %.1fh threshold. "
+                "The picture on screen is last-known-good, not current. Check "
+                "the UDL window settings (UDL_SLICE_HOURS=%s, "
+                "REFRESH_LOOKBACK_HOURS=%s) and the source errors above.",
+                age_txt, self.cfg.stale_after_hours, self.cfg.udl_slice_hours,
+                self.cfg.refresh_lookback_hours)
+            return
+        _log.info("refresh ok: +%d samples, newest fix %s old", added, age_txt)
 
     def _log_first_verdict(self) -> None:
         """After the first refresh, say plainly whether UDL produced anything,

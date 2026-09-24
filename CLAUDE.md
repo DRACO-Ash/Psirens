@@ -38,13 +38,14 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.5; DEPLOYED 1.6.2)
+## Current state (repo 1.6.6; DEPLOYED 1.6.2)
 
 Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
-pipeline stages including Deploy, status Active. **1.6.3, 1.6.4 and 1.6.5 are committed
-here and have never been uploaded**; 1.6.3 fixes the co-planar modal resize,
-1.6.4 guards the co-planar fetch, and 1.6.5 adds the default rank load and the
-label/needle legibility fix (see Open items).
+pipeline stages including Deploy, status Active. **1.6.3 to 1.6.6 are committed here and have
+never been uploaded**; 1.6.3 fixes the co-planar modal resize, 1.6.4 guards the
+co-planar fetch, 1.6.5 adds the default rank load and the legibility fix, and
+**1.6.6 fixes a live data-staleness defect and the blindness that hid it**
+(see Open items). 1.6.6 is the one to upload first.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -258,7 +259,12 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 - `POST /api/pull?mode=<real|sim|combined>&hours=N` OR
   `&start=<ISO>&end=<ISO>` — operator pull; token-gated and rate-limited.
 - `POST /api/refresh` — force HRR + REAL refresh.
-- `GET /api/meta`, `/healthz`, `/readyz`, `/favicon.ico`, `/static/{name}`.
+- `GET /api/meta` and `/readyz` — both carry the INGEST HEALTH block:
+  `newest_sample_epoch`, `data_age_hours`, `stale`, `stale_after_hours`,
+  `last_ingest_added`, `last_ingest_errors`, `last_successful_ingest`.
+  `last_refresh` alone is a trap: it advances every tick whether or not a
+  record arrived. `/readyz` stays 200 when stale by design.
+- `GET /healthz`, `/favicon.ico`, `/static/{name}`.
 
 ## Packaging and release
 
@@ -390,6 +396,40 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   weight at 11.5px with a dark stroked halo so they read over a dense belt
   without a box hiding data, and the needle carries a dark under-stroke before
   the pale line. Still dimmer when stale, always readable.
+- INGEST STALENESS: FIXED in 1.6.6, and the most serious defect found so far
+  because it was SILENT. Reported 23 September 2026 from an inspector panel
+  showing TJS-15 with "Data age 14.1d" against an epoch of 2026-09-09.
+  CAUSE. `UDLElsetSource.fetch` sent ONE request for the entire window, and
+  `run_once` set that window to the whole retention period, so every hour the
+  app asked UDL for 90 days of elsets for every object in the catalogue with
+  no satNo filter and no result cap. CONTEXT-001 already recorded that the
+  tenant hard-caps results server-side and that the remedy is to SLICE BY TIME
+  WINDOW; we were doing precisely what that fact forbids. The response was
+  truncated, the newest fixes were the ones dropped, and because the window
+  start advanced with the clock the lag was CONSTANT rather than growing,
+  which is why it read as "out of date" rather than "frozen".
+  FIX 1, the cause. `fetch` slices any window into `UDL_SLICE_HOURS` (24)
+  chunks with a `UDL_SLICE_PAUSE_SECONDS` (2) pause, merges with per-epoch
+  dedup, and treats any slice returning `UDL_TRUNCATION_THRESHOLD` (9000) rows
+  or more as truncated, halving it and retrying. The scheduled pull now uses
+  `REFRESH_LOOKBACK_HOURS` (24), not the retention window; the store is
+  cumulative, so a rolling overlap is all it needs. `merge_one` had the same
+  90-day bug and got the same fix.
+  FIX 2, the blindness, and the more important half. The scheduler DISCARDED
+  everything `run_once` returned, and `_log_first_verdict` only ever fired on
+  the first tick, so a permanently failing ingest produced no log, no banner
+  and no API signal. `/api/meta` reported `last_refresh`, which advances every
+  tick whether or not a single record arrives. Now `Refresher.report()` logs
+  the outcome of EVERY run, `health()` exposes `newest_sample_epoch`,
+  `data_age_hours`, `last_ingest_added`, `last_ingest_errors` and `stale` on
+  `/api/meta` and `/readyz`, and the SPA raises an amber banner when the
+  freshest fix exceeds `STALE_AFTER_HOURS` (24). `/readyz` reports staleness
+  but still returns 200 ON PURPOSE: stale data is not unreadiness, and a 503
+  would have the platform restart a container that is serving a correct
+  last-known-good picture, fixing no feed and losing the store.
+  PROVEN, both halves, by reverting each to its 1.6.5 form: the single-request
+  form fails three slicing tests, and removing the alarm fails the log test.
+  The 14.1-day condition Ash reported is a committed test case.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

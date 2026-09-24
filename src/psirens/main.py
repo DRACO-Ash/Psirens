@@ -146,6 +146,7 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
         },
         "count": len(tracks),
         "ranks": sorted(active_ranks) if active_ranks else None,
+        "stale_after_hours": cfg.stale_after_hours,
         "tracks": tracks,
     }
 
@@ -222,9 +223,16 @@ def _healthz(request: Request) -> JSONResponse:
 
 
 def _readyz(request: Request) -> dict:
+    """Readiness, plus a staleness report that deliberately does NOT fail it.
+
+    Stale data is not unreadiness: the app is serving a correct last-known-good
+    picture and answering every route. Returning 503 here would have the
+    platform restart a healthy container, which fixes no feed and throws away
+    the store. The alarm belongs in the payload, the logs and the interface.
+    """
     refresher: Refresher = request.app.state.refresher
-    last = refresher.last_run.isoformat() if refresher.last_run else None
-    return {"status": "ready", "last_refresh": last}
+    health = refresher.health()
+    return {"status": "ready", "data_stale": health["stale"], **health}
 
 
 def _parse_modes(view: str, modes: str) -> set[DataMode]:
@@ -275,7 +283,8 @@ def _tracks(request: Request, view: str = "combined", modes: str = "",
     # content, so an unchanged dataset returns 304 even though generated_at moves.
     stable = json.dumps(
         {k: payload[k] for k in ("view", "classification_banner", "bounds",
-                                 "count", "ranks", "tracks")},
+                                 "count", "ranks", "stale_after_hours",
+                                 "tracks")},
         separators=(",", ":"), sort_keys=True,
     )
     etag = '"' + format(zlib.crc32(stable.encode()) & 0xFFFFFFFF, "08x") + '"'
@@ -289,14 +298,17 @@ def _tracks(request: Request, view: str = "combined", modes: str = "",
 def _meta(request: Request) -> JSONResponse:
     cfg: Config = request.app.state.cfg
     refresher: Refresher = request.app.state.refresher
-    last = refresher.last_run.isoformat() if refresher.last_run else None
     return _cors(JSONResponse({
         "classification_default": "UNCLASSIFIED",
         "views": {k: [m.value for m in v] for k, v in VIEW_MODES.items()},
         "refresh_seconds": cfg.refresh_seconds,
         "retention_days": cfg.retention_days,
-        "last_refresh": last,
+        "refresh_lookback_hours": cfg.refresh_lookback_hours,
         "manual_count": len(request.app.state.manual.list_active()),
+        # Ingest health. `last_refresh` alone is a trap: it advances on every
+        # tick whether or not a single record arrived, which is exactly how a
+        # fortnight of truncated responses went unnoticed.
+        **refresher.health(),
     }), cfg)
 
 
@@ -466,7 +478,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.5", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.6", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

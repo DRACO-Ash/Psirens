@@ -133,6 +133,26 @@ class Store:
             data["schema"] = SCHEMA_VERSION
         return data
 
+    def newest_epoch(self) -> str | None:
+        """The newest sample epoch held, across every object, or None if empty.
+
+        The single number that says whether ingest is actually working. Before
+        1.6.6 nothing exposed it, so a feed that had been silently returning
+        truncated pages for a fortnight looked identical to a healthy one: the
+        refresh timestamp kept advancing, the object count was unchanged, and
+        the staleness was visible only by opening one object and reading its
+        epoch by eye. Which is how it was found.
+        """
+        newest: str | None = None
+        for rec in self.load().get("objects", {}).values():
+            samples = rec.get("samples") or []
+            if not samples:
+                continue
+            latest = samples[-1].get("epoch")
+            if latest and (newest is None or latest > newest):
+                newest = latest
+        return newest
+
     # -- health -----------------------------------------------------------
     def probe_write(self, timeout_s: float = 2.0) -> tuple[bool, str]:
         """Prove storage with a real WRITE, racing a hard timeout strictly

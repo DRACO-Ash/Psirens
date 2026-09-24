@@ -34,6 +34,9 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .views button{padding:5px 14px;font-size:11.5px;color:var(--dim)}
 .views button.on{background:var(--line2);color:var(--ink)}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
+.stale{margin:0 0 8px;padding:9px 14px;border:1px solid #C67C00;border-left:4px solid #C67C00;
+  border-radius:5px;background:rgba(198,124,0,.13);color:#F4DCAE;font-size:12.5px;line-height:1.5}
+.stale b{color:#FFE6B8}
 .rankchip{display:flex;align-items:center;gap:7px;padding:5px 12px;border:1px solid var(--line2);border-radius:20px;font-size:12px}
 .rankchip .sw{width:10px;height:10px;border-radius:50%;box-shadow:0 0 8px currentColor}
 .rankchip.off{opacity:.35;filter:grayscale(.7)}
@@ -159,6 +162,7 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 <body>
 <div class="top"><span class="brand">Bluestaq</span><h1>PSIRENS <small>GEO Sentinel Command</small></h1>
   <div class="reads" id="reads"></div></div>
+<div class="stale" id="stale" hidden></div>
 <div class="bar">
   <div class="views" id="views" role="tablist" aria-label="Data view">
     <button data-view="real" role="tab" aria-selected="true" class="on">Real World</button>
@@ -235,6 +239,7 @@ const RANKS={1:{n:"CRITICAL",c:"#E2483D"},2:{n:"HIGH",c:"#E9863A"},3:{n:"ELEVATE
 // sent; `ranks` is what is currently SHOWN. Toggling a loaded rank off and on
 // again is instant; switching on an unloaded one costs a round trip.
 const DEFAULT_RANKS=[1,2,3];
+let STALE_AFTER_H=24;   // replaced from the payload on first load
 const state={ranks:new Set(DEFAULT_RANKS),loadedRanks:new Set(DEFAULT_RANKS),
   loading:false,trails:true,view:"real",filter:"",
   sel:null,etag:null,hrr:null,loaded:false,pullHours:24,
@@ -392,6 +397,23 @@ function drawLabels(ctx,S,vis){
       ctx.globalAlpha=1;
     }
   });
+}
+function freshestAgeH(){
+  // The age of the NEWEST fix held, across every object. Minimum, not maximum:
+  // one current object means the feed is alive.
+  let best=null;
+  OBJECTS.forEach(o=>{if(o.ageH<999&&(best===null||o.ageH<best)){best=o.ageH;}});
+  return best;
+}
+function syncStale(){
+  const el=document.getElementById("stale"),age=freshestAgeH();
+  if(age===null||age<=STALE_AFTER_H){el.hidden=true;return;}
+  const days=(age/24).toFixed(1);
+  el.hidden=false;
+  el.innerHTML='<b>Data is '+days+' days old.</b> The newest element set on the '
+    +'belt is older than the '+STALE_AFTER_H+'h threshold, so this is the '
+    +'last-known-good picture rather than a current one. Check the ingest: '
+    +'<code>GET /api/meta</code> reports the source errors and the newest epoch.';
 }
 function drawBelt(){
   const ctx=cv.getContext("2d"),S=scale();
@@ -758,6 +780,8 @@ async function load(){
     const j=await r.json();
     state.etag=r.headers.get("ETag");state.loaded=true;
     OBJECTS=transform(j.tracks||[]);
+    if(typeof j.stale_after_hours==="number"){STALE_AFTER_H=j.stale_after_hours;}
+    syncStale();
     document.getElementById("banner").textContent=j.classification_banner||"UNCLASSIFIED";
     setStatus(new Date().toISOString().slice(11,16)+"Z");
     paint();

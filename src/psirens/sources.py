@@ -17,6 +17,7 @@ import logging
 import math
 import os
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Protocol, TypeVar
 
@@ -140,6 +141,44 @@ def _sample_from_elements(
     }
 
 
+_MIN_SLICE = timedelta(minutes=30)   # below this, subdividing stops helping
+_MAX_SPLIT_DEPTH = 6                 # 24h down to ~22 minutes
+
+
+def _slices(start: datetime, end: datetime,
+            slice_hours: int) -> list[tuple[datetime, datetime]]:
+    """Split [start, end] into windows of at most `slice_hours`.
+
+    Slices are half-open going forward but the endpoints overlap by nothing:
+    duplicate records across a boundary are harmless because both the sample
+    merge and the element-set retention key on epoch.
+    """
+    if end <= start:
+        return []
+    span = timedelta(hours=max(1, slice_hours))
+    out, cursor = [], start
+    while cursor < end:
+        nxt = min(cursor + span, end)
+        out.append((cursor, nxt))
+        cursor = nxt
+    return out
+
+
+def _merge_records(acc: dict[str, dict], incoming: dict[str, dict]) -> None:
+    """Fold one slice's records into the accumulator, deduplicating samples by
+    epoch and keeping the newest element set per provider."""
+    for oid, rec in incoming.items():
+        held = acc.get(oid)
+        if held is None:
+            acc[oid] = rec
+            continue
+        seen = {s["epoch"] for s in held["samples"]}
+        held["samples"].extend(s for s in rec["samples"] if s["epoch"] not in seen)
+        held["samples"].sort(key=lambda s: s["epoch"])
+        for el in (rec.get("elset_candidates") or {}).values():
+            _record_elset(held, el)
+
+
 class ElsetSource(Protocol):
     def fetch(self, start: datetime, end: datetime, /) -> dict[str, dict]:
         """Return object_id -> record with meta and a `samples` list."""
@@ -179,23 +218,78 @@ class UDLElsetSource:
         return {"Authorization": "Basic " + base64.b64encode(raw).decode()}
 
     def fetch(self, start: datetime, end: datetime) -> dict[str, dict]:
+        """Pull the window in slices and merge the results.
+
+        LEARNED (CONTEXT-001): the tenant hard-caps results server-side and the
+        documented remedy is to SLICE BY TIME WINDOW, never to offset-paginate.
+        Until 1.6.6 this asked for the whole window in one request, which for
+        the scheduled refresh meant 90 days of every object in the catalogue.
+        The response came back truncated, the newest fixes were the ones
+        missing, and the plot sat a constant fortnight behind while every other
+        signal looked healthy.
+        """
         client = self._client or httpx.Client(timeout=30.0)
+        merged: dict[str, dict] = {}
+        try:
+            windows = _slices(start, end, self.cfg.udl_slice_hours)
+            for index, (w_start, w_end) in enumerate(windows):
+                if index > 0 and self.cfg.udl_slice_pause_seconds > 0:
+                    time.sleep(self.cfg.udl_slice_pause_seconds)
+                _merge_records(merged, self._fetch_slice(client, w_start, w_end))
+        finally:
+            if self._client is None:
+                client.close()
+        return merged
+
+    def _request(self, client: httpx.Client, start: datetime,
+                 end: datetime) -> list[dict] | None:
+        """One request. None means the request failed, which is never fatal;
+        an empty list means it succeeded and matched nothing."""
         headers = {"Accept": self.cfg.udl_accept, **self._auth_header()}
         url = self.cfg.udl_base_url.rstrip("/") + self.cfg.udl_elset_path
-        params = {
-            self.cfg.udl_epoch_param: f"{_udl_ts(start)}..{_udl_ts(end)}"
-        }
+        params = {self.cfg.udl_epoch_param: f"{_udl_ts(start)}..{_udl_ts(end)}"}
+        if self.cfg.udl_max_results > 0:
+            params["maxResults"] = str(self.cfg.udl_max_results)
         try:
             resp = client.get(url, headers=headers, params=params)
             resp.raise_for_status()
             rows = resp.json()
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            _log.warning("UDL elset fetch failed (never fatal): %s", exc)
+            _log.warning("UDL elset fetch failed for %s..%s (never fatal): %s",
+                         _udl_ts(start), _udl_ts(end), exc)
+            return None
+        return rows if isinstance(rows, list) else []
+
+    def _fetch_slice(self, client: httpx.Client, start: datetime,
+                     end: datetime, depth: int = 0) -> dict[str, dict]:
+        """One slice, subdivided if the response looks truncated.
+
+        A truncated page and a complete one are indistinguishable from the
+        outside, so treat a suspiciously full response as truncated and halve
+        the window. This is the check that would have caught the original
+        defect on the day it started.
+        """
+        rows = self._request(client, start, end)
+        if rows is None:
             return {}
-        finally:
-            if self._client is None:
-                client.close()
-        return self._normalise(rows if isinstance(rows, list) else [])
+        if len(rows) >= self.cfg.udl_truncation_threshold and depth < _MAX_SPLIT_DEPTH:
+            span = (end - start) / 2
+            if span >= _MIN_SLICE:
+                _log.warning(
+                    "UDL returned %d rows for %s..%s, at or above the "
+                    "truncation threshold of %d; halving the window. Newest "
+                    "records are the ones a truncated page drops.",
+                    len(rows), _udl_ts(start), _udl_ts(end),
+                    self.cfg.udl_truncation_threshold)
+                out = self._fetch_slice(client, start, start + span, depth + 1)
+                _merge_records(out, self._fetch_slice(client, start + span, end,
+                                                      depth + 1))
+                return out
+            _log.warning(
+                "UDL returned %d rows for a %s window that cannot be split "
+                "further; the result is probably TRUNCATED and newer fixes "
+                "may be missing.", len(rows), end - start)
+        return self._normalise(rows)
 
     def _target_of(self, row: dict) -> str | None:
         val = row.get(self.cfg.udl_target_field)
