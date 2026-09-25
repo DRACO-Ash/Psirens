@@ -38,15 +38,16 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.7; DEPLOYED 1.6.2)
+## Current state (repo 1.6.8; DEPLOYED 1.6.2)
 
 Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
 pipeline stages including Deploy, status Active. **1.6.3 to 1.6.6 are committed here and have
 never been uploaded**; 1.6.3 fixes the co-planar modal resize, 1.6.4 guards the
 co-planar fetch, 1.6.5 adds the default rank load and the legibility fix, and
 **1.6.6 fixes a live data-staleness defect and the blindness that hid it**,
-and 1.6.7 adds the country filter (see Open items). Upload 1.6.7: it carries
-everything, and 1.6.6 inside it is the fix that matters.
+1.6.7 adds the country filter, and 1.6.8 clears a Code Quality contrast
+finding (see Open items). Upload 1.6.8: it carries everything, and 1.6.6
+inside it is the fix that matters.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -447,6 +448,28 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   it fail with "the country panel collapsed from 4 rows to 1".
   Purely client-side: country already travels with each object from the HRR
   join, so no API change and no extra request.
+- Text contrast: FIXED in 1.6.8. Code Quality raised "Text does not meet the
+  minimal contrast requirement with its background" at `index.html:38`, the
+  staleness banner added in 1.6.6. NOT a rendering defect: on the near-black
+  page it measures 13.35:1, which is excellent. The analyser cannot know what
+  sits behind a TRANSLUCENT background, so it reads
+  `background:rgba(198,124,0,.13)` as the opaque `#C67C00`, and light amber on
+  mid amber is 2.50:1. Both numbers measured with the WCAG 2.1 formula.
+  FIX: declare the composited colour. `background:#17100A` renders identically
+  and measures 14.08:1 as declared, so the source, the analyser and the screen
+  all agree. Do not argue the "it composites fine at runtime" line: the rule
+  exists because a translucent text background genuinely breaks the moment the
+  component moves to a lighter surface.
+  SECOND INSTANCE, found by grepping the pattern rather than the line: the
+  country filter added the day before repeated it
+  (`.crow.on{background:rgba(198,124,0,.16)}`, colour on a child selector, so
+  the analyser would have flagged it on the next scan). Also made solid.
+  GUARDED: `tools/sniff_check.py` gained `WEB-CONTRAST`, a real WCAG ratio
+  computation that treats an `rgba()` background as its opaque base. PROVEN by
+  running it over the 1.6.7 file, where it reports the SAME line 38 and the
+  SAME 2.50:1 the platform did. Its limit is documented: it compares only
+  colours declared in the same block, which is exactly how the second instance
+  escaped it.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

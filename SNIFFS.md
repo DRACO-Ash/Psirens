@@ -51,6 +51,7 @@ plugin fully enabled. Reproduce by linting one violating snippet per rule:
 | Zero-fraction literal | **NOT FLAGGED** |
 | Duplicated string literal | **NOT FLAGGED** |
 | Identical functions | **NOT FLAGGED** |
+| Text contrast below WCAG AA | **NOT FLAGGED** (it is a CSS/HTML rule, not JS) |
 
 So a green eslint run is not a prediction of a green SonarQube gate. Treat the
 linter as covering a different, overlapping set, and cover the rest with text
@@ -173,6 +174,53 @@ Write `2`, not `2.0`.
 following dot as well as a following digit. A rule that cries wolf on an IP
 address gets switched off, and then it catches nothing.
 
+### 3.12 Text contrast, and the translucent-background trap UPLOAD-adjacent
+
+**The finding:** "Text does not meet the minimal contrast requirement with its
+background", raised against one line of a stylesheet.
+
+**The trap.** The rule that produced it looked like this:
+
+```css
+.stale { background: rgba(198,124,0,.13); color: #F4DCAE }
+```
+
+On a near-black page that renders at **13.35:1**, which is excellent. A static
+analyser flagged it anyway, and it was right to. It cannot know what sits
+behind a translucent tint, so it reads the declaration as the opaque colour
+`#C67C00`, and light amber on mid amber is **2.50:1**.
+
+MEASURED, both numbers, with the WCAG 2.1 relative-luminance formula. The
+checker reproduces the analyser's reading and reports the same line.
+
+**Fix:** declare the composited colour instead of the tint.
+
+```css
+.stale { background: #17100A; color: #F4DCAE }     /* 14.08:1, and honest */
+```
+
+The rendering is identical to the eye. The difference is that the declaration
+now says what the user actually sees, so a human reading the source, an
+analyser, and the screen all agree.
+
+**Do not argue with the analyser on this one.** "It composites fine at runtime"
+is true and useless: the rule exists because translucent text backgrounds are
+genuinely fragile, and the next person to put that component on a lighter
+surface gets 2.5:1 for real.
+
+**The wider lesson, which cost a second instance.** The same pattern had
+already been repeated in a component added the following day
+(`.crow.on{background:rgba(198,124,0,.16)}` with the colour on a child
+selector). Grep the whole stylesheet for `background:rgba(` paired with text,
+not just the line the tool named. See 3.4 for the same lesson learned the
+expensive way.
+
+**Checker support and its limit.** `sniff_check.py` implements the WCAG ratio
+and flags any block below 4.5:1, treating an `rgba()` background as its opaque
+base. It compares only colours declared in the SAME block, so a colour set on
+a child selector is invisible to it. That is exactly how the second instance
+escaped, and it is why the grep above still matters.
+
 ### 3.11 Python correctness sniffs the checker also covers
 
 Not Sonar-gate failures for us, but exactly decidable and worth having:
@@ -260,7 +308,8 @@ figure.
    it catches. One rule per cycle is a treadmill; one gate per rule learned
    ends it.
 
-**MEASURED on the source project, 21 September 2026:** clean. 0 findings across
-27 files in `src`, `tests` and `tools`. Getting there from the first run took
+**MEASURED on the source project, 25 September 2026:** clean. 0 findings
+across 24 files in `src` and `tests`, with `WEB-CONTRAST` added after a real
+Code Quality finding (3.12). Getting there from the first run took
 two fixes: a false positive in the zero-fraction pattern, and one real
 violation in a tool that SonarQube never analyses and would never have caught.

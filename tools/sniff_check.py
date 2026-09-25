@@ -261,9 +261,95 @@ def strip_comments(text: str) -> str:
                              text)
 
 
+
+# ---------------------------------------------------------------------------
+# Web: declared text contrast (WCAG 2.1 AA)
+# ---------------------------------------------------------------------------
+# A static analyser cannot know what sits behind a translucent background, so
+# it reads `background:rgba(198,124,0,.13)` as the opaque colour #C67C00. Light
+# text on that is about 2.5:1 and is flagged, even though the composited result
+# on a dark page is 13:1 and perfectly readable.
+#
+# This reproduces exactly that reading, because arguing with the analyser is
+# not a strategy: declare the composited colour instead, and the rendering is
+# identical while the pair becomes legible to a human AND to a checker.
+#
+# LIMIT, stated rather than hidden: only colours declared in the SAME rule
+# block are compared. A colour set on a child selector, or inherited, is
+# invisible here and needs the real scanner or a browser check.
+_CONTRAST_AA = 4.5
+_DECL_COLOR = re.compile(r"(?<![-\w])color\s*:\s*(#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3})\s*[;}]")
+_DECL_BG = re.compile(r"background(?:-color)?\s*:\s*([^;}]+)")
+_HEX = re.compile(r"#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})")
+_RGBA = re.compile(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)")
+_CSS_BLOCK = re.compile(r"([^{}]+)\{([^{}]*)\}")
+
+
+def _parse_hex(text: str) -> tuple:
+    value = text.lstrip("#")
+    if len(value) == 3:
+        value = "".join(c * 2 for c in value)
+    return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+
+
+def _channel(value: int) -> float:
+    c = value / 255
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(rgb: tuple) -> float:
+    r, g, b = (_channel(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast_ratio(fg: tuple, bg: tuple) -> float:
+    light, dark = sorted((relative_luminance(fg), relative_luminance(bg)),
+                         reverse=True)
+    return (light + 0.05) / (dark + 0.05)
+
+
+def _background_colour(decl: str):
+    """The background an analyser reads: an rgba() gives up its alpha."""
+    rgba = _RGBA.search(decl)
+    if rgba:
+        return (int(rgba.group(1)), int(rgba.group(2)), int(rgba.group(3)))
+    hexed = _HEX.search(decl)
+    return _parse_hex(hexed.group(0)) if hexed else None
+
+
+def _contrast_finding(path: str, text: str, match) -> Finding | None:
+    selector, body = match.group(1), match.group(2)
+    colour = _DECL_COLOR.search(body + ";")
+    background = _DECL_BG.search(body)
+    if not colour or not background:
+        return None
+    bg = _background_colour(background.group(1))
+    if bg is None:
+        return None
+    ratio = contrast_ratio(_parse_hex(colour.group(1)), bg)
+    if ratio >= _CONTRAST_AA:
+        return None
+    line = text.count("\n", 0, match.start(2) + colour.start()) + 1
+    name = selector.strip().splitlines()[-1].strip()[:40]
+    return Finding(path, line, "WEB-CONTRAST",
+                   f"{name}: text {ratio:.2f}:1 against its declared "
+                   f"background (AA needs {_CONTRAST_AA}). A translucent "
+                   f"background reads as its OPAQUE base to an analyser; "
+                   f"declare the composited colour instead.")
+
+
+def check_contrast(path: str, text: str) -> list:
+    out = []
+    for match in _CSS_BLOCK.finditer(text):
+        found = _contrast_finding(path, text, match)
+        if found is not None:
+            out.append(found)
+    return out
+
+
 def _check_web(path: str, text: str) -> list[Finding]:
     clean = strip_comments(text)
-    out: list[Finding] = []
+    out: list[Finding] = check_contrast(path, clean)
     for rule, pattern, message in WEB_RULES:
         for match in pattern.finditer(clean):
             line = clean.count("\n", 0, match.start()) + 1
@@ -332,6 +418,12 @@ _CASES = [
     ("WEB-PROMISE-REJECT", "function f(){ return Promise.reject(new Error()); }\n",
      "function f(){ throw new Error(); }\n", ".js"),
     ("WEB-ZERO-FRACTION", "var n = 2.0;\n", "var n = 2;\n", ".js"),
+    # The real one, PSIRENS 1.6.6: a translucent amber tint that renders at
+    # 13:1 on a dark page and reads as 2.5:1 to an analyser. The good case is
+    # the same design with the composited colour declared.
+    ("WEB-CONTRAST",
+     "<style>.stale{background:rgba(198,124,0,.13);color:#F4DCAE}</style>\n",
+     "<style>.stale{background:#17100A;color:#F4DCAE}</style>\n", ".html"),
 ]
 
 # The comment-blindness case: a rule must not fire on prose describing it.
@@ -395,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         for rule, _, message in WEB_RULES:
             print(f"{rule:22} {message}")
+        print(f"{'WEB-CONTRAST':22} declared text contrast below WCAG AA")
         for rule in ("PY-COMPLEXITY", "PY-PARAMS", "PY-MUTABLE-DEFAULT",
                      "PY-BARE-EXCEPT", "PY-NONE-COMPARE"):
             print(f"{rule:22} see SNIFFS.md")
