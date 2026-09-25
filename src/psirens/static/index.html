@@ -82,7 +82,16 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stat{background:#0b1220;border:1px solid var(--line);border-radius:5px;padding:8px}
 .stat .v{font-family:var(--mono);font-size:17px}.stat .k{font-size:8.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
-.crow{display:grid;grid-template-columns:44px 1fr 24px;align-items:center;gap:8px;margin:3px 0;font-size:12px}
+.crow{display:grid;grid-template-columns:44px 1fr 24px;align-items:center;gap:8px;margin:3px 0;
+  font-size:12px;width:100%;padding:3px 5px;border:1px solid transparent;border-radius:4px;
+  background:none;color:inherit;cursor:pointer;text-align:left;font-family:inherit}
+.crow:hover{background:#141d2b;border-color:var(--line2)}
+.crow.on{background:rgba(198,124,0,.16);border-color:#C67C00}
+.crow.on .cc{color:#FFD79A}
+.crow.on .cbar i{background:#E9A93A}
+.cclear{width:100%;margin-top:7px;padding:5px 8px;font-size:11.5px;font-family:inherit;
+  border:1px solid var(--line2);border-radius:4px;background:none;color:var(--dim);cursor:pointer}
+.cclear:hover{color:var(--ink);border-color:#C67C00}
 .cc{font-family:var(--mono)}.cbar{height:5px;background:#141d2b;border-radius:3px;overflow:hidden}.cbar i{display:block;height:100%;background:var(--accent)}
 .cv{font-family:var(--mono);text-align:right;color:var(--dim)}
 .wl{display:grid;grid-template-columns:17px 1fr;gap:8px;width:100%;padding:5px 0;text-align:left;border-bottom:1px solid var(--line)}
@@ -241,7 +250,7 @@ const RANKS={1:{n:"CRITICAL",c:"#E2483D"},2:{n:"HIGH",c:"#E9863A"},3:{n:"ELEVATE
 const DEFAULT_RANKS=[1,2,3];
 let STALE_AFTER_H=24;   // replaced from the payload on first load
 const state={ranks:new Set(DEFAULT_RANKS),loadedRanks:new Set(DEFAULT_RANKS),
-  loading:false,trails:true,view:"real",filter:"",
+  loading:false,trails:true,view:"real",filter:"",country:null,
   sel:null,etag:null,hrr:null,loaded:false,pullHours:24,
   pullMode:"window",pullStart:"",pullStop:""};
 let OBJECTS=[];
@@ -275,7 +284,12 @@ function ageLabel(h){if(h>=900){return "\u2014";}if(h<1){return "<1h";}if(h<48){
 function wrap(d){while(d>180){d-=360;}while(d<-180){d+=360;}return d;}
 function headSize(o){if(o.rank!=null&&o.rank<=2){return 6;}if(o.rank===3){return 4.4;}return 3.4;}
 function matchF(o){const f=state.filter.trim().toLowerCase();return !f||o.name.toLowerCase().includes(f)||o.id.toLowerCase().includes(f);}
-function visible(){return OBJECTS.filter(o=>state.ranks.has(o.rank)&&matchF(o)&&o.inc>=MAXV.incMin&&o.inc<=MAXV.incMax);}
+function inCountry(o){return state.country===null||o.cc===state.country;}
+// Everything EXCEPT the country filter. The country panel counts from this,
+// not from visible(): counting from the filtered set would collapse the panel
+// to the one country selected, and there would be no way to switch or clear.
+function visibleBase(){return OBJECTS.filter(o=>state.ranks.has(o.rank)&&matchF(o)&&o.inc>=MAXV.incMin&&o.inc<=MAXV.incMax);}
+function visible(){return visibleBase().filter(inCountry);}
 
 // live tracks -> render model (trails come from the real elset samples)
 function transform(tracks){
@@ -439,14 +453,31 @@ function wRankBars(){const by=counts();const max=Math.max(1,...[1,2,3,4,5].map(r
     <span class="rk" style="background:${RANKS[r].c}">${r}</span><span class="rn">${RANKS[r].n}</span>
     <span class="rbar"><i style="width:${by[r]/max*100}%;background:${RANKS[r].c}"></i></span><span class="rc">${by[r]}</span></button>`);
   return rows.join("");}
-function wCountry(){const by={};visible().forEach(o=>{if(o.rank!=null&&o.cc)by[o.cc]=(by[o.cc]||0)+1;});
-  const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,7);const max=top.length?top[0][1]:1;
-  return top.map(([cc,v])=>`<div class="crow"><span class="cc">${esc(cc)}</span><span class="cbar"><i style="width:${v/max*100}%"></i></span><span class="cv">${v}</span></div>`).join("")||`<div class="muted">No HRR objects in view.</div>`;}
+function countryCounts(){const by={};
+  visibleBase().forEach(o=>{if(o.rank!=null&&o.cc){by[o.cc]=(by[o.cc]||0)+1;}});
+  // A selected country always appears, even at zero, so the clear control can
+  // never strand the operator on an empty plot with nothing to click.
+  if(state.country!==null&&by[state.country]===undefined){by[state.country]=0;}
+  return by;}
+function countryRow(cc,v,max){
+  const on=state.country===cc?" on":"";
+  const press=state.country===cc?"true":"false";
+  return `<button type="button" class="crow${on}" data-cc="${esc(cc)}" aria-pressed="${press}" title="Show only ${esc(cc)} objects">`
+    +`<span class="cc">${esc(cc)}</span><span class="cbar"><i style="width:${v/max*100}%"></i></span>`
+    +`<span class="cv">${v}</span></button>`;}
+function wCountry(){
+  const by=countryCounts();
+  const top=Object.entries(by).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if(!top.length){return `<div class="muted">No HRR objects in view.</div>`;}
+  const max=Math.max(1,top[0][1]);
+  const rows=top.map(([cc,v])=>countryRow(cc,v,max)).join("");
+  if(state.country===null){return rows;}
+  return rows+`<button type="button" class="cclear" data-cc="">Clear ${esc(state.country)} filter &middot; show all</button>`;}
 function wStats(){const vis=visible();return {shown:vis.length,total:OBJECTS.length,
   fresh:vis.filter(o=>o.ageH<6).length,stale:vis.filter(o=>o.ageH>36).length,
   drift:vis.filter(o=>Math.abs(o.drift)>0.3).length,
   meanAge:vis.length?vis.reduce((s,o)=>s+o.ageH,0)/vis.length:0};}
-function watchlist(){const w=OBJECTS.filter(o=>o.rank!=null&&o.rank<=2).sort((a,b)=>a.rank-b.rank);
+function watchlist(){const w=OBJECTS.filter(o=>o.rank!=null&&o.rank<=2&&inCountry(o)).sort((a,b)=>a.rank-b.rank);
   if(!w.length)return `<div class="muted">No R1–R2 objects in the current data.</div>`;
   return w.map(o=>`<button class="wl" data-id="${o.id}"><span class="wk" style="background:${rankCol(o.rank)}">${o.rank}</span><span class="wn">${esc(o.name)}</span><span class="wm">${esc(o.cc)} \u00b7 ${o.lon.toFixed(0)}\u00b0 \u00b7 ${ageLabel(o.ageH)}</span></button>`).join("");}
 function findObj(id){return OBJECTS.find(o=>o.id===id)||null;}
@@ -543,8 +574,15 @@ async function toggleRank(r){
   paint();
   try{await load();}finally{state.loading=false;paint();}
 }
+function selectCountry(cc){
+  // Clicking the selected country again clears it: the panel is a toggle, not
+  // a one-way trip.
+  state.country=(cc===""||state.country===cc)?null:cc;
+  state.sel=null;
+  paint();}
 function wire(){
   document.querySelectorAll("[data-rank]").forEach(b=>{b.onclick=()=>toggleRank(+b.dataset.rank);});
+  document.querySelectorAll("[data-cc]").forEach(b=>{b.onclick=()=>selectCountry(b.dataset.cc);});
   document.querySelectorAll("[data-id]").forEach(b=>b.onclick=()=>{state.sel=b.dataset.id;paint();});
 }
 // ---- interactions ----

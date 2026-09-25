@@ -177,12 +177,55 @@ function checkBodyFits(m, label) {
            `canvas attributes are acting as an intrinsic floor again.`);
     }
     // ---------------------------------------------------------------------
+    // The country filter (1.6.7). The design trap this guards: the country
+    // panel counts from the UNFILTERED set. Counting from the filtered set
+    // would collapse the panel to the single country selected, leaving no way
+    // to switch or clear it.
+    // ---------------------------------------------------------------------
+    await page.click("#comodal-x");   // it overlays the left rail
+    const shown = () => page.evaluate(
+      () => Number((document.querySelector("#reads .read .v").textContent || "")
+        .trim().split(" ")[0]));
+
+    const countriesBefore = await page.locator('[data-cc]:not([data-cc=""])').count();
+    if (countriesBefore < 2) {
+      fail(`the country panel listed ${countriesBefore} countries; the filter ` +
+           `assertions below would be vacuous with fewer than two.`);
+    } else {
+      const all = await shown();
+      const first = page.locator('[data-cc]:not([data-cc=""])').first();
+      const cc = await first.getAttribute("data-cc");
+      const want = Number((await first.textContent() || "").replace(/\D+/g, ""));
+      await first.click();
+      const filtered = await shown();
+      console.log(`  country:    ${cc} -> ${filtered} of ${all} shown`);
+      if (filtered !== want) {
+        fail(`selecting ${cc} showed ${filtered} objects, but the panel counted ` +
+             `${want}. The filter and the breakdown disagree.`);
+      }
+      if (filtered >= all) {
+        fail(`selecting ${cc} did not narrow the view (${filtered} of ${all}).`);
+      }
+      const countriesAfter = await page.locator('[data-cc]:not([data-cc=""])').count();
+      if (countriesAfter < countriesBefore) {
+        fail(`the country panel collapsed from ${countriesBefore} rows to ` +
+             `${countriesAfter} once a country was selected, so the operator ` +
+             `cannot switch country or see the breakdown any more.`);
+      }
+      await page.click('[data-cc=""]');           // the clear control
+      const restored = await shown();
+      if (restored !== all) {
+        fail(`clearing the country filter left ${restored} objects shown, not ` +
+             `the original ${all}.`);
+      }
+    }
+
+    // ---------------------------------------------------------------------
     // The error path. A non-JSON error body used to make .json() reject, and
     // the catch could only say "service unavailable", hiding the stated cause.
     // That exact defect reached production once on /api/conjunctions; this
     // asserts the co-planar path does not repeat it.
     // ---------------------------------------------------------------------
-    await page.click("#comodal-x");
     injectingFault = true;
     await page.route("**/api/coplanar*", (route) =>
       route.fulfill({ status: 500, contentType: "text/html",

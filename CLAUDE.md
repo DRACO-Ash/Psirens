@@ -38,14 +38,15 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.6; DEPLOYED 1.6.2)
+## Current state (repo 1.6.7; DEPLOYED 1.6.2)
 
 Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
 pipeline stages including Deploy, status Active. **1.6.3 to 1.6.6 are committed here and have
 never been uploaded**; 1.6.3 fixes the co-planar modal resize, 1.6.4 guards the
 co-planar fetch, 1.6.5 adds the default rank load and the legibility fix, and
-**1.6.6 fixes a live data-staleness defect and the blindness that hid it**
-(see Open items). 1.6.6 is the one to upload first.
+**1.6.6 fixes a live data-staleness defect and the blindness that hid it**,
+and 1.6.7 adds the country filter (see Open items). Upload 1.6.7: it carries
+everything, and 1.6.6 inside it is the fix that matters.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -86,7 +87,9 @@ Shipped features:
   sits on the left edge, which reads as "coplanar" and is correct. Points are
   labelled with the satellite name. The modal is draggable and resizable, and
   redraws on resize via a ResizeObserver. It closes with the object panel, but
-  closing it leaves the panel open. The canvas is absolutely positioned and the
+  closing it leaves the panel open. NOTE for the layout probe: the modal
+  overlays the left rail, so the probe closes it before exercising the
+  sidebar. The canvas is absolutely positioned and the
   modal body carries `min-height:0`/`min-width:0`: see the resize note in Open
   items before touching that CSS.
 
@@ -430,6 +433,20 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   PROVEN, both halves, by reverting each to its 1.6.5 form: the single-request
   form fails three slicing tests, and removing the alarm fails the log test.
   The 14.1-day condition Ash reported is a committed test case.
+- Country filter: ADDED in 1.6.7. The By-country panel is now a control, not
+  just a readout: click a country to show only its objects, click it again or
+  use the clear control to restore. The plot, the reads, Fleet Health and the
+  R1-R2 watchlist all follow the selection.
+  DESIGN TRAP, avoided deliberately and now guarded. The panel used to count
+  from `visible()`. Filtering inside `visible()` would have collapsed the
+  panel to the one country selected, leaving no way to switch country or
+  clear. So the counts come from `visibleBase()`, which is everything EXCEPT
+  the country filter, and a selected country is always listed even at zero.
+  PROVEN: the layout probe asserts the row count does not shrink when a
+  country is selected, and reverting `countryCounts` to use `visible()` makes
+  it fail with "the country panel collapsed from 4 rows to 1".
+  Purely client-side: country already travels with each object from the HRR
+  join, so no API change and no extra request.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
