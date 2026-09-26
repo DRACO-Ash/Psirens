@@ -287,6 +287,24 @@ when it finally runs. One in this project guarded against an empty watchlist
 that a bundled snapshot makes impossible. Delete it, or make the case real and
 test it.
 
+### 5.6 A swallowed failure must still be counted
+
+Resilient code catches an error so one bad call does not kill a cycle. That is
+correct. What is not correct is catching it and reporting nothing, because the
+health signal then cannot tell a rejected upstream from a quiet one.
+
+MEASURED, PSIRENS 26 September 2026: a live health endpoint reported
+`last_ingest_added: 0` beside `last_ingest_errors: []` while the picture was
+403 hours old. The error list was built from exceptions that reached the
+caller, and the HTTP layer below it caught every failure by design. A 403 and
+a genuinely empty window produced byte-identical output.
+
+The rule: wherever a `try/except` exists so the loop survives, add a counter
+beside it and put the counter in the health payload with the REASON. Then
+prove it, by making the failure happen and asserting the report is not empty.
+An assertion that the list is non-empty, written against the live symptom, is
+the whole test.
+
 ### 5.5 Watch what the coverage figure excludes
 
 MEASURED: 93.72 per cent across 157 tests, with the single-page application

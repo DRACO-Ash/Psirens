@@ -161,3 +161,97 @@ def test_tracks_carries_the_threshold_for_the_interface(client):
     """The banner is drawn client-side from data already on screen, so the
     threshold has to travel with it."""
     assert client.get("/api/tracks?view=combined").json()["stale_after_hours"] > 0
+
+
+# -- a failed upstream request is an ERROR, not silence (1.6.9) -------------
+#
+# The defect this guards was found in production on 26 September 2026:
+# /api/meta reported `last_ingest_added: 0` beside `last_ingest_errors: []`
+# with a 403-hour-old picture. `UDLElsetSource._request` swallows a failure so
+# one bad slice never kills a cycle, and nothing counted the swallowing. A
+# rejected feed was therefore indistinguishable from a quiet one, which is the
+# same class of blindness 1.6.6 fixed one layer higher up.
+def _udl_source(status: int, rows=None):
+    import httpx
+
+    from psirens.sources import UDLElsetSource
+    from test_sources import _cfg_udl
+
+    cfg = _cfg_udl()
+    body = httpx.Response(status, json=rows) if rows is not None \
+        else httpx.Response(status, text="denied")
+    client = httpx.Client(transport=httpx.MockTransport(lambda _req: body))
+    return cfg, UDLElsetSource(cfg, client=client)
+
+
+def _window():
+    return _NOW - timedelta(hours=6), _NOW
+
+
+def test_a_rejected_request_is_counted_not_swallowed():
+    _cfg, src = _udl_source(401)
+    start, end = _window()
+    assert src.fetch(start, end) == {}          # still degrades to empty
+    assert src.last_stats.requests == 1
+    assert src.last_stats.failures == 1
+    assert "HTTP 401" in src.last_stats.summary()
+
+
+def test_a_successful_request_counts_its_rows():
+    rows = [{"satNo": "43683", "epoch": "2026-09-24T09:00:00.000000Z",
+             "inclination": 1.9, "eccentricity": 0.0002, "raan": 100.0,
+             "argOfPerigee": 20.0, "meanAnomaly": 30.0, "meanMotion": 1.0027,
+             "dataMode": "REAL", "classificationMarking": "U", "source": "18SDS"}]
+    _cfg, src = _udl_source(200, rows)
+    start, end = _window()
+    src.fetch(start, end)
+    assert src.last_stats.failures == 0
+    assert src.last_stats.rows == 1
+    assert src.last_stats.objects == 1
+
+
+def test_the_refresher_reports_a_rejected_feed_as_an_error(tmp_path):
+    """THE regression. Reverting `_absorb_stats` leaves this list empty, which
+    is exactly what the live /api/meta showed."""
+    cfg, src = _udl_source(403)
+    store = _seeded_store(tmp_path, _NOW - timedelta(days=16))
+    ref = Refresher(cfg, store, [src], SingleFlight())
+    result = ref.run_once(now=_NOW)
+    assert result["added"] == 0
+    assert result["request_failures"] == 1
+    assert ref.health(_NOW)["last_ingest_errors"], \
+        "a rejected upstream must not report an empty error list"
+    assert "HTTP 403" in ref.health(_NOW)["last_ingest_errors"][0]
+    assert "upstream requests are failing" in ref.diagnosis()
+
+
+def test_records_filtered_out_by_the_high_interest_list_are_visible(tmp_path):
+    """The other reading of a zero: the upstream answered, and everything it
+    sent was then dropped. Offered and kept have to be reported separately or
+    the two are indistinguishable."""
+    rows = [{"satNo": "99999", "epoch": "2026-09-24T09:00:00.000000Z",
+             "inclination": 1.9, "eccentricity": 0.0002, "raan": 100.0,
+             "argOfPerigee": 20.0, "meanAnomaly": 30.0, "meanMotion": 1.0027,
+             "dataMode": "REAL", "classificationMarking": "U", "source": "18SDS"}]
+    cfg, src = _udl_source(200, rows)
+
+    class _Hrr:  # a list that does not contain the object on the wire
+        def geo_set(self):
+            return {"43683"}
+
+    store = _seeded_store(tmp_path, _NOW - timedelta(days=16))
+    ref = Refresher(cfg, store, [src], SingleFlight(), hrr=_Hrr())
+    ref.run_once(now=_NOW)
+    health = ref.health(_NOW)
+    assert health["last_ingest_fetched"] == 1
+    assert health["last_ingest_kept"] == 0
+    assert health["last_ingest_added"] == 0
+    assert "high-interest list" in health["ingest_diagnosis"]
+
+
+def test_meta_carries_the_stage_counts(client):
+    body = client.get("/api/meta").json()
+    for key in ("last_ingest_requests", "last_ingest_request_failures",
+                "last_ingest_rows", "last_ingest_fetched", "last_ingest_kept",
+                "hrr_list_size", "ingest_diagnosis"):
+        assert key in body, f"/api/meta must report {key}"

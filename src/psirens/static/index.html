@@ -249,6 +249,7 @@ const RANKS={1:{n:"CRITICAL",c:"#E2483D"},2:{n:"HIGH",c:"#E9863A"},3:{n:"ELEVATE
 // again is instant; switching on an unloaded one costs a round trip.
 const DEFAULT_RANKS=[1,2,3];
 let STALE_AFTER_H=24;   // replaced from the payload on first load
+let STALE_WHY="";       // server's own reading of why the feed is dry
 const state={ranks:new Set(DEFAULT_RANKS),loadedRanks:new Set(DEFAULT_RANKS),
   loading:false,trails:true,view:"real",filter:"",country:null,
   sel:null,etag:null,hrr:null,loaded:false,pullHours:24,
@@ -419,15 +420,29 @@ function freshestAgeH(){
   OBJECTS.forEach(o=>{if(o.ageH<999&&(best===null||o.ageH<best)){best=o.ageH;}});
   return best;
 }
+// Why the feed is dry, straight from the server. Fetched only when the belt is
+// already stale, so a healthy load costs nothing extra. An operator should not
+// need a container shell to answer "why is this old?".
+async function refreshDiagnosis(){
+  const age=freshestAgeH();
+  if(age===null||age<=STALE_AFTER_H){STALE_WHY="";return;}
+  try{
+    const r=await fetch("/api/meta");
+    if(!r.ok){STALE_WHY="";return;}
+    const j=await r.json();
+    STALE_WHY=typeof j.ingest_diagnosis==="string"?j.ingest_diagnosis:"";
+  }catch{STALE_WHY="";}
+}
 function syncStale(){
   const el=document.getElementById("stale"),age=freshestAgeH();
   if(age===null||age<=STALE_AFTER_H){el.hidden=true;return;}
   const days=(age/24).toFixed(1);
+  const why=STALE_WHY?' Reported cause: <b>'+esc(STALE_WHY)+'</b>.':'';
   el.hidden=false;
   el.innerHTML='<b>Data is '+days+' days old.</b> The newest element set on the '
     +'belt is older than the '+STALE_AFTER_H+'h threshold, so this is the '
-    +'last-known-good picture rather than a current one. Check the ingest: '
-    +'<code>GET /api/meta</code> reports the source errors and the newest epoch.';
+    +'last-known-good picture rather than a current one.'+why
+    +' <code>GET /api/meta</code> carries the full ingest counts.';
 }
 function drawBelt(){
   const ctx=cv.getContext("2d"),S=scale();
@@ -819,6 +834,7 @@ async function load(){
     state.etag=r.headers.get("ETag");state.loaded=true;
     OBJECTS=transform(j.tracks||[]);
     if(typeof j.stale_after_hours==="number"){STALE_AFTER_H=j.stale_after_hours;}
+    await refreshDiagnosis();
     syncStale();
     document.getElementById("banner").textContent=j.classification_banner||"UNCLASSIFIED";
     setStatus(new Date().toISOString().slice(11,16)+"Z");

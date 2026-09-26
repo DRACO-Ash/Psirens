@@ -38,16 +38,16 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.8; DEPLOYED 1.6.2)
+## Current state (repo 1.6.9; DEPLOYED 1.6.6 or later)
 
-Keep these apart. **1.6.2 is the build on the App Store**: uploaded, passed all TEN
-pipeline stages including Deploy, status Active. **1.6.3 to 1.6.6 are committed here and have
-never been uploaded**; 1.6.3 fixes the co-planar modal resize, 1.6.4 guards the
-co-planar fetch, 1.6.5 adds the default rank load and the legibility fix, and
-**1.6.6 fixes a live data-staleness defect and the blindness that hid it**,
-1.6.7 adds the country filter, and 1.6.8 clears a Code Quality contrast
-finding (see Open items). Upload 1.6.8: it carries everything, and 1.6.6
-inside it is the fix that matters.
+Keep these apart. FACT, 26 September 2026: a live `/api/meta` carried
+`refresh_lookback_hours` and the whole ingest-health block, which only exist
+from 1.6.6, so **the deployed build is 1.6.6 or later**. The exact deployed
+version is TBC (Ash to confirm from the App Store version list); `/api/meta`
+does not report it, which is itself worth fixing.
+1.6.7 adds the country filter, 1.6.8 clears a Code Quality contrast finding,
+and **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
+one** (see Open items). Upload 1.6.9: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -265,9 +265,14 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 - `POST /api/refresh` — force HRR + REAL refresh.
 - `GET /api/meta` and `/readyz` — both carry the INGEST HEALTH block:
   `newest_sample_epoch`, `data_age_hours`, `stale`, `stale_after_hours`,
-  `last_ingest_added`, `last_ingest_errors`, `last_successful_ingest`.
+  `last_ingest_added`, `last_ingest_errors`, `last_successful_ingest`, and
+  from 1.6.9 the STAGE COUNTS `last_ingest_requests`,
+  `last_ingest_request_failures`, `last_ingest_rows`, `last_ingest_fetched`,
+  `last_ingest_kept`, `hrr_list_size` and `ingest_diagnosis`.
   `last_refresh` alone is a trap: it advances every tick whether or not a
-  record arrived. `/readyz` stays 200 when stale by design.
+  record arrived. `last_ingest_added: 0` is a second trap: on its own it
+  cannot tell a quiet feed from a rejected one. `/readyz` stays 200 when
+  stale by design.
 - `GET /healthz`, `/favicon.ico`, `/static/{name}`.
 
 ## Packaging and release
@@ -470,6 +475,41 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   SAME 2.50:1 the platform did. Its limit is documented: it compares only
   colours declared in the same block, which is exactly how the second instance
   escaped it.
+- INGEST OBSERVABILITY, one layer deeper: FIXED in 1.6.9. Reported 26
+  September 2026 from a live `/api/meta`: `stale: true`,
+  `data_age_hours: 403.59`, `newest_sample_epoch` still 2026-09-09,
+  `last_ingest_added: 0`, `last_ingest_errors: []`,
+  `last_successful_ingest: null`.
+  WHAT THAT PROVED. 1.6.6's alarm was deployed and working: it named the
+  staleness Ash previously had to find by opening one object and reading its
+  epoch. WHAT IT COULD NOT SAY, and this is the defect: `last_ingest_errors`
+  was built from exceptions raised out of `src.fetch`, while
+  `UDLElsetSource._request` deliberately CATCHES every HTTP error, logs a
+  warning and returns None so one bad slice never kills a cycle. Nothing
+  counted the catching. So a feed returning 401, 403, 500 or timing out on
+  every slice reported `added: 0` with `errors: []` — identical to a healthy
+  feed with nothing new in the window. The 1.6.6 fix moved the blindness one
+  layer down rather than removing it.
+  FIX. `FetchStats` on every source records requests, failures, raw rows and
+  distinct objects per fetch, with the failure REASON (`HTTP 401` separates
+  credentials from entitlement from a tenant fault). `Refresher._absorb_stats`
+  folds those into the cycle and appends a request failure to
+  `last_ingest_errors`: still never fatal, no longer silent. `IngestResult`
+  carries the counts at each stage, so `fetched` against `kept` separates
+  "the upstream sent nothing" from "it sent plenty and the high-interest
+  filter dropped all of it". `Refresher.diagnosis()` turns those counts into
+  one operator-readable line, served on `/api/meta` and shown in the SPA
+  staleness banner, so "why is this old?" does not need a container shell.
+  PROVEN: removing the one line in `_absorb_stats` that records the failure
+  makes `test_the_refresher_reports_a_rejected_feed_as_an_error` fail with
+  `assert []`, which is the live symptom byte for byte.
+  STILL OPEN, and it needs Ash, not code: 1.6.9 makes the cause reportable,
+  it does not fix the feed. The deployed container's logs already carry
+  `UDL elset fetch failed ... (never fatal)` for every failed slice; read
+  them, or deploy 1.6.9 and read `ingest_diagnosis`. And whatever the cause,
+  the 2026-09-09 gap will NOT close on its own: the scheduled refresh looks
+  back 24 hours by design, so a backfill pull over the gap is needed once the
+  feed is answering.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

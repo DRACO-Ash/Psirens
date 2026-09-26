@@ -18,6 +18,7 @@ import math
 import os
 import tempfile
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Protocol, TypeVar
 
@@ -179,7 +180,51 @@ def _merge_records(acc: dict[str, dict], incoming: dict[str, dict]) -> None:
             _record_elset(held, el)
 
 
+@dataclass
+class FetchStats:
+    """What the WIRE did, as opposed to what the merge did.
+
+    1.6.6 gave the app an alarm for stale data but built it on the number of
+    samples the merge ADDED. That number is zero both when the upstream
+    returns nothing and when every upstream request fails, and `_request`
+    deliberately swallows a failure so one bad slice never kills a cycle. The
+    consequence, seen live on 26 September 2026: `last_ingest_added: 0` beside
+    `last_ingest_errors: []`, which reads as "the feed is healthy and simply
+    had nothing new" when it may equally mean "every request was rejected".
+    A source now records what it actually did so the two are distinguishable.
+    """
+
+    requests: int = 0
+    failures: int = 0
+    rows: int = 0          # raw records returned, before normalisation
+    objects: int = 0       # distinct objects after normalisation
+    reasons: list[str] = field(default_factory=list)
+
+    def note_failure(self, reason: str) -> None:
+        self.failures += 1
+        if reason not in self.reasons:
+            self.reasons.append(reason)
+
+    def summary(self) -> str:
+        detail = "; ".join(self.reasons[:3]) or "no reason recorded"
+        return (f"{self.failures}/{self.requests} upstream request(s) failed: "
+                f"{detail}")
+
+
+def _failure_reason(exc: Exception) -> str:
+    """A short, loggable cause. The status code is the single most useful
+    fact when a feed goes quiet: 401 is credentials, 403 is entitlement, 5xx
+    is the tenant, a timeout is the network."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"HTTP {exc.response.status_code}"
+    if isinstance(exc, json.JSONDecodeError):
+        return "non-JSON response body"
+    return type(exc).__name__
+
+
 class ElsetSource(Protocol):
+    last_stats: FetchStats
+
     def fetch(self, start: datetime, end: datetime, /) -> dict[str, dict]:
         """Return object_id -> record with meta and a `samples` list."""
         ...
@@ -212,6 +257,7 @@ class UDLElsetSource:
     def __init__(self, cfg: Config, client: httpx.Client | None = None):
         self.cfg = cfg
         self._client = client
+        self.last_stats = FetchStats()
 
     def _auth_header(self) -> dict[str, str]:
         raw = f"{self.cfg.udl_user}:{self.cfg.udl_password}".encode()
@@ -230,6 +276,7 @@ class UDLElsetSource:
         """
         client = self._client or httpx.Client(timeout=30.0)
         merged: dict[str, dict] = {}
+        self.last_stats = FetchStats()  # per fetch, never cumulative
         try:
             windows = _slices(start, end, self.cfg.udl_slice_hours)
             for index, (w_start, w_end) in enumerate(windows):
@@ -239,6 +286,10 @@ class UDLElsetSource:
         finally:
             if self._client is None:
                 client.close()
+        self.last_stats.objects = len(merged)
+        if self.last_stats.failures:
+            _log.warning("UDL fetch for %s..%s: %s", _udl_ts(start),
+                         _udl_ts(end), self.last_stats.summary())
         return merged
 
     def _request(self, client: httpx.Client, start: datetime,
@@ -250,15 +301,22 @@ class UDLElsetSource:
         params = {self.cfg.udl_epoch_param: f"{_udl_ts(start)}..{_udl_ts(end)}"}
         if self.cfg.udl_max_results > 0:
             params["maxResults"] = str(self.cfg.udl_max_results)
+        self.last_stats.requests += 1
         try:
             resp = client.get(url, headers=headers, params=params)
             resp.raise_for_status()
             rows = resp.json()
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
+            # Never fatal to the cycle, but never silent either: a swallowed
+            # failure that reported no error is what made a dead feed look
+            # like a quiet one.
+            self.last_stats.note_failure(_failure_reason(exc))
             _log.warning("UDL elset fetch failed for %s..%s (never fatal): %s",
                          _udl_ts(start), _udl_ts(end), exc)
             return None
-        return rows if isinstance(rows, list) else []
+        out = rows if isinstance(rows, list) else []
+        self.last_stats.rows += len(out)
+        return out
 
     def _fetch_slice(self, client: httpx.Client, start: datetime,
                      end: datetime, depth: int = 0) -> dict[str, dict]:
@@ -364,6 +422,10 @@ class ManualElsetSource:
     def __init__(self, data_dir: str):
         self.data_dir = data_dir
         self.path = os.path.join(data_dir, "manual.json")
+        # A local source makes no requests, so failures stay at zero; the
+        # object count still matters, because it separates "nothing was
+        # offered" from "something was offered and then filtered away".
+        self.last_stats = FetchStats()
 
     def _load(self) -> list[dict]:
         try:
@@ -437,6 +499,7 @@ class ManualElsetSource:
                         source=str(i.get("source", "MANUAL") or "MANUAL")),
                     intl_desig=str(i["object_id"])),
             }
+        self.last_stats = FetchStats(objects=len(out))
         return out
 
 
@@ -450,6 +513,9 @@ class DemoElsetSource:
     """
 
     _GEO_MM = 1.0027379093  # sidereal rev/day
+
+    def __init__(self) -> None:
+        self.last_stats = FetchStats()
 
     def fetch(self, _start: datetime, end: datetime) -> dict[str, dict]:
         now = end
@@ -492,6 +558,7 @@ class DemoElsetSource:
             rec["elset"] = self._demo_elset(
                 oid, head["sub_lon_deg"], head["inclination_deg"],
                 datetime.fromisoformat(head["epoch"]))
+        self.last_stats = FetchStats(objects=len(out))
         return out
 
     @staticmethod

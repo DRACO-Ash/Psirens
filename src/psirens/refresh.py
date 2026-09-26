@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from .config import Config
@@ -28,6 +29,39 @@ def _mode_of(rec: dict) -> DataMode:
         return DataMode.REAL
 
 
+def _filtered(incoming: dict[str, dict], modes: set[DataMode] | None,
+              hrr_set: set[str] | None) -> dict[str, dict]:
+    """Apply the data-mode and high-interest filters, in that order."""
+    out = incoming
+    if modes is not None:
+        out = {k: v for k, v in out.items() if _mode_of(v) in modes}
+    if hrr_set is not None:
+        out = {k: v for k, v in out.items() if k in hrr_set}
+    return out
+
+
+@dataclass
+class IngestResult:
+    """One refresh cycle, reported at every stage rather than only the last.
+
+    `added` alone cannot tell three very different situations apart: the
+    upstream returned nothing, the upstream returned plenty and the
+    high-interest filter dropped all of it, or every upstream request was
+    rejected. Live evidence, 26 September 2026: `last_ingest_added: 0` with
+    `last_ingest_errors: []` and a 403-hour-old picture, which narrowed to
+    nothing because the counts between the wire and the store were not kept.
+    """
+
+    added: int = 0
+    errors: list[str] = field(default_factory=list)
+    requests: int = 0           # upstream requests attempted
+    request_failures: int = 0   # ...of which failed (never fatal, now never silent)
+    rows: int = 0               # raw records returned by the upstream
+    fetched: int = 0            # distinct objects offered, before any filter
+    kept: int = 0               # ...surviving the mode and high-interest filters
+    hrr_size: int | None = None
+
+
 class Refresher:
     def __init__(self, cfg: Config, store: Store, sources: list[ElsetSource],
                  flight: SingleFlight, hrr=None):
@@ -44,6 +78,8 @@ class Refresher:
         # after the first tick, no banner and no API signal.
         self.last_errors: list[str] = []
         self.last_ok: datetime | None = None   # last run that added something
+        # The stage-by-stage counts (1.6.9). Without them a zero is mute.
+        self.last_ingest = IngestResult()
 
     def _maybe_refresh_hrr(self, now: datetime, force: bool) -> None:
         """Refresh the dynamic HRR list on its own slow cadence (or on force).
@@ -82,9 +118,45 @@ class Refresher:
             max_samples=self.cfg.max_samples_per_object, now=now,
         )
 
+    @staticmethod
+    def _absorb_stats(src: ElsetSource, res: IngestResult) -> None:
+        """Fold a source's wire counters into the cycle result.
+
+        A failed request is recorded as an ERROR here. It is still never fatal
+        to the cycle, but a swallowed failure that reported no error is
+        precisely what let a dead feed read as a quiet one.
+        """
+        stats = getattr(src, "last_stats", None)
+        if stats is None:
+            return
+        res.requests += stats.requests
+        res.request_failures += stats.failures
+        res.rows += stats.rows
+        if stats.failures:
+            res.errors.append(f"{type(src).__name__}: {stats.summary()}")
+
+    def _ingest_source(self, src: ElsetSource, start: datetime, now: datetime,
+                       *, modes: set[DataMode] | None,
+                       hrr_set: set[str] | None, res: IngestResult) -> None:
+        """One source: pull, count at each stage, filter, merge."""
+        incoming: dict[str, dict] = {}
+        try:
+            incoming = src.fetch(start, now)
+        except Exception as exc:  # never fatal to the loop
+            res.errors.append(f"{type(src).__name__}: {exc}")
+            _log.warning("source %s failed: %s", type(src).__name__, exc)
+        self._absorb_stats(src, res)
+        res.fetched += len(incoming)
+        kept = _filtered(incoming, modes, hrr_set)
+        res.kept += len(kept)
+        if kept:
+            res.added += self.store.merge_samples(
+                kept, retention_days=self.cfg.retention_days,
+                max_samples=self.cfg.max_samples_per_object, now=now)
+
     def _ingest(self, start: datetime, now: datetime, *,
                 modes: set[DataMode] | None, hrr_filter: bool,
-                prune: bool) -> tuple[int, list[str]]:
+                prune: bool) -> IngestResult:
         """Pull every source over [start, now] and merge, optionally restricted
         to a set of data modes and/or the HRR set. When prune is set and an HRR
         set is in play, drop REAL objects that fell off the list (simulated data
@@ -92,27 +164,13 @@ class Refresher:
         hrr_set = (self.hrr.geo_set()
                    if (self.hrr is not None and self.cfg.udl_enabled and hrr_filter)
                    else None)
-        added = 0
-        errors: list[str] = []
+        res = IngestResult(hrr_size=None if hrr_set is None else len(hrr_set))
         for src in self.sources:
-            try:
-                incoming = src.fetch(start, now)
-            except Exception as exc:  # never fatal to the loop
-                errors.append(f"{type(src).__name__}: {exc}")
-                _log.warning("source %s failed: %s", type(src).__name__, exc)
-                continue
-            if modes is not None:
-                incoming = {k: v for k, v in incoming.items()
-                            if _mode_of(v) in modes}
-            if hrr_set is not None:
-                incoming = {k: v for k, v in incoming.items() if k in hrr_set}
-            if incoming:
-                added += self.store.merge_samples(
-                    incoming, retention_days=self.cfg.retention_days,
-                    max_samples=self.cfg.max_samples_per_object, now=now)
+            self._ingest_source(src, start, now, modes=modes,
+                                hrr_set=hrr_set, res=res)
         if prune and hrr_set is not None:
             self.store.retain_only(hrr_set)  # REAL-only prune; sim data kept
-        return added, errors
+        return res
 
     def run_once(self, now: datetime | None = None, force_hrr: bool = False) -> dict:
         """Automatic refresh: complete HRR list, then REAL elsets over the
@@ -127,16 +185,19 @@ class Refresher:
         start = now - timedelta(hours=self.cfg.refresh_lookback_hours)
         try:
             self._maybe_refresh_hrr(now, force_hrr)  # list first; ingest filters on it
-            added, errors = self._ingest(start, now, modes=None,
-                                         hrr_filter=True, prune=True)
+            res = self._ingest(start, now, modes=None,
+                               hrr_filter=True, prune=True)
             self.last_run = now
-            self.last_added = added
-            self.last_errors = errors
-            if added > 0:
+            self.last_added = res.added
+            self.last_errors = list(res.errors)
+            self.last_ingest = res
+            if res.added > 0:
                 self.last_ok = now
-            hrr_set = self.hrr.geo_set() if (self.hrr and self.cfg.udl_enabled) else None
-            return {"status": "ok", "added": added, "errors": errors,
-                    "hrr_count": len(hrr_set) if hrr_set is not None else None}
+            return {"status": "ok", "added": res.added, "errors": res.errors,
+                    "hrr_count": res.hrr_size, "fetched": res.fetched,
+                    "kept": res.kept, "rows": res.rows,
+                    "requests": res.requests,
+                    "request_failures": res.request_failures}
         finally:
             self.flight.end()
 
@@ -155,22 +216,29 @@ class Refresher:
         real_now = now or datetime.now(timezone.utc)
         added = 0
         errors: list[str] = []
+        fetched = 0
         try:
             if mode in ("real", "combined"):
                 self._maybe_refresh_hrr(real_now, True)  # HRR list is always current
-                a, e = self._ingest(start, end, modes={DataMode.REAL},
-                                    hrr_filter=True, prune=True)
-                added += a
-                errors += e
+                res = self._ingest(start, end, modes={DataMode.REAL},
+                                   hrr_filter=True, prune=True)
+                added += res.added
+                errors += res.errors
+                fetched += res.fetched
             if mode in ("sim", "combined"):
-                a, e = self._ingest(start, end, modes={DataMode.SIMULATED},
-                                    hrr_filter=False, prune=False)
-                added += a
-                errors += e
+                res = self._ingest(start, end, modes={DataMode.SIMULATED},
+                                   hrr_filter=False, prune=False)
+                added += res.added
+                errors += res.errors
+                fetched += res.fetched
             self.last_run = real_now
             self.last_added = added
+            self.last_errors = list(errors)
+            if added > 0:
+                self.last_ok = real_now
             return {"status": "ok", "mode": mode, "start": start.isoformat(),
-                    "end": end.isoformat(), "added": added, "errors": errors}
+                    "end": end.isoformat(), "added": added, "errors": errors,
+                    "fetched": fetched}
         finally:
             self.flight.end()
 
@@ -212,18 +280,53 @@ class Refresher:
         return age is not None and age > self.cfg.stale_after_hours
 
     def health(self, now: datetime | None = None) -> dict:
-        """Everything needed to tell a working feed from a frozen one."""
+        """Everything needed to tell a working feed from a frozen one.
+
+        The counts between the wire and the store are here on purpose. Added
+        alone is ambiguous: `last_ingest_requests` against
+        `last_ingest_request_failures` says whether the upstream answered at
+        all, and `last_ingest_fetched` against `last_ingest_kept` says whether
+        what it sent was then filtered away by the high-interest list.
+        """
         age = self.staleness_hours(now)
+        res = self.last_ingest
         return {
             "last_refresh": self.last_run.isoformat() if self.last_run else None,
             "last_ingest_added": self.last_added,
             "last_ingest_errors": list(self.last_errors),
             "last_successful_ingest": self.last_ok.isoformat() if self.last_ok else None,
+            "last_ingest_requests": res.requests,
+            "last_ingest_request_failures": res.request_failures,
+            "last_ingest_rows": res.rows,
+            "last_ingest_fetched": res.fetched,
+            "last_ingest_kept": res.kept,
+            "hrr_list_size": res.hrr_size,
             "newest_sample_epoch": self.store.newest_epoch(),
             "data_age_hours": None if age is None else round(age, 2),
             "stale_after_hours": self.cfg.stale_after_hours,
             "stale": self.is_stale(now),
+            "ingest_diagnosis": self.diagnosis(),
         }
+
+    def diagnosis(self) -> str:
+        """One line naming the most likely reason the feed is dry.
+
+        Written for the operator, not the log reader: the interface shows it
+        beside the staleness banner so the answer to "why is this old?" does
+        not require a container shell.
+        """
+        res = self.last_ingest
+        if res.request_failures:
+            return ("upstream requests are failing: " +
+                    (res.errors[0] if res.errors else "reason not recorded"))
+        if res.requests == 0 and res.fetched == 0:
+            return "no upstream pull has completed since start-up"
+        if res.fetched == 0:
+            return "the upstream answered but returned no records for the window"
+        if res.kept == 0:
+            return ("records arrived but none matched the high-interest list "
+                    f"({res.hrr_size} objects)")
+        return "records arrived and were merged; no new epochs in the window"
 
     def report(self, result: dict, now: datetime | None = None) -> None:
         """Say out loud what every refresh did. Not only the first.
@@ -244,10 +347,15 @@ class Refresher:
         if self.is_stale(now):
             _log.warning(
                 "STALE DATA: newest fix is %s old, past the %.1fh threshold. "
-                "The picture on screen is last-known-good, not current. Check "
-                "the UDL window settings (UDL_SLICE_HOURS=%s, "
-                "REFRESH_LOOKBACK_HOURS=%s) and the source errors above.",
-                age_txt, self.cfg.stale_after_hours, self.cfg.udl_slice_hours,
+                "The picture on screen is last-known-good, not current. "
+                "Likely cause: %s. Counts this cycle: %d request(s), %d "
+                "failed, %d row(s), %d object(s) offered, %d kept after "
+                "filtering. Window settings UDL_SLICE_HOURS=%s, "
+                "REFRESH_LOOKBACK_HOURS=%s.",
+                age_txt, self.cfg.stale_after_hours, self.diagnosis(),
+                self.last_ingest.requests, self.last_ingest.request_failures,
+                self.last_ingest.rows, self.last_ingest.fetched,
+                self.last_ingest.kept, self.cfg.udl_slice_hours,
                 self.cfg.refresh_lookback_hours)
             return
         _log.info("refresh ok: +%d samples, newest fix %s old", added, age_txt)
