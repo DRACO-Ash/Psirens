@@ -99,4 +99,11 @@ class Track(BaseModel):
     origin: str  # UDL | MANUAL | DEMO
     target: str | None = None
     samples: list[Sample]
-    drift_deg_per_day: float | None = None  # longitude drift rate at the head
+    # Drift is FITTED over a trailing window, not differenced between the last
+    # two fixes, so these four travel together: a rate without its residual and
+    # baseline is not interpretable. None means no usable baseline yet.
+    drift_deg_per_day: float | None = None   # fitted longitude rate
+    drift_residual_deg: float | None = None  # RMS scatter about the fitted model
+    drift_fit_hours: float | None = None     # baseline the fit used
+    drift_fit_points: int | None = None      # fixes in the fit
+    drift_fit_harmonic: bool | None = None   # libration modelled, not averaged

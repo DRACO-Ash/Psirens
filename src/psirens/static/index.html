@@ -306,6 +306,9 @@ function transform(tracks){
     out.push({id:t.object_id,name:meta.name||t.name||t.object_id,cc:meta.country||"",
       rank:meta.rank==null?5:meta.rank,lon:head.sub_lon_deg,inc:head.inclination_deg,
       drift:(t.drift_deg_per_day==null?0:t.drift_deg_per_day),ageH:+ageH.toFixed(1),
+      dknown:t.drift_deg_per_day!=null,dres:(t.drift_residual_deg==null?0:t.drift_residual_deg),
+      dh:(t.drift_fit_hours==null?0:t.drift_fit_hours),dn:(t.drift_fit_points==null?0:t.drift_fit_points),
+      dharm:t.drift_fit_harmonic===true,
       tr:ss.map(s=>[s.sub_lon_deg,s.inclination_deg,Date.parse(s.epoch)]),
       ra:(t.ra_deg==null?null:t.ra_deg),
       mode:t.data_mode,mark:t.classification_marking,origin:t.origin,source:t.source,target:t.target});
@@ -496,9 +499,23 @@ function watchlist(){const w=OBJECTS.filter(o=>o.rank!=null&&o.rank<=2&&inCountr
   if(!w.length)return `<div class="muted">No R1–R2 objects in the current data.</div>`;
   return w.map(o=>`<button class="wl" data-id="${o.id}"><span class="wk" style="background:${rankCol(o.rank)}">${o.rank}</span><span class="wn">${esc(o.name)}</span><span class="wm">${esc(o.cc)} \u00b7 ${o.lon.toFixed(0)}\u00b0 \u00b7 ${ageLabel(o.ageH)}</span></button>`).join("");}
 function findObj(id){return OBJECTS.find(o=>o.id===id)||null;}
-function inspectHTML(o){if(!o)return"";
+// Drift is FITTED over a trailing window, not differenced between the last two
+// fixes. A rate with no residual and no baseline is not interpretable: that is
+// how -3.82 deg/day sat beside a 5.9 deg total excursion without contradicting
+// itself out loud. Both travel with the number now.
+function driftText(o){
+  if(!o.dknown){return "no usable baseline";}
+  if(Math.abs(o.drift)<=0.05){return "on station";}
   const dir=o.drift>0?"E":"W";
-  const dr=Math.abs(o.drift)>0.05?`${o.drift.toFixed(2)}\u00b0/day ${dir}`:"on station";
+  return `${o.drift.toFixed(2)}\u00b0/day ${dir}`;
+}
+function driftFitText(o){
+  if(!o.dknown){return "under 24h of fixes";}
+  const model=o.dharm?"libration modelled":"plain line";
+  return `\u00b1${o.dres.toFixed(3)}\u00b0 rms \u00b7 ${o.dh.toFixed(0)}h \u00b7 ${o.dn} fixes \u00b7 ${model}`;
+}
+function inspectHTML(o){if(!o)return"";
+  const dr=driftText(o);
   const lons=o.tr&&o.tr.length?o.tr.map(p=>p[0]):[o.lon];
   const span=lons.length>1?(Math.max(...lons)-Math.min(...lons)):0;
   const rkChip=`<span class="ins-rk" style="background:${rankCol(o.rank)}">R${o.rank}</span>`;
@@ -507,7 +524,8 @@ function inspectHTML(o){if(!o)return"";
     <dl class="ins-dl">${pr}<dt>Data mode</dt><dd>${esc(o.mode||"—")}</dd>
     <dt>Classification</dt><dd>${esc(o.mark||"U")}</dd>
     <dt>Longitude</dt><dd>${o.lon.toFixed(2)}\u00b0E</dd><dt>Inclination</dt><dd>${o.inc.toFixed(2)}\u00b0</dd>
-    <dt>Drift</dt><dd>${dr}</dd><dt>Track span</dt><dd>${span.toFixed(1)}\u00b0 over ${o.tr?o.tr.length:0} fixes</dd>
+    <dt>Drift</dt><dd>${dr}</dd><dt>Drift fit</dt><dd>${driftFitText(o)}</dd>
+    <dt>Track span</dt><dd>${span.toFixed(1)}\u00b0 over ${o.tr?o.tr.length:0} fixes</dd>
     <dt>Data age</dt><dd>${ageLabel(o.ageH)} <span class="agebar"><i style="width:${ageAlpha(o.ageH)*100}%"></i></span></dd></dl>
     <button type="button" class="cobtn" id="cobtn">Co-Planar view</button>
     <div class="tgttle" id="tgttle"></div>

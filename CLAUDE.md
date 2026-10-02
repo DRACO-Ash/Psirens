@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.10; DEPLOYED 1.6.6 or later)
+## Current state (repo 1.6.11; DEPLOYED 1.6.6 or later)
 
 Keep these apart. FACT, 26 September 2026: a live `/api/meta` carried
 `refresh_lookback_hours` and the whole ingest-health block, which only exist
@@ -47,8 +47,9 @@ version is TBC for that reading because `/api/meta` did not report it; from
 1.6.10 it does, so this inference never has to be made again.
 1.6.7 adds the country filter, 1.6.8 clears a Code Quality contrast finding,
 **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
-one**, and 1.6.10 puts the running version on `/api/meta` (see Open items).
-Upload 1.6.10: it carries everything.
+one**, 1.6.10 puts the running version on `/api/meta`, and 1.6.11 replaces the
+two-point drift rate with a least-squares fit (see Open items).
+Upload 1.6.11: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -197,8 +198,10 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
 - `models.py` — Pydantic models; DataMode enum; `VIEW_MODES` (real/sim/combined);
   Sample and Track shapes; `display_name` (HRR name, then a stored name that is
   not just the id, then the id alone: never the id twice).
-- `astro.py` — SGP4-based sub-satellite longitude and `drift_deg_per_day` (with
-  the physical-rate guard).
+- `astro.py` — SGP4-based sub-satellite longitude and `drift_fit`, the
+  least-squares longitude rate (trailing window, sidereal libration modelled
+  where the sampling resolves it, RMS residual, physical-rate guard).
+  `drift_deg_per_day` remains as the rate-only wrapper.
 - `config.py` — env-only config (UDL base/path, epoch param, retention, HRR
   cadence, conjunction window, memory-independent tunables).
 - `store.py` — atomic JSON store; anti-shrink `merge_samples`; `retain_only`
@@ -254,7 +257,10 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   non-numeric values are 400, never silently ignored. The ETag covers the rank
   set, so a narrow request is never answered 304 from a wider one. Each
   track carries `object_id, name, data_mode, classification_marking, source,
-  origin, target, samples[], drift_deg_per_day, ra_deg`.
+  origin, target, samples[], ra_deg` and the DRIFT BLOCK:
+  `drift_deg_per_day, drift_residual_deg, drift_fit_hours, drift_fit_points,
+  drift_fit_harmonic`. All five are null together when there is no usable
+  baseline; a rate without its residual and span is not interpretable.
 - `GET /api/hrr` — the HRR object map.
 - `GET /api/conjunctions?target=<satNo>` — target TLE plus per-neighbour closest
   approach and TLEs.
@@ -522,6 +528,46 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `app.version`. The string still lives in two places by necessity
   (`main.py` and `pyproject.toml`), so a test reads the TOML and asserts they
   match: a half-done bump now fails the test stage.
+- DRIFT RATE, two-point to least squares: FIXED in 1.6.11. Reported
+  2 October 2026 from an inspector panel: TJS-17 at 158.65E, inclination
+  1.33deg, `Drift -3.82deg/day W` against `Track span 5.9deg over 2000 fixes`.
+  The two readings contradict each other: 3.82deg/day sweeps 5.9deg in 1.54
+  days, and the span covers the whole retained history.
+  CAUSE. The rate was a TWO-POINT difference between the newest sample and
+  the most recent one at least 30 MINUTES earlier. With hourly pulls over a
+  24-hour window and several providers per object the baseline sits at that
+  floor almost always, and a 30-minute baseline multiplies any longitude
+  disagreement by 48: 0.0796deg reads as exactly 3.82deg/day. Two mechanisms
+  supply that disagreement with the object going nowhere.
+  (1) ECCENTRICITY LIBRATION. A slightly eccentric GEO orbit swings east-west
+  by 2e radians once per SIDEREAL day. The native line 2 on that very panel
+  gives e = 0.0021955, so amplitude 0.2516deg and peak rate 1.581deg/day.
+  (2) PROVIDER SCATTER. Consecutive samples can be two providers' views of the
+  same object minutes apart; the difference is bias, not motion, and gets the
+  same 48x multiplier.
+  FIX. `astro.drift_fit` fits a trailing window (`DRIFT_WINDOW_DAYS`, 3) by
+  least squares and returns the rate WITH its RMS residual, baseline, fix
+  count and whether the libration was modelled. Where the sampling resolves
+  the cycle (at least 8 points, median step at most 6 hours) the model is a
+  line PLUS sine and cosine at the sidereal frequency, so the oscillation is
+  removed rather than averaged. Where it does not (roughly daily fixes alias
+  it), the plain line is used and the payload says so. The window must span
+  at least `MIN_DRIFT_SPAN_H` (24, one full cycle); below that the answer is
+  null, and the inspector says "no usable baseline" rather than "on station".
+  A dense recent burst widens the window to the full history rather than
+  refusing. Longitudes are unwrapped across the seam before fitting.
+  MEASURED on a synthetic e = 0.0022 object with ZERO true drift, sampled
+  every 30 minutes for three days: a plain line returns -0.053deg/day with a
+  0.172deg residual; the harmonic model returns 1.2e-13deg/day.
+  PROVEN against git history rather than a reconstruction: the UNMODIFIED
+  1.6.10 `drift_deg_per_day` from `f9278ae`, fed that same series, returns
+  +1.567deg/day for an object that is not drifting at all. The test suite
+  carries the red case as `test_the_libration_really_does_fool_a_short_
+  baseline`, which asserts the data still contains the trap, so the fit tests
+  cannot quietly start passing against harmless data.
+  NOTE on the two-point revert: the old and new functions have different
+  signatures, so a byte-for-byte file revert fails at import rather than at
+  the assertion. The proof above runs the old file verbatim from git instead.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

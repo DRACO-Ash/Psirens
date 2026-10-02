@@ -23,7 +23,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from .astro import drift_deg_per_day
+from .astro import drift_fit
 from .config import Config, load_config
 from .models import VIEW_MODES, DataMode, ManualElsetIn
 from .conjunction import conjunctions_for
@@ -83,6 +83,28 @@ def _rank_of(oid: str, hrr_map: dict) -> int:
     return 5 if rank is None else int(rank)
 
 
+def _drift_block(pairs: list[tuple[datetime, float]]) -> dict:
+    """The fitted drift rate with the context needed to read it.
+
+    A rate on its own is not interpretable, which is how a 30-minute finite
+    difference reading -3.82 deg/day sat on an inspector panel beside a total
+    track excursion of 5.9 deg without contradicting itself out loud. The
+    residual and the baseline travel with the number.
+    """
+    fit = drift_fit(pairs)
+    if fit is None:
+        return {"drift_deg_per_day": None, "drift_residual_deg": None,
+                "drift_fit_hours": None, "drift_fit_points": None,
+                "drift_fit_harmonic": None}
+    return {
+        "drift_deg_per_day": fit.rate_deg_per_day,
+        "drift_residual_deg": fit.residual_deg,
+        "drift_fit_hours": fit.span_hours,
+        "drift_fit_points": fit.points,
+        "drift_fit_harmonic": fit.harmonic,
+    }
+
+
 def _tracks_payload(cfg: Config, store: Store, view: str,
                     modes: set[DataMode],
                     ranks: set[int] | None = None,
@@ -133,7 +155,7 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
             "origin": rec.get("origin", ""),
             "target": rec.get("target"),
             "samples": samples,
-            "drift_deg_per_day": drift_deg_per_day(pairs),
+            **_drift_block(pairs),
             "ra_deg": (rec.get("elset") or {}).get("raan_deg"),
         })
     return {
@@ -483,7 +505,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.10", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.11", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual
