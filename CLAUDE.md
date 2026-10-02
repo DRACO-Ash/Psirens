@@ -38,16 +38,17 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.9; DEPLOYED 1.6.6 or later)
+## Current state (repo 1.6.10; DEPLOYED 1.6.6 or later)
 
 Keep these apart. FACT, 26 September 2026: a live `/api/meta` carried
 `refresh_lookback_hours` and the whole ingest-health block, which only exist
 from 1.6.6, so **the deployed build is 1.6.6 or later**. The exact deployed
-version is TBC (Ash to confirm from the App Store version list); `/api/meta`
-does not report it, which is itself worth fixing.
+version is TBC for that reading because `/api/meta` did not report it; from
+1.6.10 it does, so this inference never has to be made again.
 1.6.7 adds the country filter, 1.6.8 clears a Code Quality contrast finding,
-and **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
-one** (see Open items). Upload 1.6.9: it carries everything.
+**1.6.9 makes a rejected upstream request impossible to mistake for a quiet
+one**, and 1.6.10 puts the running version on `/api/meta` (see Open items).
+Upload 1.6.10: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -263,6 +264,10 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 - `POST /api/pull?mode=<real|sim|combined>&hours=N` OR
   `&start=<ISO>&end=<ISO>` — operator pull; token-gated and rate-limited.
 - `POST /api/refresh` — force HRR + REAL refresh.
+- `GET /api/meta` — carries `version`, the running build, read from
+  `app.version` rather than a third copy of the string. A test asserts
+  `src/psirens/main.py` and `pyproject.toml` agree, so a half-done bump fails
+  the build rather than shipping.
 - `GET /api/meta` and `/readyz` — both carry the INGEST HEALTH block:
   `newest_sample_epoch`, `data_age_hours`, `stale`, `stale_after_hours`,
   `last_ingest_added`, `last_ingest_errors`, `last_successful_ingest`, and
@@ -510,6 +515,13 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   the 2026-09-09 gap will NOT close on its own: the scheduled refresh looks
   back 24 hours by design, so a backfill pull over the gap is needed once the
   feed is answering.
+- Running version on the API: ADDED in 1.6.10. The 26 September diagnosis
+  could establish only "1.6.6 or later", by inferring from which keys the
+  payload happened to carry, which is exactly the kind of guess this repo
+  does not accept elsewhere. `/api/meta` now reports `version` from
+  `app.version`. The string still lives in two places by necessity
+  (`main.py` and `pyproject.toml`), so a test reads the TOML and asserts they
+  match: a half-done bump now fails the test stage.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

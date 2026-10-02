@@ -435,3 +435,28 @@ def test_etag_varies_with_the_rank_set(client, monkeypatch):
                         headers={"If-None-Match": wide.headers["ETag"]})
     assert narrow.status_code == 200
     assert narrow.headers["ETag"] != wide.headers["ETag"]
+
+
+# -- which build is serving (1.6.10) ---------------------------------------
+def test_meta_reports_the_running_version(client):
+    """A live /api/meta on 26 September 2026 could only establish "1.6.6 or
+    later", by inferring from which keys the payload happened to carry. The
+    build should state itself."""
+    body = client.get("/api/meta").json()
+    assert body["version"], "/api/meta must report the running version"
+
+
+def test_the_version_string_is_the_same_in_both_places():
+    """The version lives in src/psirens/main.py AND pyproject.toml, and a
+    half-done bump is invisible until something downstream reads the wrong
+    one. This is the cheap guard that makes the pair impossible to split."""
+    import tomllib
+    from pathlib import Path
+
+    from psirens.main import create_app
+
+    root = Path(__file__).resolve().parents[1]
+    with open(root / "pyproject.toml", "rb") as fh:
+        declared = tomllib.load(fh)["project"]["version"]
+    assert create_app().version == declared, (
+        "src/psirens/main.py and pyproject.toml disagree on the version")

@@ -299,6 +299,11 @@ def _meta(request: Request) -> JSONResponse:
     cfg: Config = request.app.state.cfg
     refresher: Refresher = request.app.state.refresher
     return _cors(JSONResponse({
+        # The running build, read from the app rather than a third copy of the
+        # string. A live /api/meta on 26 September 2026 could prove only
+        # "1.6.6 or later", because the block it carried did not exist before
+        # that; which build is actually serving should not be an inference.
+        "version": request.app.version,
         "classification_default": "UNCLASSIFIED",
         "views": {k: [m.value for m in v] for k, v in VIEW_MODES.items()},
         "refresh_seconds": cfg.refresh_seconds,
@@ -478,7 +483,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.9", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.10", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual
