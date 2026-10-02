@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.11; DEPLOYED 1.6.6 or later)
+## Current state (repo 1.6.12; DEPLOYED 1.6.6 or later)
 
 Keep these apart. FACT, 26 September 2026: a live `/api/meta` carried
 `refresh_lookback_hours` and the whole ingest-health block, which only exist
@@ -47,9 +47,10 @@ version is TBC for that reading because `/api/meta` did not report it; from
 1.6.10 it does, so this inference never has to be made again.
 1.6.7 adds the country filter, 1.6.8 clears a Code Quality contrast finding,
 **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
-one**, 1.6.10 puts the running version on `/api/meta`, and 1.6.11 replaces the
-two-point drift rate with a least-squares fit (see Open items).
-Upload 1.6.11: it carries everything.
+one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
+two-point drift rate with a least-squares fit, and 1.6.12 clears a Code
+Quality loop-capture finding (see Open items).
+Upload 1.6.12: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -568,6 +569,29 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   NOTE on the two-point revert: the old and new functions have different
   signatures, so a byte-for-byte file revert fails at import rather than at
   the assertion. The proof above runs the old file verbatim from git instead.
+- Loop-variable capture in a lambda: FIXED in 1.6.12. Code Quality raised
+  "Add a parameter to the parent lambda function and use variable `col` as its
+  default value; the value of `col` might change at the next loop iteration"
+  at `astro.py:174`, the pivot search inside the 1.6.11 solver:
+  `max(range(col, n), key=lambda r: abs(aug[r][col]))`.
+  NOT a defect in this instance: the lambda is consumed by `max` inside the
+  same iteration, so it never outlives the value it captured. The rule is
+  about the SHAPE, and it is right to be: the same lambda stored in a list,
+  returned or deferred would read the LAST value for every copy. Do not argue
+  the instance.
+  FIX: `_pivot_row(aug, col, n)`, so `col` arrives as a parameter. Chosen over
+  the `lambda r, c=col:` default-argument form the analyser suggests because
+  the extracted function reads better and the loop is clearer without a lambda.
+  GUARDED: `tools/sniff_check.py` gained `PY-LOOP-LAMBDA`, an AST rule that
+  takes a for statement's target names and flags any lambda in its body whose
+  own arguments do not shadow them. PROVEN by running it over the pre-fix file
+  from git (`b4d611c`), where it reports the SAME `astro.py:174`.
+  CORRECTION to the sniff-compendium entry below: `tools` is NOT clean any
+  more. `tools/layout_probe.js:197` trips `WEB-GETATTR-DATA` on
+  `locator.getAttribute("data-cc")`, which is a FALSE POSITIVE: a Playwright
+  Locator is a handle, not a DOM element, and has no `dataset`. Recorded in
+  SNIFFS.md section 3.14 rather than silenced, and the loop deliberately runs
+  the web rules over `src` and `tests` only.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
@@ -592,6 +616,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   uses the reference `cognitive_complexity` package when installed and a
   stdlib fallback otherwise, and the fallback OVER-counts deeply nested
   if/elif chains, so it is labelled rather than trusted silently.
+  The "0 findings across 27 files" line above was true on the day; see the
+  1.6.12 entry for the one false positive `tools/` has since acquired.
 - `README.md` predates several features (RA needles, Simulation view, timescale/
   range pull, conjunctions, deep zoom). Refresh when convenient.
 

@@ -183,6 +183,8 @@ def _check_python(path: str, text: str) -> list[Finding]:
                                "SystemExit; name the exceptions you handle"))
         if isinstance(node, ast.Compare):
             out.extend(_check_none_compare(path, node))
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            out.extend(_check_loop_lambda(path, node))
     return out
 
 
@@ -206,6 +208,50 @@ def _check_function(path: str, node: ast.AST) -> list[Finding]:
             out.append(Finding(path, node.lineno, "PY-MUTABLE-DEFAULT",  # type: ignore
                                f"{name} has a mutable default argument; it is "
                                f"created once and shared by every call"))
+    return out
+
+
+def _loop_targets(node: ast.AST) -> set[str]:
+    """Names bound by a for statement's target, including tuple unpacking."""
+    target = node.target  # type: ignore[attr-defined]
+    return {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+
+
+def _lambda_captures(fn: ast.Lambda, names: set[str]) -> set[str]:
+    """Loop names the lambda body reads without binding them itself."""
+    args = fn.args
+    bound = {a.arg for a in
+             list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)}
+    used = {n.id for n in ast.walk(fn.body) if isinstance(n, ast.Name)}
+    return (used & names) - bound
+
+
+def _lambdas_in(node: ast.AST) -> list[ast.Lambda]:
+    out: list[ast.Lambda] = []
+    for stmt in node.body:  # type: ignore[attr-defined]
+        out.extend(n for n in ast.walk(stmt) if isinstance(n, ast.Lambda))
+    return out
+
+
+def _check_loop_lambda(path: str, node: ast.AST) -> list[Finding]:
+    """A lambda inside a loop that closes over the loop variable.
+
+    The lambda reads the variable's value when it RUNS, not when it was
+    written, so by the next iteration the capture has moved underneath it.
+    Harmless where the lambda is consumed immediately (a `key=` to `max`), a
+    real defect the moment one is stored, deferred or returned. The analyser
+    does not distinguish, and neither should we: the remedy is the same, bind
+    it as a default argument or pass it as a parameter.
+    """
+    names = _loop_targets(node)
+    out: list[Finding] = []
+    for fn in _lambdas_in(node):
+        for name in sorted(_lambda_captures(fn, names)):
+            out.append(Finding(
+                path, fn.lineno, "PY-LOOP-LAMBDA",
+                f"lambda captures loop variable {name!r}, whose value changes "
+                f"on the next iteration; bind it ({name}={name}) or pass it to "
+                f"an extracted function"))
     return out
 
 
@@ -410,6 +456,14 @@ _CASES = [
     ("PY-NONE-COMPARE",
      "def f(x):\n    return x == None\n",
      "def g(x):\n    return x is None\n", ".py"),
+    # The good case is the remedy the analyser itself names: bind the loop
+    # variable as a default argument so the lambda holds this iteration's value.
+    ("PY-LOOP-LAMBDA",
+     "def f(rows, n):\n    out = []\n    for col in range(n):\n"
+     "        out.append(max(rows, key=lambda r: r[col]))\n    return out\n",
+     "def g(rows, n):\n    out = []\n    for col in range(n):\n"
+     "        out.append(max(rows, key=lambda r, c=col: r[c]))\n    return out\n",
+     ".py"),
     ("WEB-WINDOW", "var w = window.innerWidth;\n",
      "var w = globalThis.innerWidth;\n", ".js"),
     ("WEB-ARIA-ROLE", '<div role="region"></div>\n', "<section></section>\n", ".html"),
@@ -489,7 +543,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{rule:22} {message}")
         print(f"{'WEB-CONTRAST':22} declared text contrast below WCAG AA")
         for rule in ("PY-COMPLEXITY", "PY-PARAMS", "PY-MUTABLE-DEFAULT",
-                     "PY-BARE-EXCEPT", "PY-NONE-COMPARE"):
+                     "PY-BARE-EXCEPT", "PY-NONE-COMPARE", "PY-LOOP-LAMBDA"):
             print(f"{rule:22} see SNIFFS.md")
         return 0
     if not args.paths:

@@ -221,6 +221,54 @@ base. It compares only colours declared in the SAME block, so a colour set on
 a child selector is invisible to it. That is exactly how the second instance
 escaped, and it is why the grep above still matters.
 
+### 3.13 Lambda capturing a loop variable UPLOAD-adjacent
+
+**Rule as the platform states it:** "Add a parameter to the parent lambda
+function and use variable X as its default value; the value of X might change
+at the next loop iteration."
+
+**What it is.** A lambda written inside a loop that reads the loop variable
+does not capture its value, it captures the VARIABLE. The value it sees is
+whatever the variable holds when the lambda runs. Raised live on PSIRENS at
+`astro.py:174`, 2 October 2026:
+
+```python
+for col in range(n):
+    pivot = max(range(col, n), key=lambda r: abs(aug[r][col]))   # flagged
+```
+
+**Why it was flagged even though it was correct.** That lambda is consumed by
+`max` inside the same iteration, so it never outlives the value it captured
+and the behaviour was right. The analyser cannot know that, and should not
+have to: the defect appears the moment such a lambda is stored in a list,
+returned, scheduled, or passed to anything deferred, and then every one of
+them reads the LAST value. Do not argue the instance; the rule is about the
+shape.
+
+**Two fixes, both accepted:**
+
+```python
+pivot = max(range(col, n), key=lambda r, c=col: abs(aug[r][c]))  # bind it
+```
+
+```python
+def _pivot_row(aug, col, n):            # or pass it as a parameter, which is
+    best = col                          # usually clearer than a defaulted arg
+    for row in range(col + 1, n):
+        if abs(aug[row][col]) > abs(aug[best][col]):
+            best = row
+    return best
+```
+
+**Gated:** `PY-LOOP-LAMBDA` in `tools/sniff_check.py`, an AST rule that reads
+the loop target names and flags any lambda in the loop body whose own
+arguments do not shadow them. PROVEN by running it over the pre-fix file from
+git history, where it reports the SAME `astro.py:174` the platform did.
+
+**Note for JavaScript:** the same shape with `var` is the classic bug and
+`let`/`const` fix it outright, because each iteration gets its own binding.
+Python has no equivalent, so the default-argument idiom is the whole remedy.
+
 ### 3.11 Python correctness sniffs the checker also covers
 
 Not Sonar-gate failures for us, but exactly decidable and worth having:
@@ -231,6 +279,21 @@ Not Sonar-gate failures for us, but exactly decidable and worth having:
   exceptions.
 ● **`== None`**: use `is None`. `==` invokes `__eq__`, which a class can
   define, so the two are not equivalent.
+● **Lambda capturing a loop variable**: see 3.13.
+
+### 3.14 A known false positive, recorded rather than silenced
+
+`WEB-GETATTR-DATA` fires on `locator.getAttribute("data-cc")` in Playwright
+driver code. That is a FALSE POSITIVE: a Playwright `Locator` is a handle, not
+a DOM element, and has no `dataset`; `getAttribute` is the only API. The rule
+is a text match and cannot see the receiver's type.
+
+Recorded here rather than fixed, because the honest options are both worse
+than the note: weakening the pattern would lose the real rule in page code,
+and an inline suppression comment teaches people to reach for suppressions.
+The web rules are therefore run over shipped page sources, not over browser
+driver scripts. MEASURED on this repo: `src` and `tests` are clean;
+`tools/layout_probe.js:197` is this one false positive.
 
 ## 4. Rules no cheap checker can decide
 

@@ -161,6 +161,24 @@ def _unwrap(samples: list[tuple[datetime, float]]) -> list[tuple[datetime, float
     return out
 
 
+def _pivot_row(aug: list[list[float]], col: int, n: int) -> int:
+    """Index of the row with the largest magnitude in `col`, at or below it.
+
+    Extracted so `col` arrives as a PARAMETER rather than being captured from
+    the enclosing loop. A lambda that closes over a loop variable reads the
+    value the variable holds when the lambda RUNS, not when it was written,
+    which is a real defect anywhere the lambda outlives the iteration. Code
+    Quality raised it here (astro.py:174, 2 October 2026) even though the
+    lambda was consumed immediately and the behaviour was correct; the rule is
+    about the shape, not this instance.
+    """
+    best = col
+    for row in range(col + 1, n):
+        if abs(aug[row][col]) > abs(aug[best][col]):
+            best = row
+    return best
+
+
 def _solve(matrix: list[list[float]], rhs: list[float]) -> list[float] | None:
     """Gaussian elimination with partial pivoting. None when singular.
 
@@ -171,7 +189,7 @@ def _solve(matrix: list[list[float]], rhs: list[float]) -> list[float] | None:
     n = len(rhs)
     aug = [list(row) + [rhs[i]] for i, row in enumerate(matrix)]
     for col in range(n):
-        pivot = max(range(col, n), key=lambda r: abs(aug[r][col]))
+        pivot = _pivot_row(aug, col, n)
         if abs(aug[pivot][col]) < _SINGULAR:
             return None
         aug[col], aug[pivot] = aug[pivot], aug[col]
