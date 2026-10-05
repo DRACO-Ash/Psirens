@@ -15,6 +15,14 @@ dist/
 
 # build artifacts and local-only
 *.zip
+
+# Review artefacts, all regenerable, none of them source:
+#   PSIRENS-Operator-Guide-*.html  tools/guide_standalone.py
+#   g*.png                         screenshots taken for a review message
+# The guide's OWN figures live in src/psirens/static/guide-*.png and ARE
+# tracked, because the shipped page references them.
+/PSIRENS-Operator-Guide-*.html
+/g[0-9]-*.png
 .ruff_cache/
 shots/
 node_modules/
