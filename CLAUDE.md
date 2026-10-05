@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.12; DEPLOYED 1.6.6 or later)
+## Current state (repo 1.6.13; 1.6.12 UPLOADED, 10 of 11 stages green)
 
 Keep these apart. FACT, 26 September 2026: a live `/api/meta` carried
 `refresh_lookback_hours` and the whole ingest-health block, which only exist
@@ -48,9 +48,17 @@ version is TBC for that reading because `/api/meta` did not report it; from
 1.6.7 adds the country filter, 1.6.8 clears a Code Quality contrast finding,
 **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
 one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
-two-point drift rate with a least-squares fit, and 1.6.12 clears a Code
-Quality loop-capture finding (see Open items).
-Upload 1.6.12: it carries everything.
+two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
+loop-capture finding, and 1.6.13 colours the RA needle by affiliation
+(see Open items).
+FACT, 5 October 2026, from the App Store Pipeline and Versions tab: **1.6.12
+is uploaded and passed all TEN gates, Code Quality among them**, with Deploy
+the eleventh stage and still running at the time of the screenshot; the app
+header read "Pending Approval". The Deploy outcome is TBC until Ash confirms.
+Observed oddity, recorded not explained: the Date Uploaded column read
+"Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
+date as unreliable, not the build.
+Upload 1.6.13: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -110,6 +118,13 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 sh simulate-pipeline.sh        # MUST print "SIMULATION GREEN"
 ```
+
+THE PIPELINE IS ELEVEN STAGES, NOT TEN. FACT, 5 October 2026: ten gates
+(Secret Detection, Dependencies, SAST Scan, Dependency Scanning, Test, Code
+Quality, Dockerfile Lint, Container Build, **DAST Scan**, Container Scan) then
+Deploy. DAST Scan was not in the earlier reading of this file and has always
+passed; it runs the built container and probes it, so the unauthenticated 200
+on `/`, `/healthz` and `/readyz` matters to it as well as to Deploy.
 
 `simulate-pipeline.sh` reproduces the App Store python template test stage
 EXACTLY (install `requirements.txt` only, then `pytest --cov`), then runs local
@@ -262,7 +277,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `drift_deg_per_day, drift_residual_deg, drift_fit_hours, drift_fit_points,
   drift_fit_harmonic`. All five are null together when there is no usable
   baseline; a rate without its residual and span is not interpretable.
-- `GET /api/hrr` — the HRR object map.
+- `GET /api/hrr` — the HRR object map. Each entry carries `affiliation`
+  (`RED`/`BLUE`/`OTHER`/`UNKNOWN`), resolved server-side from the env policy
+  lists, plus `affiliation_lists` naming the two lists in force.
 - `GET /api/conjunctions?target=<satNo>` — target TLE plus per-neighbour closest
   approach and TLEs.
 - `GET /api/coplanar?target=<satNo>` — the primary's plane plus, for each object
@@ -592,6 +609,45 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   Locator is a handle, not a DOM element, and has no `dataset`. Recorded in
   SNIFFS.md section 3.14 rather than silenced, and the loop deliberately runs
   the web rules over `src` and `tests` only.
+- AFFILIATION on the RA needle (Option A): ADDED in 1.6.13. Owner asked for a
+  Red/Blue distinction, 5 October 2026, and chose Option A from four offered.
+  WHY THE NEEDLE AND NOT THE MARKER. Hue is already fully spent on HRR rank,
+  and that palette uses red (`#E2483D` CRITICAL) and blue (`#3E8FD0` ROUTINE),
+  so a red marker would mean critical, or hostile, or both. MEASURED against
+  the bundled 594-object list: within the DEFAULT first paint (ranks 1-3) the
+  split is 109 red to 36 blue, so moving hue to affiliation would have put
+  three-quarters of the opening view in one colour and traded five legible
+  priority levels for two.
+  FOUR BUCKETS, NOT TWO. Also measured: 20.4% of the list (121 objects) are
+  commercial or intergovernmental operators (SES 36, ITSO 31, EUTE 27, IM 14,
+  AC 6, ABS 4, plus ESA, FRIT, TMMC), and 5 records carry no country at all.
+  `OTHER` (a known code on neither list) and `UNKNOWN` (no country given) are
+  kept apart on purpose: "we make no claim" and "we do not know" are different
+  statements, and collapsing them lets a data gap read as a judgement. OTHER
+  keeps the existing white needle, so where we make no claim nothing changes.
+  POLICY, NOT ASTRODYNAMICS. `AFFILIATION_RED` and `AFFILIATION_BLUE` are
+  comma-separated env lists with `DEFAULT_AFFILIATION_RED`/`_BLUE` in
+  `config.py` as the single default (the dataclass field and `load_config` use
+  the same constant, and a test asserts they match: a default living only
+  inside `load_config` is a second, quieter default and the two drift).
+  Defaults are a STARTING POINT for Ash to amend, not an assertion: red is
+  CHN, RUS, IRN, PRK; blue is NATO plus Five Eyes plus JPN, KOR, ISR, IND.
+  The lookup drives the needle colour and NOTHING else, so an amended list can
+  never move a marker.
+  RESOLVED SERVER-SIDE in `HrrStore.as_payload`, for the 1.6.1 reason: every
+  consumer then agrees. The stored cache is NOT rewritten, so amending the
+  policy needs no re-pull and the archive carries no judgement that was true
+  only on the day it was written.
+  PROVEN: the layout probe asserts the inspector's Affiliation row reads Red
+  for 43683 (CHN), Blue for 41748 (USA) and Other for 41836 (LUX), which
+  exercises the whole chain; reverting `hrr.py` byte for byte to `9258395`
+  makes all three read "Unknown" and fails the build.
+  FOUND WHILE BUILDING IT, and fixed: `loadHrr` called `.then`-style
+  `r.json()` with NO `response.ok` check. This is the THIRD instance of the
+  pattern 1.5.2 fixed on `/api/conjunctions` and 1.6.4 on `/api/coplanar`. A
+  non-JSON error body made `.json()` reject, the catch blanked the HRR map,
+  and every REAL object silently vanished from the plot with no stated cause.
+  Now checked, and the HRR note states the reason.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

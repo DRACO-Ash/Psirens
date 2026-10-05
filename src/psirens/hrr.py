@@ -98,6 +98,31 @@ def _as_sat_list(payload) -> list[dict]:
     return []
 
 
+# Affiliation values. OTHER means the country code is known and on neither
+# list, which is most commercial and intergovernmental operators; UNKNOWN means
+# the feed gave no country at all. They are kept apart on purpose: "we make no
+# claim" and "we do not know" are different statements, and collapsing them
+# would let a data gap read as a judgement.
+AFFILIATIONS = ("RED", "BLUE", "OTHER", "UNKNOWN")
+
+
+def affiliation_of(country: str | None, cfg: Config) -> str:
+    """Bucket a country code using the operator-defined lists in config.
+
+    This is a POLICY lookup, not astrodynamics. It drives the colour of the RA
+    bearing needle and nothing else: no filtering, no pruning, no effect on any
+    computed value, so an amended list can never move a marker.
+    """
+    code = str(country or "").strip().upper()
+    if not code:
+        return "UNKNOWN"
+    if code in cfg.affiliation_red:
+        return "RED"
+    if code in cfg.affiliation_blue:
+        return "BLUE"
+    return "OTHER"
+
+
 def _coerce_rank(raw) -> int | None:
     try:
         return int(raw) if raw is not None else None
@@ -241,8 +266,22 @@ class HrrStore:
         }
 
     def as_payload(self) -> dict:
+        """The HRR map with affiliation resolved SERVER-side.
+
+        Resolved here rather than in the SPA for the same reason object names
+        were moved server-side in 1.6.1: every consumer then agrees, and the
+        policy lists stay in one place. The stored cache is NOT rewritten, so
+        amending the lists needs no re-pull and nothing in the archive carries
+        a judgement that was true only on the day it was written.
+        """
         m = self.meta()
-        m["objects"] = self.map()
+        m["objects"] = {
+            sat: {**entry,
+                  "affiliation": affiliation_of(entry.get("country"), self.cfg)}
+            for sat, entry in self.map().items()
+        }
+        m["affiliation_lists"] = {"red": list(self.cfg.affiliation_red),
+                                  "blue": list(self.cfg.affiliation_blue)}
         return m
 
     # -- refresh ----------------------------------------------------------

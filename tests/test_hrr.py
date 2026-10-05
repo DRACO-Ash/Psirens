@@ -239,3 +239,101 @@ def test_names_tolerates_either_key_shape(tmp_path):
     # A name that is just the catalogue number is not a name: reporting it
     # would shadow a genuine stored name downstream.
     assert got["41021"] == ""
+
+
+# -- affiliation (1.6.13) --------------------------------------------------
+#
+# A POLICY lookup, not astrodynamics. It drives the RA bearing needle's colour
+# and nothing else, so an amended list can never move a marker. OTHER and
+# UNKNOWN are kept apart on purpose: "we make no claim about this operator"
+# and "the feed gave us no country" are different statements, and collapsing
+# them would let a data gap read as a judgement.
+from psirens.hrr import affiliation_of  # noqa: E402
+
+
+def _affil_cfg(tmp_path):
+    from test_api import _cfg
+    return _cfg(tmp_path)
+
+
+def test_the_default_lists_bucket_the_obvious_cases(tmp_path):
+    cfg = _affil_cfg(tmp_path)
+    assert affiliation_of("CHN", cfg) == "RED"
+    assert affiliation_of("RUS", cfg) == "RED"
+    assert affiliation_of("USA", cfg) == "BLUE"
+    assert affiliation_of("GBR", cfg) == "BLUE"
+
+
+def test_a_commercial_operator_is_other_not_blue(tmp_path):
+    """SES, ITSO, EUTELSAT and friends are 20.4% of the bundled 594-object
+    list. Forcing them into two buckets would be an assertion we cannot make."""
+    cfg = _affil_cfg(tmp_path)
+    for code in ("SES", "ITSO", "EUTE", "ABS"):
+        assert affiliation_of(code, cfg) == "OTHER", code
+
+
+def test_a_missing_country_is_unknown_not_other(tmp_path):
+    cfg = _affil_cfg(tmp_path)
+    assert affiliation_of("", cfg) == "UNKNOWN"
+    assert affiliation_of(None, cfg) == "UNKNOWN"
+    assert affiliation_of("   ", cfg) == "UNKNOWN"
+
+
+def test_the_lists_are_operator_defined_and_case_insensitive(monkeypatch):
+    """The whole point of env lists: the owner amends the policy without a
+    rebuild, and the code asserts nothing of its own. Goes through
+    load_config, because the env path is the one that has to work."""
+    from psirens.config import load_config
+
+    monkeypatch.setenv("AFFILIATION_RED", "xyz , ABC , abc")
+    monkeypatch.setenv("AFFILIATION_BLUE", "chn")
+    cfg = load_config()
+    assert cfg.affiliation_red == ("XYZ", "ABC")   # upper-cased, de-duplicated
+    assert affiliation_of("abc", cfg) == "RED"
+    assert affiliation_of("CHN", cfg) == "BLUE"    # amended away from the default
+    assert affiliation_of("USA", cfg) == "OTHER"   # no longer on either list
+
+
+def test_the_dataclass_default_matches_the_environment_default(tmp_path):
+    """A default that exists only inside load_config is a second, quieter
+    default, and the two drift."""
+    from psirens.config import load_config
+    from test_api import _cfg
+
+    assert _cfg(tmp_path).affiliation_red == load_config().affiliation_red
+    assert _cfg(tmp_path).affiliation_blue == load_config().affiliation_blue
+
+
+def test_the_payload_resolves_affiliation_server_side(tmp_path):
+    """Resolved on the server for the same reason names were in 1.6.1: every
+    consumer then agrees, and the policy lists stay in one place."""
+    from psirens.hrr import HrrStore
+    from test_api import _cfg
+
+    static = tmp_path / "hrr-geo.json"
+    static.write_text(json.dumps({"marking": "U", "source": "JCO", "objects": {
+        "1": {"name": "A", "country": "CHN", "rank": 1},
+        "2": {"name": "B", "country": "USA", "rank": 2},
+        "3": {"name": "C", "country": "SES", "rank": 4},
+        "4": {"name": "D", "country": "", "rank": 5},
+    }}))
+    store = HrrStore(_cfg(tmp_path, udl_enabled=False), static_fallback=str(static))
+    payload = store.as_payload()
+    got = {k: v["affiliation"] for k, v in payload["objects"].items()}
+    assert got == {"1": "RED", "2": "BLUE", "3": "OTHER", "4": "UNKNOWN"}
+    assert set(payload["affiliation_lists"]) == {"red", "blue"}
+
+
+def test_resolving_affiliation_does_not_rewrite_the_cached_map(tmp_path):
+    """The stored cache keeps what the feed said. Amending the policy must not
+    need a re-pull, and nothing in the archive should carry a judgement that
+    was true only on the day it was written."""
+    from psirens.hrr import HrrStore
+    from test_api import _cfg
+
+    static = tmp_path / "hrr-geo.json"
+    static.write_text(json.dumps({"marking": "U", "source": "JCO", "objects": {
+        "1": {"name": "A", "country": "CHN", "rank": 1}}}))
+    store = HrrStore(_cfg(tmp_path, udl_enabled=False), static_fallback=str(static))
+    store.as_payload()
+    assert all("affiliation" not in e for e in store.map().values())

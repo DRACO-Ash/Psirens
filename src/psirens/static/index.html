@@ -270,6 +270,15 @@ const decs=step=>{const t=String(step),i=t.indexOf(".");return i<0?0:Math.min(4,
 const fmtTick=(v,step)=>v.toFixed(decs(step));  // decimals follow the tick step, so labels stay distinct when zoomed tight
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const rankCol=r=>(RANKS[r]||RANKS[5]).c;
+// AFFILIATION lives on the RA bearing needle, never on the marker. Hue is
+// already fully spent on HRR rank, and that palette uses red (CRITICAL) and
+// blue (ROUTINE), so colouring a marker red would mean critical, or hostile,
+// or both. The needle is a separate, consistent shape, so the eye can learn
+// one channel without relearning the other. OTHER keeps the existing white:
+// where we make no claim, nothing changes.
+const AFFIL={RED:{n:"Red",c:"#FF4D4D"},BLUE:{n:"Blue",c:"#4DA6FF"},
+  OTHER:{n:"Other",c:"#F2F7FF"},UNKNOWN:{n:"Unknown",c:"#9AA7BC"}};
+const affil=o=>AFFIL[o.aff]||AFFIL.UNKNOWN;
 const MAX_TRAIL_RATE=18;  // deg/day; a segment implying faster longitude motion is a data artifact, not a real transit
 const objCol=o=>rankCol(o.rank);
 const ageAlpha=h=>Math.max(0.18,1-Math.min(h,72)/72*0.82);
@@ -304,6 +313,7 @@ function transform(tracks){
     const head=ss.length?ss[ss.length-1]:{sub_lon_deg:0,inclination_deg:0,epoch:null};
     const ageH=head.epoch?Math.max(0,(now-Date.parse(head.epoch))/3600000):999;
     out.push({id:t.object_id,name:meta.name||t.name||t.object_id,cc:meta.country||"",
+      aff:meta.affiliation||"UNKNOWN",
       rank:meta.rank==null?5:meta.rank,lon:head.sub_lon_deg,inc:head.inclination_deg,
       drift:(t.drift_deg_per_day==null?0:t.drift_deg_per_day),ageH:+ageH.toFixed(1),
       dknown:t.drift_deg_per_day!=null,dres:(t.drift_residual_deg==null?0:t.drift_residual_deg),
@@ -377,7 +387,7 @@ function raNeedle(ctx,px,py,o,sz,alpha){
   // disappears wherever it crosses a trail or another marker.
   ctx.strokeStyle="rgba(4,8,15,.75)";ctx.lineWidth=4.2;
   ctx.beginPath();ctx.moveTo(px+dx*r0,py+dy*r0);ctx.lineTo(px+dx*r1,py+dy*r1);ctx.stroke();
-  ctx.strokeStyle="#F2F7FF";ctx.lineWidth=2.3;
+  ctx.strokeStyle=affil(o).c;ctx.lineWidth=2.3;
   ctx.beginPath();ctx.moveTo(px+dx*r0,py+dy*r0);ctx.lineTo(px+dx*r1,py+dy*r1);ctx.stroke();ctx.restore();
 }
 function drawHead(ctx,S,o){
@@ -524,6 +534,7 @@ function inspectHTML(o){if(!o)return"";
     <dl class="ins-dl">${pr}<dt>Data mode</dt><dd>${esc(o.mode||"—")}</dd>
     <dt>Classification</dt><dd>${esc(o.mark||"U")}</dd>
     <dt>Longitude</dt><dd>${o.lon.toFixed(2)}\u00b0E</dd><dt>Inclination</dt><dd>${o.inc.toFixed(2)}\u00b0</dd>
+    <dt>Affiliation</dt><dd style="color:${affil(o).c}">${affil(o).n}</dd>
     <dt>Drift</dt><dd>${dr}</dd><dt>Drift fit</dt><dd>${driftFitText(o)}</dd>
     <dt>Track span</dt><dd>${span.toFixed(1)}\u00b0 over ${o.tr?o.tr.length:0} fixes</dd>
     <dt>Data age</dt><dd>${ageLabel(o.ageH)} <span class="agebar"><i style="width:${ageAlpha(o.ageH)*100}%"></i></span></dd></dl>
@@ -589,7 +600,9 @@ function paint(){
   document.getElementById("stats").innerHTML=[["Shown",s.shown],["Fresh <6h",s.fresh],["Stale >36h",s.stale],["Drifting",s.drift]].map(([k,v])=>`<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
   document.getElementById("country").innerHTML=wCountry();
   document.getElementById("watch").innerHTML=watchlist();
-  document.getElementById("legend").innerHTML=[1,2,3,4,5].map(r=>`<span><i style="background:${RANKS[r].c};color:${RANKS[r].c}"></i>R${r} ${RANKS[r].n}</span>`).join("")+`<span class="trailkey">past<span class="grad"></span>now · \u25b6 drift · hollow = SIM/TEST</span>`;
+  document.getElementById("legend").innerHTML=[1,2,3,4,5].map(r=>`<span><i style="background:${RANKS[r].c};color:${RANKS[r].c}"></i>R${r} ${RANKS[r].n}</span>`).join("")
+    +["RED","BLUE","OTHER"].map(a=>`<span><i style="background:${AFFIL[a].c};color:${AFFIL[a].c}"></i>${AFFIL[a].n} needle</span>`).join("")
+    +`<span class="trailkey">past<span class="grad"></span>now · \u25b6 drift · hollow = SIM/TEST</span>`;
   syncInspector();
   wire();
 }
@@ -873,9 +886,16 @@ async function doRefresh(){
   state.etag=null;
   if(state.view==="real"||state.view==="combined"){await loadHrr();}
   await load();}
-async function loadHrr(){try{const r=await fetch("/api/hrr");const j=await r.json();
+// response.ok checked BEFORE .json(), the pattern 1.5.2 fixed on
+// /api/conjunctions and 1.6.4 on /api/coplanar. This one was still unchecked:
+// a non-JSON error body made .json() reject, the catch blanked the HRR map,
+// and every REAL object silently vanished from the plot with no stated cause.
+async function loadHrr(){try{const r=await fetch("/api/hrr");
+  if(!r.ok){throw new Error("HRR list unavailable: HTTP "+r.status);}
+  const j=await r.json();
   state.hrr=j.objects||{};document.getElementById("hrrnote").innerHTML=`HRR ${esc(j.regime||"GEO")} \u00b7 ${esc(j.count||0)} \u00b7 ${esc(j.source||"JCO")}<br>${esc(j.marking||"U")}`;
-  }catch{state.hrr={};}}
+  }catch(e){state.hrr={};
+    document.getElementById("hrrnote").textContent=e.message||"HRR list unavailable";}}
 function boot(){
   showOverlay("loading");paint();
   loadHrr().then(()=>{

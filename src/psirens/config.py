@@ -35,6 +35,31 @@ def _env(name: str, default: str = "") -> str:
     return _clean(os.environ.get(name, default))
 
 
+# A STARTING POINT for the owner to amend, not an assertion. Defined here, at
+# module level, so a Config built directly carries the same policy as one built
+# from the environment: a default that exists only inside load_config is a
+# second, quieter default, and the two drift.
+DEFAULT_AFFILIATION_RED = ("CHN", "RUS", "IRN", "PRK")
+DEFAULT_AFFILIATION_BLUE = (
+    "USA", "GBR", "AUS", "CAN", "NZL", "JPN", "KOR", "FRA", "DEU", "ITA",
+    "ESP", "NOR", "SWE", "DNK", "NLD", "BEL", "POL", "TUR", "ISR", "IND")
+
+
+def _env_codes(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    """A comma-separated list of country codes, upper-cased and de-duplicated.
+
+    Affiliation is a POLICY, not a fact about an orbit, so it lives in env
+    rather than in the code or the feed.
+    """
+    raw = _env(name, ",".join(default))
+    out: list[str] = []
+    for part in raw.split(","):
+        code = part.strip().upper()
+        if code and code not in out:
+            out.append(code)
+    return tuple(out)
+
+
 def _env_int(name: str, default: int) -> int:
     """An integer setting. An env var set to empty string, or to something
     unparseable, falls back to the default rather than crashing the boot: a
@@ -115,6 +140,12 @@ class Config:
     # a complete one and that is exactly how this defect hid.
     udl_truncation_threshold: int = 9000
     stale_after_hours: float = 24.0    # newest fix older than this raises the alarm
+    # Affiliation, used only for the RA bearing needle's colour. Anything on
+    # neither list is OTHER, and a blank country is UNKNOWN; neither is an
+    # assertion about the operator. Commercial and intergovernmental operators
+    # are 20.4% of the bundled 594-object list, so two buckets would be a lie.
+    affiliation_red: tuple[str, ...] = DEFAULT_AFFILIATION_RED
+    affiliation_blue: tuple[str, ...] = DEFAULT_AFFILIATION_BLUE
     # TLE source selection: ordered classes, first non-empty class wins, newest
     # epoch within it. `any` disables class ranking (plain newest-fix-wins).
     tle_source_priority: str = "commercial,government,unknown"
@@ -165,6 +196,8 @@ def load_config() -> Config:
         udl_max_results=_env_int("UDL_MAX_RESULTS", 0),
         udl_truncation_threshold=_env_int("UDL_TRUNCATION_THRESHOLD", 9000),
         stale_after_hours=_env_float("STALE_AFTER_HOURS", 24),
+        affiliation_red=_env_codes("AFFILIATION_RED", DEFAULT_AFFILIATION_RED),
+        affiliation_blue=_env_codes("AFFILIATION_BLUE", DEFAULT_AFFILIATION_BLUE),
         tle_source_priority=_env("TLE_SOURCE_PRIORITY",
                                  "commercial,government,unknown"),
         coplanar_half_width_deg=_env_float("COPLANAR_HALF_WIDTH_DEG", 20),

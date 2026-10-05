@@ -221,6 +221,35 @@ function checkBodyFits(m, label) {
     }
 
     // ---------------------------------------------------------------------
+    // Affiliation (1.6.13). Colour alone proves nothing from a probe, so this
+    // asserts the WORDS in the inspector, which exercise the whole chain:
+    // config policy lists -> server-side resolution on /api/hrr -> the HRR
+    // join in transform -> the panel. The seed carries CHN, USA, FRA and LUX
+    // on purpose, so RED, BLUE and OTHER are all reachable.
+    // ---------------------------------------------------------------------
+    const affilOf = async (id) => {
+      await page.locator(`[data-id="${id}"]`).first().click();
+      await page.waitForSelector(".ins-dl", { timeout: 10000 });
+      return (await page.evaluate(() => {
+        const dts = Array.from(document.querySelectorAll(".ins-dl dt"));
+        const dt = dts.find((d) => d.textContent.trim() === "Affiliation");
+        return dt && dt.nextElementSibling
+          ? dt.nextElementSibling.textContent.trim() : "";
+      })).trim();
+    };
+    const wantAffil = { 43683: "Red", 41748: "Blue", 41836: "Other" };
+    for (const [id, want] of Object.entries(wantAffil)) {
+      if (!ids.includes(id)) { continue; }
+      const got = await affilOf(id);
+      console.log(`  affiliation: ${id} -> ${JSON.stringify(got)}`);
+      if (got !== want) {
+        fail(`object ${id} reported affiliation ${JSON.stringify(got)}, ` +
+             `expected ${JSON.stringify(want)}. The policy lists, the ` +
+             `/api/hrr payload and the panel are not agreeing.`);
+      }
+    }
+
+    // ---------------------------------------------------------------------
     // The error path. A non-JSON error body used to make .json() reject, and
     // the catch could only say "service unavailable", hiding the stated cause.
     // That exact defect reached production once on /api/conjunctions; this
