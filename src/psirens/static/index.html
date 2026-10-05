@@ -24,6 +24,12 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
 .top h1 small{color:var(--dim);font-weight:300;font-size:12.5px;letter-spacing:.06em}
 .reads{margin-left:auto;display:flex;gap:24px}
+/* Top right, beside the readouts: the guide is the first thing a new operator
+   needs and the last thing an experienced one wants in the way. */
+.guidebtn{flex:none;border:1px solid var(--line2);border-radius:20px;padding:5px 14px;
+  font-size:12px;color:var(--dim);text-decoration:none;white-space:nowrap}
+.guidebtn:hover{border-color:var(--accent);color:var(--ink)}
+.guidebtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .read{text-align:right}.read .v{font-family:var(--mono);font-size:19px;font-weight:600;line-height:1}
 .read .v small{font-size:12px;color:var(--dim)}
 .read .k{font-size:8.5px;letter-spacing:.15em;color:var(--faint);text-transform:uppercase;margin-top:3px}
@@ -170,7 +176,9 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 </head>
 <body>
 <div class="top"><span class="brand">Bluestaq</span><h1>PSIRENS <small>GEO Sentinel Command</small></h1>
-  <div class="reads" id="reads"></div></div>
+  <div class="reads" id="reads"></div>
+  <a class="guidebtn" href="/static/guide.html" target="_blank" rel="noopener"
+    title="Operator Guide: what every element on this screen means">Guide</a></div>
 <div class="stale" id="stale" hidden></div>
 <div class="bar">
   <div class="views" id="views" role="tablist" aria-label="Data view">

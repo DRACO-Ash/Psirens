@@ -295,6 +295,27 @@ The web rules are therefore run over shipped page sources, not over browser
 driver scripts. MEASURED on this repo: `src` and `tests` are clean;
 `tools/layout_probe.js:197` is this one false positive.
 
+### 3.15 Text gates meet prose
+
+A grep-shaped rule written against code behaves differently the moment a
+documentation page ships from the same tree. MEASURED, PSIRENS 5 October 2026:
+the `\bwindow\.` rule, which exists to catch `window.innerWidth` in page
+code, fired five times on an operator guide, every one of them an English
+sentence ending "...over a trailing window."
+
+Two bad fixes and one good one:
+
+● **Bad:** weaken the pattern. The rule is load-bearing and the next real
+  `window.` violation then ships.
+● **Bad:** add a suppression comment. That teaches the next person that
+  suppressions are the normal response to a finding.
+● **Good:** reword the five sentences. Prose has synonyms; code does not.
+
+The general rule: before adding a documentation page to a tree that is
+scanned, run the scanner over it and expect the text rules to argue. Decide
+each case on whether the RULE or the SENTENCE is the thing worth keeping, and
+record the decision where the next person will find it.
+
 ## 4. Rules no cheap checker can decide
 
 Listed so nobody mistakes a clean `sniff_check` run for a clean gate. These

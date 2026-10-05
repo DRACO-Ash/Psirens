@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSIRENS Operator Guide</title>
+<link rel="icon" type="image/png" href="/favicon.ico">
+<meta name="theme-color" content="#05070e">
+<style>
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{margin:0}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+:root{--bg:#05070e;--bg2:#0a0f1c;--panel:#0e1524;--panel2:#121b2e;--line:#1b2740;
+ --line2:#2b3d63;--ink:#eaf1fb;--dim:#9db1cf;--faint:#7b90b3;--accent:#f0a52e;
+ --focus:#7fb0ff;--red:#FF4D4D;--blue:#4DA6FF;--green:#3fd27b;--amber:#C67C00;
+ --r1:#E2483D;--r2:#E9863A;--r3:#D9B23A;--r4:#3E8FD0;--r5:#8199B8;
+ --sans:'Segoe UI',system-ui,sans-serif;--mono:'Cascadia Mono',Consolas,monospace}
+body{background:#05070e;color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}
+  html{scroll-behavior:auto}}
+
+/* ---- shell ------------------------------------------------------------ */
+.gbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:16px;
+  padding:12px 26px;background:#070b14;border-bottom:1px solid var(--line)}
+.gbar .brand{font-weight:700;letter-spacing:.24em;font-size:11px;color:var(--accent);text-transform:uppercase}
+.gbar h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.02em}
+.gbar h1 span{color:var(--dim);font-weight:300;font-size:12.5px;letter-spacing:.06em;margin-left:8px}
+.gbar .spacer{margin-left:auto}
+.gbtn{border:1px solid var(--line2);border-radius:20px;padding:6px 15px;font-size:12.5px;color:var(--ink)}
+.gbtn:hover{border-color:var(--accent)}
+.gbtn.primary{background:#1a2742;border-color:var(--line2)}
+#find{background:#0b1220;border:1px solid var(--line2);border-radius:20px;padding:6px 14px;
+  color:var(--ink);font-size:12.5px;width:230px;font-family:var(--sans)}
+.shell{display:grid;grid-template-columns:262px minmax(0,1fr);gap:34px;
+  max-width:1360px;margin:0 auto;padding:0 26px 90px}
+.toc{position:sticky;top:62px;align-self:start;max-height:calc(100vh - 78px);overflow:auto;
+  padding:22px 0 30px}
+.toc h2{font-size:9.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+.toc a{display:block;padding:5px 11px;border-left:2px solid #1b2740;color:var(--dim);
+  text-decoration:none;font-size:13px}
+.toc a:hover{color:var(--ink);border-left-color:var(--line2)}
+.toc a.on{color:var(--accent);border-left-color:var(--accent);background:#101829}
+.toc .grp{margin-top:16px}
+main{padding:24px 0 0;min-width:0}
+
+/* ---- sections --------------------------------------------------------- */
+section{scroll-margin-top:74px;padding:26px 0 10px;border-top:1px solid var(--line)}
+section:first-of-type{border-top:none}
+h2.sec{font-size:25px;margin:0 0 4px;letter-spacing:.01em}
+h3{font-size:16.5px;margin:26px 0 8px;color:var(--ink)}
+h4{font-size:13.5px;margin:18px 0 6px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--dim);font-size:16px;margin:0 0 18px;max-width:72ch}
+p{max-width:76ch}
+ul,ol{max-width:76ch;padding-left:20px}
+li{margin:5px 0}
+code,kbd{font-family:var(--mono);font-size:12.5px;background:#111a2c;border:1px solid var(--line);
+  border-radius:4px;padding:1px 6px}
+kbd{border-bottom-width:2px}
+a{color:var(--focus)}
+.pill{display:inline-block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  border:1px solid var(--line2);border-radius:20px;padding:2px 10px;color:var(--dim);margin-left:8px;vertical-align:3px}
+
+/* ---- cards ------------------------------------------------------------ */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(246px,1fr));gap:14px;margin:16px 0}
+.card{background:#0e1524;border:1px solid var(--line);border-radius:9px;padding:15px 17px}
+.card h5{margin:0 0 6px;font-size:14px;color:var(--ink)}
+.card p{margin:0;font-size:13.5px;color:var(--dim)}
+.card .big{font-family:var(--mono);font-size:21px;color:var(--accent);display:block;margin-bottom:4px}
+.note{border-left:3px solid var(--line2);background:#0c1322;border-radius:0 7px 7px 0;
+  padding:12px 16px;margin:16px 0;font-size:14px;color:var(--dim);max-width:78ch}
+.note b{color:var(--ink)}
+.note.warn{border-left-color:var(--amber);background:#17100A;color:#F4DCAE}
+.note.warn b{color:#FFE6B8}
+.note.good{border-left-color:var(--green);background:#0b1a13;color:#bfe7cf}
+.note.good b{color:#dff5e6}
+
+/* ---- tables ----------------------------------------------------------- */
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:600}
+td.k{font-family:var(--mono);color:var(--ink);white-space:nowrap}
+tbody tr:hover{background:#101829}
+.sw{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+.line{display:inline-block;width:26px;height:3px;border-radius:2px;margin-right:8px;vertical-align:3px}
+
+/* ---- figures with hotspots -------------------------------------------- */
+figure{margin:18px 0 10px}
+.fig{position:relative;display:block;border:1px solid var(--line2);border-radius:9px;overflow:hidden;background:#070b14}
+.fig img{display:block;width:100%;height:auto}
+.hot{position:absolute;border:1.5px dashed #f0a52e;border-radius:6px;background:#2a1d05;
+  opacity:.5;padding:0}
+.hot:hover,.hot.on{opacity:1;background:#3a2707;border-style:solid}
+.hot .num{position:absolute;top:-11px;left:-11px;width:22px;height:22px;border-radius:50%;
+  background:#f0a52e;color:#120b00;font-size:12px;font-weight:700;line-height:22px;text-align:center}
+.figcap{display:flex;gap:14px;align-items:flex-start;margin-top:10px;padding:12px 15px;
+  background:#0e1524;border:1px solid var(--line);border-radius:8px;min-height:72px}
+.figcap .n{flex:none;width:24px;height:24px;border-radius:50%;background:#f0a52e;color:#120b00;
+  font-weight:700;font-size:12.5px;line-height:24px;text-align:center}
+.figcap .t{font-size:13.5px;color:var(--dim)}
+.figcap .t b{color:var(--ink);display:block;font-size:14px;margin-bottom:2px}
+figcaption{font-size:12px;color:var(--faint);margin-top:8px}
+.hotlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.hotlist button{border:1px solid var(--line);border-radius:20px;padding:3px 11px;font-size:12px;color:var(--dim)}
+.hotlist button.on{border-color:var(--accent);color:var(--accent);background:#17100A}
+
+/* ---- live demos ------------------------------------------------------- */
+.demo{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:18px;margin:18px 0;
+  background:#0b1220;border:1px solid var(--line2);border-radius:10px;padding:16px}
+.demo canvas{width:100%;height:280px;display:block;border-radius:7px;background:#070c16}
+.demo .ctl{display:flex;flex-direction:column;gap:13px}
+.demo label{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);
+  display:block;margin-bottom:4px}
+.demo .val{font-family:var(--mono);font-size:13px;color:var(--accent);float:right;text-transform:none;letter-spacing:0}
+.demo input[type=range]{width:100%;accent-color:#f0a52e}
+.demo select{width:100%;background:#0b1220;border:1px solid var(--line2);border-radius:6px;
+  color:var(--ink);padding:5px 8px;font:inherit;font-size:13px}
+.demo .readout{font-size:12.5px;color:var(--dim);border-top:1px solid var(--line);padding-top:10px}
+.demo .readout b{color:var(--ink)}
+@media(max-width:980px){.demo{grid-template-columns:minmax(0,1fr)}
+  .shell{grid-template-columns:minmax(0,1fr)}.toc{position:static;max-height:none}}
+
+/* ---- steps ------------------------------------------------------------ */
+ol.steps{list-style:none;padding:0;counter-reset:s}
+ol.steps li{counter-increment:s;position:relative;padding:11px 0 11px 46px;border-bottom:1px solid var(--line)}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:11px;width:28px;height:28px;
+  border-radius:50%;background:#17223a;color:var(--accent);font-family:var(--mono);font-size:13px;
+  line-height:28px;text-align:center;border:1px solid var(--line2)}
+ol.steps b{color:var(--ink)}
+
+/* ---- quiz ------------------------------------------------------------- */
+.quiz{background:#0e1524;border:1px solid var(--line2);border-radius:10px;padding:16px 18px;margin:18px 0}
+.quiz .q{font-size:15px;margin-bottom:10px}
+.quiz .opts{display:flex;flex-direction:column;gap:7px}
+.quiz .opts button{text-align:left;border:1px solid var(--line);border-radius:7px;padding:8px 13px;
+  font-size:13.5px;color:var(--dim)}
+.quiz .opts button:hover{border-color:var(--line2);color:var(--ink)}
+.quiz .opts button.right{border-color:#2f7d53;background:#0b1a13;color:#dff5e6}
+.quiz .opts button.wrong{border-color:#7d3a34;background:#1a0e0c;color:#f6d3cf}
+.quiz .fb{margin-top:11px;font-size:13.5px;color:var(--dim);min-height:21px}
+.quiz .score{float:right;font-family:var(--mono);font-size:12.5px;color:var(--faint)}
+
+/* ---- misc ------------------------------------------------------------- */
+.hidden{display:none}
+mark{background:#3a2707;color:#ffd98a;border-radius:3px;padding:0 2px}
+.foot{max-width:1360px;margin:0 auto;padding:22px 26px 60px;border-top:1px solid var(--line);
+  color:var(--faint);font-size:12px}
+.kbd-row{display:flex;gap:10px;align-items:baseline;margin:6px 0}
+.kbd-row .d{color:var(--dim);font-size:13.5px}
+@media print{.toc,.gbar,.demo .ctl,.hotlist{display:none}.shell{grid-template-columns:1fr}
+  body{background:#fff;color:#111}.card,.note,.fig,.figcap{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="gbar">
+  <span class="brand">Bluestaq</span>
+  <h1>PSIRENS Operator Guide<span id="appver">GEO Sentinel Command</span></h1>
+  <div class="spacer"></div>
+  <input type="search" id="find" placeholder="Search the guide" aria-label="Search the guide">
+  <button type="button" class="gbtn" id="printbtn">Print</button>
+  <a class="gbtn primary" href="/">Open PSIRENS</a>
+</header>
+
+<div class="shell">
+<nav class="toc" id="toc" aria-label="Guide contents">
+  <h2>Contents</h2>
+  <div id="toclinks"></div>
+</nav>
+<main id="main">
+
+<section id="start">
+  <h2 class="sec">Start here</h2>
+  <p class="lede">PSIRENS plots the geostationary belt as a single picture: where every
+  high-interest object sits in longitude, how far its orbit is tilted, which way it is
+  moving, and which way its orbital plane points. This guide takes about twenty minutes
+  end to end, and every figure in it is a screenshot of the real interface.</p>
+
+  <div class="cards">
+    <div class="card"><h5><span class="big">1</span>One plot, two numbers</h5>
+      <p>Left to right is longitude over the Earth. Bottom to top is orbital inclination.
+      Everything else on a marker is a modifier of those two.</p></div>
+    <div class="card"><h5><span class="big">2</span>Colour is priority</h5>
+      <p>Marker colour is the JCO high-interest rank, R1 to R5. It is never nationality.
+      Nationality lives on the bearing needle.</p></div>
+    <div class="card"><h5><span class="big">3</span>Click anything</h5>
+      <p>A marker or a watchlist row opens the inspector: element set, drift fit, nearest
+      neighbours with closest approach, and the co-planar chart.</p></div>
+  </div>
+
+  <h3>The one-minute version</h3>
+  <ol class="steps">
+    <li><b>Check the banner.</b> If an amber bar sits under the title, the picture is older
+      than 24 hours and the bar says why. Everything below it is last-known-good, not live.</li>
+    <li><b>Read the belt.</b> Objects near the bottom are station-kept. Objects higher up are
+      inclined. Objects with an arrowhead are drifting, and the arrow points the way they go.</li>
+    <li><b>Open the one that matters.</b> Click its marker, or its row in the R1&ndash;R2
+      watchlist. Read Drift, Drift fit and the Neighbourhood list.</li>
+    <li><b>Ask the geometry question.</b> Press <b>Co-Planar view</b>. Anything in the bottom
+      left of that chart shares your object's orbital plane and sits close to it in longitude.</li>
+  </ol>
+
+  <div class="note"><b>About the figures.</b> Every screenshot here was captured from a running
+  PSIRENS by driving the real controls. The object names, countries and priority ranks are the
+  real JCO high-interest list. The orbital positions in the figures are illustrative, generated
+  locally, because the machine that builds this guide has no feed access. Nothing in a figure is
+  a drawing of an interface that does not exist.</div>
+</section>
+
+<section id="screen">
+  <h2 class="sec">The screen at a glance</h2>
+  <p class="lede">Five regions, and they never move. Select a number to read what that region does.</p>
+  <figure>
+    <div class="fig" id="fig-overview" data-fig="overview">
+      <img src="guide-overview.png" alt="The full PSIRENS screen: title bar with summary
+        readouts, control bar, left telemetry rail, the belt plot, and the legend.">
+    </div>
+    <div class="figcap" id="cap-overview"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>Use the numbered markers on the figure, or the
+      buttons below, to read each region.</div></div>
+    <div class="hotlist" id="list-overview"></div>
+    <figcaption>Real World view, ranks R1 to R3 loaded, over a 24-hour window, with illustrative geometry.</figcaption>
+  </figure>
+</section>
+
+<section id="axes">
+  <h2 class="sec">Reading the belt</h2>
+  <p class="lede">The plot is a map of the geostationary ring seen from above and flattened out.</p>
+
+  <h3>Horizontal: sub-satellite longitude</h3>
+  <p>From &minus;180&deg; (west) through 0&deg; (the Greenwich meridian) to +180&deg; (east). This
+  is the point on the Earth's surface directly beneath the object, computed from the element set
+  with a validated SGP4 propagator, not read from a field in the feed.</p>
+
+  <h3>Vertical: orbital inclination</h3>
+  <p>From 0&deg; at the bottom to 15&deg; at the top. A true geostationary satellite sits at 0&deg;
+  and stays over one longitude. Inclination builds up naturally if a satellite stops correcting
+  it, at roughly 0.8&deg; per year, so a high inclination often means an old or retired object
+  &mdash; or one deliberately placed in an inclined orbit.</p>
+
+  <table>
+    <thead><tr><th>What you see</th><th>What it usually means</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Hugging the bottom edge</td><td>Actively station-kept. Operational, controlled, paying for fuel.</td></tr>
+      <tr><td class="k">1&deg; to 5&deg; up</td><td>Inclination no longer corrected. Often retired in place, or an inclined-orbit lease.</td></tr>
+      <tr><td class="k">Above 5&deg;</td><td>Long-uncorrected, or never geostationary to begin with.</td></tr>
+      <tr><td class="k">A dense vertical cluster</td><td>A popular slot. Several operators sharing a longitude band.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Zoom and pan</h3>
+  <div class="kbd-row"><kbd>scroll</kbd><span class="d">Zoom about the cursor, down to 0.05&deg; of
+    longitude and 0.01&deg; of inclination.</span></div>
+  <div class="kbd-row"><kbd>drag</kbd><span class="d">Pan. The axis labels gain decimal places as
+    you go deeper, so you always know the scale.</span></div>
+  <div class="kbd-row"><kbd>+</kbd><kbd>&minus;</kbd><kbd>&#8634;</kbd><span class="d">The controls at
+    the top right of the plot. The third resets to the whole belt.</span></div>
+  <div class="note"><b>Why zoom this far?</b> Two objects 0.1&deg; apart in longitude are about
+  74 km apart at geostationary altitude. At belt scale they are one pixel. The deep zoom is what
+  turns a single dot into a co-location group you can count.</div>
+</section>
+
+<section id="marker">
+  <h2 class="sec">Anatomy of a marker</h2>
+  <p class="lede">Every object draws the same four things. Move the controls and watch each one
+  change: this canvas uses the same rules as the plot.</p>
+
+  <div class="demo">
+    <canvas id="d-marker" width="640" height="280"
+      aria-label="Live diagram of one object marker, responding to the controls beside it"></canvas>
+    <div class="ctl">
+      <div><label for="m-rank">Priority rank <span class="val" id="m-rank-v">R1</span></label>
+        <input type="range" id="m-rank" min="1" max="5" step="1" value="1"></div>
+      <div><label for="m-drift">Drift <span class="val" id="m-drift-v">+0.00&deg;/day</span></label>
+        <input type="range" id="m-drift" min="-400" max="400" step="5" value="0"></div>
+      <div><label for="m-ra">RA bearing <span class="val" id="m-ra-v">40&deg;</span></label>
+        <input type="range" id="m-ra" min="0" max="359" step="1" value="40"></div>
+      <div><label for="m-age">Fix age <span class="val" id="m-age-v">1h</span></label>
+        <input type="range" id="m-age" min="0" max="96" step="1" value="1"></div>
+      <div><label for="m-aff">Affiliation</label>
+        <select id="m-aff">
+          <option value="RED">Red</option>
+          <option value="BLUE">Blue</option>
+          <option value="OTHER" selected>Other</option>
+          <option value="UNKNOWN">Unknown</option>
+        </select></div>
+      <div class="readout" id="m-read"></div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h5>The dot, or the arrowhead</h5>
+      <p>A circle while the object holds its longitude. Past <b>0.08&deg;/day</b> it becomes a
+      triangle pointing the way it drifts, and grows with the rate.</p></div>
+    <div class="card"><h5>Size and glow</h5>
+      <p>R1 and R2 draw at 6&nbsp;px with a coloured halo. R3 at 4.4&nbsp;px. R4 and R5 at
+      3.4&nbsp;px. Priority is readable before you read any colour.</p></div>
+    <div class="card"><h5>The needle</h5>
+      <p>A short line from the marker giving the orbital plane's RA bearing, and coloured by
+      affiliation. North is straight up, angles run clockwise.</p></div>
+    <div class="card"><h5>Fade</h5>
+      <p>The marker dims as its element set ages, bottoming out at 72 hours. Names and needles
+      have a brightness floor so they stay readable when the marker does not.</p></div>
+  </div>
+</section>
+
+<section id="priority">
+  <h2 class="sec">Priority: the HRR ranks</h2>
+  <p class="lede">Colour means one thing only: how high the Joint Commercial Operations high
+  interest list rates the object. It never means nationality, never means hostile.</p>
+  <table>
+    <thead><tr><th>Rank</th><th>Name</th><th>Drawn as</th><th>Loaded</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><span class="sw" style="background:#E2483D"></span>R1</td><td>CRITICAL</td>
+        <td>6&nbsp;px with halo</td><td>On first paint</td></tr>
+      <tr><td class="k"><span class="sw" style="background:#E9863A"></span>R2</td><td>HIGH</td>
+        <td>6&nbsp;px with halo</td><td>On first paint</td></tr>
+      <tr><td class="k"><span class="sw" style="background:#D9B23A"></span>R3</td><td>ELEVATED</td>
+        <td>4.4&nbsp;px</td><td>On first paint</td></tr>
+      <tr><td class="k"><span class="sw" style="background:#3E8FD0"></span>R4</td><td>ROUTINE</td>
+        <td>3.4&nbsp;px</td><td>On demand</td></tr>
+      <tr><td class="k"><span class="sw" style="background:#8199B8"></span>R5</td><td>BACKGROUND</td>
+        <td>3.4&nbsp;px</td><td>On demand</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>Why R4 and R5 wait.</b> They are three quarters of the list. Loading them
+  on first paint would slow the opening picture for everyone to serve the minority of sessions
+  that need them. Their chips read <i>tap to load</i> until you ask; after that, toggling them is
+  instant.</div>
+  <div class="note warn"><b>A chip that is off hides objects.</b> If an object you expect is
+  missing, check the rank chips before anything else. A greyed chip is the most common reason
+  the belt looks emptier than it should.</div>
+</section>
+
+<section id="affiliation">
+  <h2 class="sec">The RA needle and affiliation</h2>
+  <p class="lede">The needle answers a question the marker position cannot: which way does this
+  object's orbital plane point, and whose object is it.</p>
+
+  <h3>What the bearing means</h3>
+  <p>An orbit's plane cuts the equator at a line. The right ascension of the ascending node, RAAN
+  or RA, is the direction of that line. Two objects with the same inclination and the same RA are
+  in the <b>same plane</b>, whatever their longitudes. That is why the needle is on the marker:
+  two needles pointing the same way, close together on the plot, is the pattern worth a second
+  look.</p>
+  <ul>
+    <li>Straight up is 0&deg;. Angles increase clockwise, like a compass.</li>
+    <li>The needle is absent when the object has no usable element set. That absence is
+      information: there is no current orbit solution to draw.</li>
+  </ul>
+
+  <h3>Colour: affiliation</h3>
+  <table>
+    <thead><tr><th>Needle</th><th>Meaning</th><th>Set by</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><span class="line" style="background:#FF4D4D"></span>Red</td>
+        <td>The object's country is on the red list.</td><td rowspan="2">Operator policy, held in
+        configuration as two country-code lists. Changing them never moves a marker.</td></tr>
+      <tr><td class="k"><span class="line" style="background:#4DA6FF"></span>Blue</td>
+        <td>The object's country is on the blue list.</td></tr>
+      <tr><td class="k"><span class="line" style="background:#F2F7FF"></span>Other</td>
+        <td>Country known, on neither list. Most commercial and intergovernmental operators.</td>
+        <td>No claim made.</td></tr>
+      <tr><td class="k"><span class="line" style="background:#9AA7BC"></span>Unknown</td>
+        <td>The feed gave no country for this object.</td><td>A data gap, not a judgement.</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>Other and Unknown are deliberately different.</b> &ldquo;We make no claim
+  about this operator&rdquo; and &ldquo;we do not know who this is&rdquo; are different statements.
+  Collapsing them would let a gap in the feed read as an assessment. Roughly a fifth of the
+  high-interest list is commercial or intergovernmental and sits in Other.</div>
+</section>
+
+<section id="drift">
+  <h2 class="sec">Drift, and why it is fitted</h2>
+  <p class="lede">Drift is the rate the object's longitude is changing, in degrees per day. It is
+  the single most operationally useful number on the panel, and the easiest to get wrong.</p>
+
+  <h3>Reading it</h3>
+  <table>
+    <thead><tr><th>Panel reads</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="k">on station</td><td>Under 0.05&deg;/day. Holding its slot.</td></tr>
+      <tr><td class="k">&minus;1.20&deg;/day W</td><td>Moving west at 1.2&deg; a day. About 27 days to cross 30&deg;.</td></tr>
+      <tr><td class="k">+0.40&deg;/day E</td><td>Moving east. A slow relocation, or an uncorrected orbit.</td></tr>
+      <tr><td class="k">no usable baseline</td><td>Under 24 hours of fixes. The honest answer, not a zero.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Why a fit and not a difference</h3>
+  <p>A geostationary orbit with even slight eccentricity swings east and west once per sidereal
+  day without going anywhere. At an eccentricity of 0.0022, that swing is 0.25&deg; wide and
+  reaches 1.58&deg;/day at its fastest. Take two fixes thirty minutes apart and you divide by one
+  forty-eighth of a day, so that swing &mdash; and any disagreement between two providers' element
+  sets &mdash; is multiplied by 48. A perfectly stationary object can read several degrees a day.</p>
+  <p>So the rate is <b>fitted by least squares over a trailing three-day window</b>, and where the
+  sampling is dense enough the fit includes a sine and cosine at the sidereal frequency, which
+  removes the swing rather than averaging it.</p>
+
+  <div class="demo">
+    <canvas id="d-drift" width="640" height="280"
+      aria-label="Live diagram showing a longitude series, its libration, and the fitted rate"></canvas>
+    <div class="ctl">
+      <div><label for="k-ecc">Eccentricity <span class="val" id="k-ecc-v">0.0022</span></label>
+        <input type="range" id="k-ecc" min="0" max="40" step="1" value="22"></div>
+      <div><label for="k-drift">True drift <span class="val" id="k-drift-v">0.00&deg;/day</span></label>
+        <input type="range" id="k-drift" min="-200" max="200" step="5" value="0"></div>
+      <div><label for="k-base">Baseline <span class="val" id="k-base-v">72h</span></label>
+        <input type="range" id="k-base" min="1" max="96" step="1" value="72"></div>
+      <div class="readout" id="k-read"></div>
+    </div>
+  </div>
+
+  <h3>The drift fit line</h3>
+  <p>Beneath Drift the inspector shows the fit itself, for example
+  <code>&plusmn;0.004&deg; rms &middot; 72h &middot; 37 fixes &middot; libration modelled</code>.</p>
+  <ul>
+    <li><b>rms</b> is the scatter of the fixes about the fitted line. Small means a clean,
+      trustworthy rate. Large means noisy inputs, or a manoeuvre partway through the span being fitted.</li>
+    <li><b>Baseline and fix count</b> say how much evidence the rate rests on.</li>
+    <li><b>libration modelled</b> means the once-a-day swing was fitted out.
+      <b>plain line</b> means the fixes were too sparse to resolve it, so treat a small rate with
+      more caution.</li>
+  </ul>
+  <div class="note good"><b>Cross-check for free.</b> Compare Drift against Track span on the same
+  panel. A rate of 3&deg;/day with a total excursion of 6&deg; across the whole stored history is a
+  contradiction: that rate would cover 6&deg; in two days. Where the two disagree, believe the span
+  and read the rms.</div>
+</section>
+
+<section id="trails">
+  <h2 class="sec">Trails and age</h2>
+  <p class="lede">The faint tail behind each marker is the object's own history, drawn from the
+  stored fixes. The brighter end is now.</p>
+  <ul>
+    <li><b>Trails</b> in the control bar turns them off for a cleaner picture in a dense band.</li>
+    <li>A trail segment implying faster than <b>18&deg;/day</b> of longitude motion is suppressed.
+      No geostationary object moves that fast; such a segment is a mismatched historical element
+      set, and drawing it would put a line straight across the belt.</li>
+    <li>Marker brightness falls with the age of the newest fix and bottoms out at 72 hours.
+      <b>Fresh &lt;6h</b> and <b>Stale &gt;36h</b> in Fleet health count the two ends.</li>
+  </ul>
+</section>
+
+<section id="bar">
+  <h2 class="sec">The control bar</h2>
+  <p class="lede">Everything that changes what is on screen, or asks the server for more.</p>
+  <figure>
+    <div class="fig" id="fig-bar" data-fig="bar">
+      <img src="guide-bar.png" alt="The control bar: view tabs, rank chips, trails toggle,
+        search box, window and range selectors, refresh, and the high-interest list note.">
+    </div>
+    <div class="figcap" id="cap-bar"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>Each control, and what it costs you.</div></div>
+    <div class="hotlist" id="list-bar"></div>
+  </figure>
+
+  <h3>Window against Range</h3>
+  <table>
+    <thead><tr><th>Mode</th><th>Asks for</th><th>Use it when</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Window</td><td>The last 6h, 24h, 3d, 7d or 30d, ending now.</td>
+        <td>Routine work. Deepening the window fills in history for the trails.</td></tr>
+      <tr><td class="k">Range</td><td>An explicit UTC start and stop.</td>
+        <td>Reconstructing a past event, or loading a scenario window that does not end now.</td></tr>
+    </tbody>
+  </table>
+  <div class="note warn"><b>Refresh is a real pull, not a redraw.</b> It asks the server to fetch
+  the selected window from the feed for the current view. It is rate limited and may need a team
+  token. A wide window over a busy catalogue takes time: the server slices it and paces itself
+  deliberately, because asking for everything at once is what once left the picture a fortnight
+  behind without saying so.</div>
+</section>
+
+<section id="rail">
+  <h2 class="sec">The left rail</h2>
+  <p class="lede">Four cards, all of them live, all of them scoped to what is currently in view.</p>
+  <figure>
+    <div class="fig" id="fig-rail" data-fig="rail">
+      <img src="guide-rail.png" alt="The left rail: priority mix, fleet health, by country,
+        and the R1 to R2 watchlist.">
+    </div>
+    <div class="figcap" id="cap-rail"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>What each card counts, and what it does when clicked.</div></div>
+    <div class="hotlist" id="list-rail"></div>
+  </figure>
+
+  <h3>By country is a filter, not just a readout</h3>
+  <p>Click a country to show only its objects. The plot, the summary readouts, Fleet health and the
+  watchlist all follow. Click it again, or use the clear control, to restore.</p>
+  <figure>
+    <div class="fig"><img src="guide-country.png" alt="The left rail with one country selected:
+      the counts stay, the view narrows."></div>
+    <figcaption>With a country selected the panel keeps every row and every count, so you can
+    switch country or clear without guessing. The counts deliberately ignore the country filter;
+    if they did not, selecting one country would collapse the panel to that country alone and
+    leave no way out.</figcaption>
+  </figure>
+</section>
+
+<section id="inspector">
+  <h2 class="sec">The inspector</h2>
+  <p class="lede">Click a marker or a watchlist row. The panel is draggable; closing it leaves the
+  plot exactly as it was.</p>
+  <figure>
+    <div class="fig" id="fig-inspector" data-fig="inspector">
+      <img src="guide-inspector.png" alt="The inspector panel showing identity, priority, data
+        mode, classification, longitude, inclination, affiliation, drift, drift fit, track span,
+        data age, the co-planar button, the element set with provenance, and the neighbourhood list.">
+    </div>
+    <div class="figcap" id="cap-inspector"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>Every field on the panel, explained.</div></div>
+    <div class="hotlist" id="list-inspector"></div>
+  </figure>
+
+  <h3>Field by field</h3>
+  <table>
+    <thead><tr><th>Field</th><th>What it tells you</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Priority</td><td>The HRR rank in words. Matches the marker colour.</td></tr>
+      <tr><td class="k">Data mode</td><td>REAL, SIMULATED, EXERCISE or TEST. Anything but REAL draws hollow.</td></tr>
+      <tr><td class="k">Classification</td><td>The marking carried by this object's own record, not a page-level default.</td></tr>
+      <tr><td class="k">Longitude</td><td>Sub-satellite longitude at the newest fix.</td></tr>
+      <tr><td class="k">Inclination</td><td>Orbital inclination at the newest fix.</td></tr>
+      <tr><td class="k">Affiliation</td><td>Red, Blue, Other or Unknown. The same value that colours the needle.</td></tr>
+      <tr><td class="k">Drift</td><td>The fitted longitude rate, with direction, or &ldquo;on station&rdquo;.</td></tr>
+      <tr><td class="k">Drift fit</td><td>Scatter, baseline, fix count, and whether the libration was modelled.</td></tr>
+      <tr><td class="k">Track span</td><td>Total longitude excursion across every stored fix. The sanity check on Drift.</td></tr>
+      <tr><td class="k">Data age</td><td>Age of the newest fix, with a bar. Under an hour is a healthy feed.</td></tr>
+      <tr><td class="k">Element set</td><td>The two-line element, with a provenance badge and the epoch it was issued for.</td></tr>
+      <tr><td class="k">Neighbourhood</td><td>Everything within &plusmn;10&deg;, with current range and the closest approach over seven days.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Provenance and copy-out</h3>
+  <ul>
+    <li><b>NATIVE</b> means the provider's own two lines, stored verbatim and validated on arrival:
+      correct shape, both checksums, and the catalogue number inside the line matched against the
+      record's own. Nothing between the provider and you reformatted it.</li>
+    <li><b>RECONSTRUCTED</b> means no usable native pair existed, so the lines were rebuilt from
+      the stored mean elements. Labelled, never silent.</li>
+    <li>The element set shown is the one actually propagated for the closest-approach figures, so
+      the line you copy produces the range you were shown.</li>
+    <li>The copy control appears only for a plain unclassified, caveat-free marking. A proprietary
+      commercial line is displayed with the control withheld and the reason given. That gate fails
+      closed on any caveat.</li>
+  </ul>
+</section>
+
+<section id="coplanar">
+  <h2 class="sec">The Co-Planar view</h2>
+  <p class="lede">The question this chart answers: is anything sharing my object's orbital plane
+  and sitting close to it in longitude. That combination is the co-orbital and rendezvous geometry
+  an operator watches for.</p>
+  <figure>
+    <div class="fig" id="fig-coplanar" data-fig="coplanar">
+      <img src="guide-coplanar.png" alt="The co-planar modal: a log-log chart of coplanar angle
+        against longitude difference, with each nearby object labelled.">
+    </div>
+    <div class="figcap" id="cap-coplanar"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>How to read the chart without being misled by it.</div></div>
+    <div class="hotlist" id="list-coplanar"></div>
+  </figure>
+
+  <h3>How to read it</h3>
+  <ul>
+    <li><b>Horizontal: coplanar angle</b>, the mutual tilt between the two orbital planes. Small
+      means the planes agree.</li>
+    <li><b>Vertical: longitude difference</b>, how far apart they sit around the belt.</li>
+    <li><b>Both axes are logarithmic.</b> The objects that matter cluster within a degree of zero,
+      and a linear axis piles them all against the origin where you cannot tell them apart.</li>
+    <li><b>Bottom left is the corner that matters.</b> Same plane, same longitude.</li>
+  </ul>
+  <div class="note"><b>The left edge is not an error.</b> A perfectly coplanar object has an angle
+  of exactly zero, which no logarithmic axis can place. Those points are clamped to 0.01&deg; and
+  drawn on the left edge, which reads as &ldquo;coplanar&rdquo; and is correct.</div>
+  <div class="note warn"><b>The dashed arcs are decoration, not a boundary.</b> They are drawn as
+  screen-space ellipses, so on logarithmic axes they do not trace a constant-threshold line. Judge
+  by the axis values, not by which side of an arc a point falls.</div>
+  <p>The modal is draggable and resizable, and redraws as you resize it. It closes with the object
+  panel; closing the chart alone leaves the panel open.</p>
+</section>
+
+<section id="freshness">
+  <h2 class="sec">Data freshness</h2>
+  <p class="lede">The most dangerous failure in a picture like this is not an error message. It is
+  a plausible, well-drawn, out-of-date belt. PSIRENS says so out loud.</p>
+  <figure>
+    <div class="fig"><img src="guide-stale.png" alt="The amber staleness banner stating how old the
+      data is and the reported cause."></div>
+    <figcaption>The banner appears whenever the newest element set anywhere in the store is older
+    than 24 hours, and names the server's own reading of the cause.</figcaption>
+  </figure>
+  <h3>What to do when you see it</h3>
+  <ol class="steps">
+    <li><b>Read the stated cause.</b> &ldquo;Upstream requests are failing&rdquo; with a status code
+      is an access problem. &ldquo;Records arrived but none matched the high-interest list&rdquo; is
+      a filtering problem. &ldquo;No upstream pull has completed&rdquo; means the service has not
+      managed a cycle since it started.</li>
+    <li><b>Press Refresh</b> with a 24h window selected. If the banner clears, it was transient.</li>
+    <li><b>If it does not clear</b>, the picture is still correct as last known good. Say so
+      explicitly in any report you write from it, with the age.</li>
+    <li><b>Escalate with the age and the cause</b>, not just &ldquo;it looks old&rdquo;.</li>
+  </ol>
+  <div class="note good"><b>Readiness stays green on purpose.</b> Stale data is not unreadiness.
+  The service keeps answering, because restarting a container that is serving a correct
+  last-known-good picture fixes no feed and throws away the stored history.</div>
+</section>
+
+<section id="views">
+  <h2 class="sec">Views, simulation and classification</h2>
+  <h3>The three views</h3>
+  <table>
+    <thead><tr><th>View</th><th>Shows</th><th>Use it for</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Real World</td><td>REAL objects only, scoped to the high-interest list.</td>
+        <td>Everything operational.</td></tr>
+      <tr><td class="k">Simulation</td><td>SIMULATED objects only. Zero real objects, guaranteed.</td>
+        <td>Exercise and scenario work, with no chance of mixing the two.</td></tr>
+      <tr><td class="k">Combined</td><td>Both at once.</td>
+        <td>Comparing an injected scenario against the live belt.</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>Non-real objects draw <b>hollow</b>, so you can always tell at a glance.</li>
+    <li>A simulation pull is not filtered against the high-interest list and never prunes real
+      objects, so a scenario cannot quietly erase the live picture.</li>
+  </ul>
+  <h3>Classification</h3>
+  <p>The banner at the foot of the screen shows the <b>most restrictive marking present</b> among
+  the objects currently loaded, not a fixed label. Individual objects carry their own marking in the
+  inspector. Treat the foot banner as the floor for anything you export or screenshot.</p>
+</section>
+
+<section id="playbooks">
+  <h2 class="sec">Playbooks</h2>
+  <p class="lede">Four things an operator actually does, start to finish.</p>
+
+  <h3>Is anything closing on my satellite?</h3>
+  <ol class="steps">
+    <li>Type the name or NORAD number into the search box.</li>
+    <li>Click the marker, or its watchlist row, to open the inspector.</li>
+    <li>Read <b>Neighbourhood &plusmn;10&deg;</b>. Rows are ordered by current range; each gives the
+      closest approach over the next seven days and when.</li>
+    <li>Open <b>Co-Planar view</b>. A neighbour that is close in range <i>and</i> sits bottom-left
+      on the chart is in the same plane, which is the geometry that matters.</li>
+    <li>Copy the element set if the marking allows it, and hand on the epoch with it.</li>
+  </ol>
+
+  <h3>Which objects of one country are drifting?</h3>
+  <ol class="steps">
+    <li>Click the country in <b>By country</b>. Everything narrows to it.</li>
+    <li>Read <b>Drifting</b> in Fleet health: that is the count above 0.3&deg;/day in the current view.</li>
+    <li>Look for arrowheads on the plot, and open each to confirm from the drift fit rather than
+      from the arrow alone.</li>
+    <li>Clear the country filter when you are done, or every later reading stays narrowed.</li>
+  </ol>
+
+  <h3>Reconstruct what the belt looked like last Tuesday</h3>
+  <ol class="steps">
+    <li>Switch the selector to <b>Range</b>.</li>
+    <li>Enter the UTC start and stop. Both are UTC; there is no local-time conversion.</li>
+    <li>Press <b>Refresh</b> and wait: a wide window is pulled in slices on purpose.</li>
+    <li>Check <b>Data age</b> on any object to confirm the window landed where you intended.</li>
+  </ol>
+
+  <h3>The plot is empty</h3>
+  <ol class="steps">
+    <li><b>Check the rank chips.</b> R4 and R5 are off until asked for.</li>
+    <li><b>Check the country filter.</b> A selected country persists until cleared.</li>
+    <li><b>Check the search box.</b> A leftover filter string hides everything that does not match.</li>
+    <li><b>Check the view tab.</b> Simulation shows nothing when no scenario is loaded.</li>
+    <li><b>Then check the banner.</b> If the feed is dry the overlay says so rather than leaving
+      you to guess.</li>
+  </ol>
+</section>
+
+<section id="check">
+  <h2 class="sec">Check yourself</h2>
+  <p class="lede">Five questions. They are the five things that most often get misread.</p>
+  <div id="quiz"></div>
+</section>
+
+<section id="glossary">
+  <h2 class="sec">Glossary</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Coplanar angle</td><td>The mutual tilt between two orbital planes. Zero means the same plane.</td></tr>
+      <tr><td class="k">Drift</td><td>Rate of change of sub-satellite longitude, degrees per day, fitted over a trailing three-day span of fixes.</td></tr>
+      <tr><td class="k">Element set, elset</td><td>The mean orbital elements for one object at one epoch. The input to every number here.</td></tr>
+      <tr><td class="k">Epoch</td><td>The instant an element set describes. Not the time it was received.</td></tr>
+      <tr><td class="k">GEO</td><td>Geostationary orbit, about 35,786 km up, one revolution per sidereal day.</td></tr>
+      <tr><td class="k">HRR</td><td>High Rate Reporting: the JCO high-interest object list that scopes the real-world picture.</td></tr>
+      <tr><td class="k">Inclination</td><td>Tilt of the orbital plane against the equator, in degrees.</td></tr>
+      <tr><td class="k">JCO</td><td>Joint Commercial Operations, the source of the high-interest list.</td></tr>
+      <tr><td class="k">Libration</td><td>The once-per-sidereal-day east-west swing caused by orbital eccentricity. Not drift.</td></tr>
+      <tr><td class="k">RA, RAAN</td><td>Right ascension of the ascending node: which way the orbital plane points.</td></tr>
+      <tr><td class="k">RPO</td><td>Rendezvous and proximity operations: deliberate close approach between two objects.</td></tr>
+      <tr><td class="k">SGP4</td><td>The standard propagator used to turn an element set into a position.</td></tr>
+      <tr><td class="k">Sidereal day</td><td>23h 56m 04s, one rotation of the Earth against the stars. The orbital period at GEO.</td></tr>
+      <tr><td class="k">Sub-satellite longitude</td><td>The longitude directly beneath the object.</td></tr>
+      <tr><td class="k">TCA</td><td>Time of closest approach.</td></tr>
+      <tr><td class="k">TLE</td><td>Two-line element set, the standard text form of an element set.</td></tr>
+      <tr><td class="k">UDL</td><td>Unified Data Library, the source of the element sets.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="reference">
+  <h2 class="sec">Reference card</h2>
+  <h4>Thresholds the interface uses</h4>
+  <table>
+    <thead><tr><th>Value</th><th>Where it shows</th></tr></thead>
+    <tbody>
+      <tr><td class="k">0.05&deg;/day</td><td>Below this the inspector reads &ldquo;on station&rdquo;.</td></tr>
+      <tr><td class="k">0.08&deg;/day</td><td>Above this the marker becomes a drift arrowhead.</td></tr>
+      <tr><td class="k">0.3&deg;/day</td><td>Counted in the Drifting readout.</td></tr>
+      <tr><td class="k">18&deg;/day</td><td>Trail segments above this are suppressed as data artifacts.</td></tr>
+      <tr><td class="k">24h</td><td>Minimum baseline for a drift fit, and the staleness threshold.</td></tr>
+      <tr><td class="k">3 days</td><td>Trailing window the drift rate is fitted over.</td></tr>
+      <tr><td class="k">6h / 36h / 72h</td><td>Fresh, Stale, and the point the age fade bottoms out.</td></tr>
+      <tr><td class="k">&plusmn;10&deg;</td><td>Neighbourhood half-width in the inspector.</td></tr>
+      <tr><td class="k">&plusmn;20&deg;</td><td>Half-width of the co-planar neighbourhood.</td></tr>
+      <tr><td class="k">0.05&deg; / 0.01&deg;</td><td>Deepest zoom, in longitude and inclination.</td></tr>
+    </tbody>
+  </table>
+  <h4>If you are asked for evidence</h4>
+  <p>The live service reports its own state. <code>GET /api/meta</code> gives the running version,
+  the age of the newest fix, whether it is considered stale, and the ingest counts behind that
+  verdict, including how many upstream requests were made and how many failed. Quote those rather
+  than describing the screen.</p>
+</section>
+</main>
+</div>
+<footer class="foot">
+  PSIRENS Operator Guide &middot; Bluestaq Limited &middot; Not Classified.
+  Figures captured from the running interface; orbital geometry in the figures is illustrative.
+</footer>
+<script>
+(function(){
+"use strict";
+const doc=document;
+const $=id=>doc.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---- contents and scroll spy ---------------------------------------- */
+const SECTIONS=[
+  ["start","Start here"],["screen","The screen at a glance"],["axes","Reading the belt"],
+  ["marker","Anatomy of a marker"],["priority","Priority: the HRR ranks"],
+  ["affiliation","RA needle and affiliation"],["drift","Drift, and why it is fitted"],
+  ["trails","Trails and age"],["bar","The control bar"],["rail","The left rail"],
+  ["inspector","The inspector"],["coplanar","The Co-Planar view"],
+  ["freshness","Data freshness"],["views","Views and classification"],
+  ["playbooks","Playbooks"],["check","Check yourself"],["glossary","Glossary"],
+  ["reference","Reference card"]];
+
+function buildToc(){
+  $("toclinks").innerHTML=SECTIONS.map(
+    ([id,label])=>`<a href="#${id}" data-sec="${id}">${esc(label)}</a>`).join("");
+}
+function spy(){
+  const links=Array.from(doc.querySelectorAll("#toclinks a"));
+  const obs=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(!e.isIntersecting){return;}
+      links.forEach(a=>a.classList.toggle("on",a.dataset.sec===e.target.id));
+    });
+  },{rootMargin:"-70px 0px -72% 0px"});
+  SECTIONS.forEach(([id])=>{const el=$(id);if(el){obs.observe(el);}});
+}
+
+/* ---- search ---------------------------------------------------------- */
+function runSearch(term){
+  const q=term.trim().toLowerCase();
+  const secs=Array.from(doc.querySelectorAll("main section"));
+  secs.forEach(s=>{
+    const hit=q===""||(s.textContent||"").toLowerCase().includes(q);
+    s.classList.toggle("hidden",!hit);
+  });
+  const links=Array.from(doc.querySelectorAll("#toclinks a"));
+  links.forEach(a=>{
+    const sec=$(a.dataset.sec);
+    a.classList.toggle("hidden",sec!==null&&sec.classList.contains("hidden"));
+  });
+}
+
+/* ---- annotated figures ----------------------------------------------- */
+// Each hotspot is a percentage box over the captured figure, so it keeps its
+// place at any width. Buttons, not divs: the keyboard reaches them too.
+const HOTSPOTS={
+  overview:[
+    [1.5,1,24,5,"Title and classification","The product name, and at the foot of the screen the most restrictive marking present among the objects currently loaded."],
+    [82,0.5,18,6,"Summary readouts","In view (shown of total), R1-R2 count, Drifting count, and mean age of the newest fixes. These follow every filter you apply."],
+    [1,6,18,4,"View tabs","Real World, Simulation or Combined. Simulation is guaranteed to contain zero real objects."],
+    [20,6,51,4,"Priority chips","Toggle each HRR rank. R4 and R5 read “tap to load” until you ask for them."],
+    [70.5,6,5,4,"Trails","Turn the history tails off for a cleaner picture in a dense band."],
+    [75,6,10,4,"Search","Filter by name or NORAD number. A leftover string here is the most common cause of a thin-looking belt."],
+    [1,10,22,4,"Window or Range","Choose a trailing window, or switch to Range for an explicit UTC start and stop."],
+    [23,10,6,4,"Refresh","A real pull from the feed for this view, over the selected span. Rate limited; a wide span takes time by design."],
+    [89,9,11,4.5,"High-interest list","Which list is in force, how many objects it holds, its source and its marking."],
+    [1,14,16,18,"Priority mix","How many of each rank are currently in view."],
+    [1,33,16,17,"Fleet health","Shown, Fresh under 6h, Stale over 36h, and Drifting above 0.3 degrees per day."],
+    [1,51,16,22,"By country","A breakdown that is also a filter. Click a country to narrow everything to it."],
+    [1,75,16,22,"R1-R2 watchlist","The highest-priority objects, with country, longitude and fix age. Click a row to open the inspector."],
+    [17.5,14,77,79,"The belt","Longitude left to right, inclination bottom to top. Scroll to zoom, drag to pan."],
+    [94.5,15,5,12,"Zoom controls","In, out, and reset to the full belt."]],
+  bar:[
+    [0.5,8,17,70,"View tabs","Switch the data mode. The plot, the rail and the readouts all follow."],
+    [18,8,52,70,"Priority chips","Each rank toggles independently. Greyed chips are hidden, not absent."],
+    [70,8,5,70,"Trails","History tails on or off."],
+    [75.5,8,13,70,"Search","Name or NORAD id. Clears with the box."],
+    [0.5,76,12,22,"Window or Range","Window ends now. Range takes an explicit UTC pair."],
+    [12,76,17,22,"Window length","6h, 24h, 3d, 7d or 30d. Longer fills more trail history and costs more time."],
+    [29,76,7,22,"Refresh","Pull the selected window from the feed for the current view."],
+    [88,2,12,40,"List note","Regime, object count, source and marking of the high-interest list in force."]],
+  rail:[
+    [2,1,96,22,"Priority mix","Counts by rank for what is in view, with a bar for proportion."],
+    [2,25,96,24,"Fleet health","Four counts: shown, fresh under 6h, stale over 36h, and drifting."],
+    [2,51,96,24,"By country","Click a country to filter. The counts deliberately ignore the country filter so you can always switch or clear."],
+    [2,77,96,22,"R1-R2 watchlist","The critical and high objects, newest first. Each row opens the inspector."]],
+  inspector:[
+    [2,0.5,96,5,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
+    [2,7,96,7,"Identity","Rank chip, common name, NORAD number and country code."],
+    [2,14,96,17,"State","Priority, data mode and classification marking carried by this object's own record."],
+    [2,21,96,10,"Position","Sub-satellite longitude and inclination at the newest fix."],
+    [2,26.5,96,4,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
+    [2,29.5,96,4,"Drift","The fitted longitude rate with direction, or “on station”, or “no usable baseline”."],
+    [2,32,96,8,"Drift fit","Scatter about the fitted line, the baseline, the number of fixes, and whether the once-a-day libration was modelled."],
+    [2,39,96,4,"Track span","Total longitude excursion across every stored fix. Use it to sanity-check Drift."],
+    [2,41.5,96,4,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
+    [2,45,30,5,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
+    [2,51,96,7,"Element set","The two lines actually propagated for the ranges shown below."],
+    [2,57,96,6,"Provenance","NATIVE means the provider's own validated lines. RECONSTRUCTED means rebuilt from stored elements, and says so."],
+    [2,63,96,5,"Copy control","Offered only for a plain unclassified, caveat-free marking. Withheld with a reason otherwise."],
+    [2,68,96,5,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days."],
+    [2,73,96,25,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
+  coplanar:[
+    [2,1,96,5,"Title bar","The primary object and how many objects are in its neighbourhood. Drag to move, drag the corner to resize."],
+    [10,12,82,70,"The field","Each point is one nearby object. Both axes are logarithmic."],
+    [4,12,7,74,"Coplanar angle","Horizontal: the mutual tilt between the two orbital planes. The left edge is zero, clamped so a logarithmic axis can place it."],
+    [10,84,82,10,"Longitude difference","Vertical scale runs up the left of the field: how far apart the two objects sit around the belt."],
+    [10,70,30,16,"The corner that matters","Bottom left: same plane and same longitude. That is co-orbital geometry."]]
+};
+function hotHtml(h,i){
+  const [x,y,w,ht,title]=h;
+  return `<button type="button" class="hot" data-i="${i}" title="${esc(title)}"
+    style="left:${x}%;top:${y}%;width:${w}%;height:${ht}%"
+    aria-label="${esc(title)}"><span class="num">${i+1}</span></button>`;
+}
+function showHot(key,i){
+  const h=HOTSPOTS[key][i];
+  const cap=$("cap-"+key);
+  cap.innerHTML=`<div class="n">${i+1}</div><div class="t"><b>${esc(h[4])}</b>${esc(h[5])}</div>`;
+  Array.from(doc.querySelectorAll(`#fig-${key} .hot`)).forEach(
+    b=>b.classList.toggle("on",Number(b.dataset.i)===i));
+  Array.from(doc.querySelectorAll(`#list-${key} button`)).forEach(
+    b=>b.classList.toggle("on",Number(b.dataset.i)===i));
+}
+function buildFigure(key){
+  const fig=$("fig-"+key);
+  if(fig===null){return;}
+  const spots=HOTSPOTS[key];
+  fig.insertAdjacentHTML("beforeend",spots.map(hotHtml).join(""));
+  $("list-"+key).innerHTML=spots.map(
+    (h,i)=>`<button type="button" data-i="${i}">${i+1}. ${esc(h[4])}</button>`).join("");
+  const pick=ev=>{
+    const btn=ev.target.closest("button[data-i]");
+    if(btn!==null){showHot(key,Number(btn.dataset.i));}
+  };
+  fig.addEventListener("click",pick);
+  $("list-"+key).addEventListener("click",pick);
+}
+
+/* ---- shared canvas helpers ------------------------------------------- */
+function fit(cv){
+  const ratio=globalThis.devicePixelRatio||1;
+  const box=cv.getBoundingClientRect();
+  cv.width=Math.max(320,Math.round(box.width*ratio));
+  cv.height=Math.max(200,Math.round(box.height*ratio));
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  return {ctx,w:box.width,h:box.height};
+}
+const RANKS={1:{n:"CRITICAL",c:"#E2483D"},2:{n:"HIGH",c:"#E9863A"},3:{n:"ELEVATED",c:"#D9B23A"},
+  4:{n:"ROUTINE",c:"#3E8FD0"},5:{n:"BACKGROUND",c:"#8199B8"}};
+const AFFIL={RED:{n:"Red",c:"#FF4D4D"},BLUE:{n:"Blue",c:"#4DA6FF"},
+  OTHER:{n:"Other",c:"#F2F7FF"},UNKNOWN:{n:"Unknown",c:"#9AA7BC"}};
+const ageAlpha=h=>Math.max(0.18,1-Math.min(h,72)/72*0.82);
+const headSize=r=>{
+  if(r<=2){return 6;}
+  if(r===3){return 4.4;}
+  return 3.4;
+};
+
+/* ---- demo 1: marker anatomy ------------------------------------------ */
+function drawNeedle(ctx,px,py,raDeg,sz,colour,alpha){
+  const r=raDeg*Math.PI/180,dx=Math.sin(r),dy=-Math.cos(r);
+  const r0=sz+1.5,r1=sz+17;
+  ctx.save();ctx.globalAlpha=alpha;ctx.lineCap="round";
+  ctx.strokeStyle="rgba(4,8,15,.75)";ctx.lineWidth=4.2;
+  ctx.beginPath();ctx.moveTo(px+dx*r0,py+dy*r0);ctx.lineTo(px+dx*r1,py+dy*r1);ctx.stroke();
+  ctx.strokeStyle=colour;ctx.lineWidth=2.3;
+  ctx.beginPath();ctx.moveTo(px+dx*r0,py+dy*r0);ctx.lineTo(px+dx*r1,py+dy*r1);ctx.stroke();
+  ctx.restore();
+}
+function drawHeadShape(ctx,px,py,drift,sz){
+  if(Math.abs(drift)<=0.08){
+    ctx.beginPath();ctx.arc(px,py,sz,0,Math.PI*2);ctx.fill();
+    return;
+  }
+  const d=drift>0?1:-1,s=Math.min(9,sz+Math.abs(drift)*2.2);
+  ctx.beginPath();ctx.moveTo(px+d*s,py);ctx.lineTo(px-d*s*0.7,py-s*0.7);
+  ctx.lineTo(px-d*s*0.7,py+s*0.7);ctx.closePath();ctx.fill();
+}
+function drawTrail(ctx,px,py,drift,alpha){
+  const span=Math.max(6,Math.min(150,Math.abs(drift)*60+18));
+  const dir=drift>0?-1:1;
+  const grad=ctx.createLinearGradient(px+dir*span,py,px,py);
+  grad.addColorStop(0,"rgba(140,170,220,0)");
+  grad.addColorStop(1,"rgba(190,215,255,.75)");
+  ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=grad;ctx.lineWidth=2;ctx.lineCap="round";
+  ctx.beginPath();ctx.moveTo(px+dir*span,py+4);
+  ctx.quadraticCurveTo(px+dir*span*0.5,py+2,px,py);ctx.stroke();ctx.restore();
+}
+function labelAt(ctx,px,py,text,sz){
+  ctx.save();ctx.font="600 11.5px 'Segoe UI',system-ui,sans-serif";
+  ctx.globalAlpha=0.92;ctx.lineJoin="round";ctx.lineWidth=3;
+  ctx.strokeStyle="rgba(4,8,15,.9)";ctx.strokeText(text,px+sz+22,py+4);
+  ctx.fillStyle="#dde8f8";ctx.fillText(text,px+sz+22,py+4);ctx.restore();
+}
+function markerState(){
+  return {
+    rank:Number($("m-rank").value),
+    drift:Number($("m-drift").value)/100,
+    ra:Number($("m-ra").value),
+    age:Number($("m-age").value),
+    aff:$("m-aff").value,
+  };
+}
+function drawMarkerDemo(){
+  const cv=$("d-marker");
+  if(cv===null){return;}
+  const {ctx,w,h}=fit(cv);
+  const s=markerState();
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle="#070c16";ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle="#15213a";ctx.lineWidth=1;
+  for(let gx=40;gx<w;gx+=70){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
+  for(let gy=40;gy<h;gy+=60){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
+  const px=w*0.46,py=h*0.54,sz=headSize(s.rank),alpha=ageAlpha(s.age);
+  const colour=RANKS[s.rank].c;
+  drawTrail(ctx,px,py,s.drift,Math.max(0.25,alpha));
+  drawNeedle(ctx,px,py,s.ra,sz,AFFIL[s.aff].c,Math.max(0.7,alpha));
+  ctx.save();ctx.globalAlpha=alpha;
+  if(s.rank<=2){ctx.shadowColor=colour;ctx.shadowBlur=14;}
+  ctx.fillStyle=colour;drawHeadShape(ctx,px,py,s.drift,sz);ctx.restore();
+  labelAt(ctx,px,py,"TIANLIAN-3 01",sz);
+  const dirWord=s.drift>0?"east":"west";
+  const shape=Math.abs(s.drift)>0.08?("arrowhead, pointing "+dirWord):"circle (on station)";
+  $("m-rank-v").textContent="R"+s.rank;
+  $("m-drift-v").textContent=(s.drift>=0?"+":"")+s.drift.toFixed(2)+"°/day";
+  $("m-ra-v").textContent=s.ra+"°";
+  $("m-age-v").textContent=s.age+"h";
+  $("m-read").innerHTML=
+    `<b>${esc(RANKS[s.rank].n)}</b> at ${sz}&nbsp;px${s.rank<=2?" with halo":""}.<br>`
+    +`Shape: ${esc(shape)}.<br>`
+    +`Needle: <b style="color:${AFFIL[s.aff].c}">${esc(AFFIL[s.aff].n)}</b>, bearing ${s.ra}°.<br>`
+    +`Marker opacity ${alpha.toFixed(2)} at ${s.age}h.`;
+}
+
+/* ---- demo 2: libration against drift --------------------------------- */
+const SIDEREAL=0.9972695787;
+function series(ecc,drift,hours){
+  const amp=2*ecc*180/Math.PI;
+  const pts=[];
+  const stepH=0.5;
+  for(let t=-hours;t<=0;t+=stepH){
+    const d=t/24;
+    pts.push([d,drift*d+amp*Math.sin(2*Math.PI*d/SIDEREAL)]);
+  }
+  return pts;
+}
+function slope(pts){
+  const n=pts.length;
+  let mx=0,my=0;
+  pts.forEach(p=>{mx+=p[0];my+=p[1];});
+  mx/=n;my/=n;
+  let sxx=0,sxy=0;
+  pts.forEach(p=>{sxx+=(p[0]-mx)*(p[0]-mx);sxy+=(p[0]-mx)*(p[1]-my);});
+  return sxx<=0?0:sxy/sxx;
+}
+function plotSeries(ctx,w,h,pts,hours){
+  let lo=pts[0][1],hi=pts[0][1];
+  pts.forEach(p=>{lo=Math.min(lo,p[1]);hi=Math.max(hi,p[1]);});
+  const pad=Math.max(0.02,(hi-lo)*0.18);
+  lo-=pad;hi+=pad;
+  const sx=d=>30+(d+hours/24)/(hours/24)*(w-50);
+  const sy=v=>h-34-(v-lo)/(hi-lo)*(h-60);
+  return {sx,sy,lo,hi};
+}
+function drawDriftDemo(){
+  const cv=$("d-drift");
+  if(cv===null){return;}
+  const {ctx,w,h}=fit(cv);
+  const ecc=Number($("k-ecc").value)/10000;
+  const drift=Number($("k-drift").value)/100;
+  const hours=Number($("k-base").value);
+  const pts=series(ecc,drift,hours);
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle="#070c16";ctx.fillRect(0,0,w,h);
+  const sc=plotSeries(ctx,w,h,pts,hours);
+  ctx.strokeStyle="#15213a";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(30,h-34);ctx.lineTo(w-20,h-34);ctx.stroke();
+  ctx.save();ctx.strokeStyle="#4DA6FF";ctx.lineWidth=2;ctx.beginPath();
+  pts.forEach((p,i)=>{const X=sc.sx(p[0]),Y=sc.sy(p[1]);
+    if(i===0){ctx.moveTo(X,Y);}else{ctx.lineTo(X,Y);}});
+  ctx.stroke();ctx.restore();
+  const fitted=slope(pts);
+  const a=pts[0],b=pts[pts.length-1];
+  ctx.save();ctx.strokeStyle="#f0a52e";ctx.lineWidth=2;ctx.setLineDash([6,5]);
+  const mid=(a[1]+b[1])/2,midX=(a[0]+b[0])/2;
+  ctx.beginPath();
+  ctx.moveTo(sc.sx(a[0]),sc.sy(mid+fitted*(a[0]-midX)));
+  ctx.lineTo(sc.sx(b[0]),sc.sy(mid+fitted*(b[0]-midX)));
+  ctx.stroke();ctx.restore();
+  ctx.fillStyle="#7b90b3";ctx.font="11px 'Cascadia Mono',Consolas,monospace";
+  ctx.fillText("longitude",6,16);
+  ctx.fillText("-"+hours+"h",30,h-18);
+  ctx.fillText("now",w-44,h-18);
+  ctx.fillStyle="#4DA6FF";ctx.fillText("actual longitude",w-170,20);
+  ctx.fillStyle="#f0a52e";ctx.fillText("3-day straight-line fit",w-170,36);
+  const last=pts[pts.length-1],prev=pts[pts.length-2];
+  const twoPoint=(last[1]-prev[1])/(last[0]-prev[0]);
+  $("k-ecc-v").textContent=ecc.toFixed(4);
+  $("k-drift-v").textContent=drift.toFixed(2)+"°/day";
+  $("k-base-v").textContent=hours+"h";
+  const honest=hours>=24?"a usable baseline":"under 24h, so PSIRENS reports no rate at all";
+  $("k-read").innerHTML=
+    `True drift <b>${drift.toFixed(2)}°/day</b>.<br>`
+    +`A 30-minute difference reads <b style="color:#FF4D4D">${twoPoint.toFixed(2)}°/day</b>.<br>`
+    +`A straight-line fit over ${hours}h reads <b>${fitted.toFixed(2)}°/day</b>.<br>`
+    +`This baseline is ${esc(honest)}.<br>`
+    +`<span style="color:#7b90b3">PSIRENS also fits the once-a-day swing itself, which removes`
+    +` what remains of the orange error.</span>`;
+}
+
+/* ---- quiz ------------------------------------------------------------ */
+const QUESTIONS=[
+  {q:"A marker is bright red. What does that tell you?",
+   a:["It is rank R1, CRITICAL on the high-interest list",
+      "It is hostile","It is drifting west","Its data is stale"],
+   right:0,
+   why:"Colour is priority and nothing else. Nationality is on the needle, not the marker."},
+  {q:"An object shows Drift -3.80°/day but Track span 5.9° over 2000 fixes. Which do you believe?",
+   a:["The drift, it is the more precise number","The span, and check the drift fit's rms",
+      "Neither, reload the page","Both, they measure different things"],
+   right:1,
+   why:"3.8°/day would cover 5.9° in under two days, but the span covers the whole stored history. The rms on the drift fit will tell you how noisy the rate is."},
+  {q:"A needle is drawn in white. What does that mean?",
+   a:["The object is neutral in a conflict","No country was supplied by the feed",
+      "The country is known and on neither policy list","The element set is reconstructed"],
+   right:2,
+   why:"White is Other: a known country on neither list. Grey is Unknown, which means the feed gave no country at all."},
+  {q:"The amber banner says the data is 16 days old. What is the first thing you do?",
+   a:["Restart the service","Read the stated cause in the banner",
+      "Switch to Simulation","Widen the window to 30d"],
+   right:1,
+   why:"The banner carries the server's own reading of why the feed is dry: failing requests, nothing matching the list, or no completed pull. That decides what you do next."},
+  {q:"On the Co-Planar chart, which corner is the one worth a second look?",
+   a:["Top right","Bottom left","Top left","The dashed arc"],
+   right:1,
+   why:"Bottom left is small coplanar angle and small longitude separation: the same plane, in the same place. The dashed arcs are decoration on logarithmic axes."}
+];
+let answered=0,correct=0;
+function quizHtml(item,i){
+  return `<div class="quiz" data-qi="${i}">
+    <div class="q"><b>Q${i+1}.</b> ${esc(item.q)}</div>
+    <div class="opts">${item.a.map(
+      (opt,k)=>`<button type="button" data-k="${k}">${esc(opt)}</button>`).join("")}</div>
+    <div class="fb"></div></div>`;
+}
+function markAnswer(box,item,pick){
+  if(box.dataset.done==="1"){return;}
+  box.dataset.done="1";
+  answered+=1;
+  const ok=pick===item.right;
+  if(ok){correct+=1;}
+  Array.from(box.querySelectorAll(".opts button")).forEach(b=>{
+    const k=Number(b.dataset.k);
+    if(k===item.right){b.classList.add("right");}
+    if(k===pick&&!ok){b.classList.add("wrong");}
+  });
+  const lead=ok?"Correct.":"Not quite.";
+  box.querySelector(".fb").innerHTML=`<b>${lead}</b> ${esc(item.why)}`;
+  $("quizscore").textContent=correct+" of "+answered+" right";
+}
+function buildQuiz(){
+  const host=$("quiz");
+  if(host===null){return;}
+  host.innerHTML=`<div class="score" id="quizscore">0 of 0 right</div>`
+    +QUESTIONS.map(quizHtml).join("");
+  host.addEventListener("click",ev=>{
+    const btn=ev.target.closest(".opts button");
+    if(btn===null){return;}
+    const box=btn.closest(".quiz");
+    markAnswer(box,QUESTIONS[Number(box.dataset.qi)],Number(btn.dataset.k));
+  });
+}
+
+/* ---- running version ------------------------------------------------- */
+function showVersion(){
+  fetch("/api/meta").then(r=>{
+    if(r.ok){return r.json();}
+    throw new Error("meta unavailable");
+  }).then(j=>{
+    if(typeof j.version==="string"){
+      $("appver").textContent="for PSIRENS "+j.version;
+    }
+  }).catch(()=>{});
+}
+
+/* ---- wiring ---------------------------------------------------------- */
+function wire(ids,fn){
+  ids.forEach(id=>{const el=$(id);if(el!==null){el.addEventListener("input",fn);}});
+}
+buildToc();
+spy();
+Object.keys(HOTSPOTS).forEach(buildFigure);
+Object.keys(HOTSPOTS).forEach(k=>{if($("fig-"+k)!==null){showHot(k,0);}});
+buildQuiz();
+showVersion();
+wire(["m-rank","m-drift","m-ra","m-age","m-aff"],drawMarkerDemo);
+wire(["k-ecc","k-drift","k-base"],drawDriftDemo);
+$("find").addEventListener("input",ev=>runSearch(ev.target.value));
+$("printbtn").addEventListener("click",()=>globalThis.print());
+globalThis.addEventListener("resize",()=>{drawMarkerDemo();drawDriftDemo();});
+drawMarkerDemo();
+drawDriftDemo();
+})();
+</script>
+</body>
+</html>

@@ -250,6 +250,57 @@ function checkBodyFits(m, label) {
     }
 
     // ---------------------------------------------------------------------
+    // The Operator Guide (1.6.14). A guide that 404s, or whose figures do not
+    // load, is worse than no guide: it is a page that looks authoritative and
+    // is missing the thing it is explaining. Every figure is a served asset on
+    // an explicit allowlist, so forgetting to register one is a live risk.
+    // ---------------------------------------------------------------------
+    const guideErrors = [];
+    // An explicit context: browser.newPage() above made an implicit one, and
+    // Playwright refuses a second page on it.
+    const guideCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const guide = await guideCtx.newPage();
+    guide.on("pageerror", (e) => guideErrors.push(e.message));
+    const guideResp = await guide.goto(BASE + "/static/guide.html",
+                                       { waitUntil: "networkidle" });
+    if (guideResp === null || guideResp.status() !== 200) {
+      fail(`the Operator Guide returned ${guideResp && guideResp.status()}, not 200.`);
+    }
+    const broken = await guide.evaluate(() => Array.from(
+      document.images).filter((im) => im.naturalWidth === 0).map((im) => im.src));
+    if (broken.length) {
+      fail(`the guide has ${broken.length} figure(s) that did not load: ` +
+           `${broken.slice(0, 3).join(", ")}. Register the asset in ` +
+           `main._ASSET_MEDIA, or recapture it with tools/guide_shots.sh.`);
+    }
+    const tocCount = await guide.locator("#toclinks a").count();
+    const hotCount = await guide.locator("#fig-overview .hot").count();
+    if (tocCount < 10 || hotCount < 5) {
+      fail(`the guide built ${tocCount} contents links and ${hotCount} hotspots; ` +
+           `its script did not run.`);
+    }
+    // The hotspots are the interactive half: clicking one must change the caption.
+    const capBefore = await guide.textContent("#cap-overview");
+    await guide.locator("#fig-overview .hot").nth(3).click();
+    const capAfter = await guide.textContent("#cap-overview");
+    if (capBefore === capAfter) {
+      fail("clicking a guide hotspot did not change the caption, so the " +
+           "annotated figures are decorative rather than interactive.");
+    }
+    const canvasOk = await guide.evaluate(() => {
+      const c = document.getElementById("d-marker");
+      return c !== null && c.width > 10 && c.height > 10;
+    });
+    if (!canvasOk) { fail("the guide's live marker diagram did not size itself."); }
+    if (guideErrors.length) {
+      fail("uncaught exceptions in the Operator Guide: " +
+           guideErrors.slice(0, 3).join(" | "));
+    }
+    console.log(`  guide:      ${tocCount} sections, ${hotCount} hotspots, ` +
+                `${await guide.locator("img").count()} figures, no page errors`);
+    await guideCtx.close();
+
+    // ---------------------------------------------------------------------
     // The error path. A non-JSON error body used to make .json() reject, and
     // the catch could only say "service unavailable", hiding the stated cause.
     // That exact defect reached production once on /api/conjunctions; this

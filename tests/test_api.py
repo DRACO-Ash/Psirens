@@ -460,3 +460,49 @@ def test_the_version_string_is_the_same_in_both_places():
         declared = tomllib.load(fh)["project"]["version"]
     assert create_app().version == declared, (
         "src/psirens/main.py and pyproject.toml disagree on the version")
+
+
+# -- the Operator Guide (1.6.14) -------------------------------------------
+def test_the_guide_is_served(client):
+    r = client.get("/static/guide.html")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "Operator Guide" in r.text
+
+
+def test_every_figure_the_guide_references_is_servable(client):
+    """The server-side twin of the probe's check, so it also runs in the
+    platform test stage where there is no browser. Assets are an explicit
+    allowlist, so a new figure that nobody registered 404s in production while
+    looking fine in the editor."""
+    import re
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parents[1]
+            / "src/psirens/static/guide.html").read_text(encoding="utf-8")
+    figures = re.findall(r'<img src="([^"]+)"', page)
+    assert figures, "the guide should carry figures"
+    for name in figures:
+        assert client.get("/static/" + name).status_code == 200, name
+
+
+def test_every_guide_figure_has_alt_text(client):
+    """A screenshot with no alt text is a blank space to anyone using a screen
+    reader, and the guide is the one document a new operator cannot skip."""
+    import re
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parents[1]
+            / "src/psirens/static/guide.html").read_text(encoding="utf-8")
+    for tag in re.findall(r"<img\b[^>]*>", page):
+        alt = re.search(r'alt="([^"]*)"', tag)
+        assert alt is not None and len(alt.group(1)) > 20, tag[:80]
+
+
+def test_the_app_links_to_the_guide():
+    """Top right of the interface, which is where the owner asked for it."""
+    from pathlib import Path
+
+    spa = (Path(__file__).resolve().parents[1]
+           / "src/psirens/static/index.html").read_text(encoding="utf-8")
+    assert '/static/guide.html' in spa

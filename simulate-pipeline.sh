@@ -66,18 +66,24 @@ echo "sniff_check OK (self-test passed, no findings in src or tests)"
 # page (must not). One of these once matched its own explanatory comment, so
 # they are fragile enough to deserve testing.
 # ---------------------------------------------------------------------------
-SPA="src/psirens/static/index.html"
+# BOTH shipped pages, not just the SPA. The Operator Guide is served from the
+# same origin and analysed by the same scanner (sonar.sources=src), so an
+# unguarded second page is simply the old one-rule-per-cycle trap with a new
+# filename.
+SPA_PAGES="src/psirens/static/index.html src/psirens/static/guide.html"
 CASE="$ROOT/gate-cases/spa_case.html"
-spa_rule() {  # $1 = pattern, $2 = the message if the real page matches
+spa_rule() {  # $1 = pattern, $2 = the message if a shipped page matches
   if ! grep -qE "$1" "$CASE"; then
     echo "FAIL: pattern [$1] did not match the red case gate-cases/spa_case.html."
-    echo "      The check is broken, so a clean SPA proves nothing."
+    echo "      The check is broken, so a clean page proves nothing."
     exit 1
   fi
-  if grep -nE "$1" "$SPA"; then
-    echo "FAIL: $2"
-    exit 1
-  fi
+  for page in $SPA_PAGES; do
+    if grep -nE "$1" "$page"; then
+      echo "FAIL: $page: $2"
+      exit 1
+    fi
+  done
 }
 spa_rule '\bwindow\.' \
   'use globalThis instead of window.* in the SPA (SonarQube S6643)'
@@ -87,7 +93,7 @@ spa_rule 'getAttribute\("data-' \
   'use element.dataset.* instead of getAttribute("data-...") above (prefer-dataset)'
 spa_rule 'Promise\.reject' \
   "prefer 'throw error' over a returned rejected promise above (SonarJS)"
-echo "SPA text gates OK (all four bit the red case, none matched the SPA)"
+echo "SPA text gates OK (all four bit the red case, neither shipped page matched)"
 
 # ---------------------------------------------------------------------------
 # eslint covers a wider set of JS smells. It carries its own canary because an
@@ -136,10 +142,11 @@ export default [
 ESLINTCFG
     python3 - <<'EXTRACT'
 import re
-src = open("src/psirens/static/index.html").read()
-blocks = re.findall(r"<script>(.*?)</script>", src, re.S)
-assert blocks, "no inline script found in the SPA"
-open("_spa_lint.js", "w").write("\n".join(blocks))
+for page, out in (("index.html", "_spa_lint.js"), ("guide.html", "_guide_lint.js")):
+    src = open("src/psirens/static/" + page).read()
+    blocks = re.findall(r"<script>(.*?)</script>", src, re.S)
+    assert blocks, "no inline script found in " + page
+    open(out, "w").write("\n".join(blocks))
 # A deliberate violation of a rule the PLUGIN genuinely carries
 # (sonarjs/no-invariant-returns). If it is not flagged, eslint is not really
 # running here and the step must not report a pass. Verified by hand that
@@ -151,16 +158,17 @@ open("_spa_lint_canary.js", "w").write(
     "}\n")
 EXTRACT
     node --check _spa_lint.js || { echo "FAIL: SPA script is not valid JavaScript"; exit 1; }
+    node --check _guide_lint.js || { echo "FAIL: guide script is not valid JavaScript"; exit 1; }
     # Prove the gate bites before trusting it to pass.
     if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint_canary.js >/dev/null 2>&1; then
       echo "FAIL: SPA lint canary was NOT flagged; the linter is not running"; exit 1
     fi
-    if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint.js; then
-      echo "SPA lint OK (eslint + eslint-plugin-sonarjs bit the canary, no findings in the SPA)"
+    if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint.js _guide_lint.js; then
+      echo "SPA lint OK (eslint + eslint-plugin-sonarjs bit the canary, no findings in the SPA or the guide)"
     else
-      echo "FAIL: SonarJS findings in the SPA (see above)"; exit 1
+      echo "FAIL: SonarJS findings in a shipped page (see above)"; exit 1
     fi
-    rm -f _spa_lint.js _spa_lint_canary.js eslint.config.mjs node_modules
+    rm -f _spa_lint.js _guide_lint.js _spa_lint_canary.js eslint.config.mjs node_modules
   fi
 fi
 # ---------------------------------------------------------------------------

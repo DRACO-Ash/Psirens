@@ -54,6 +54,20 @@ _ASSET_MEDIA: dict[str, str] = {
     "psirens-banner.png": _PNG,
     "manifest.webmanifest": "application/manifest+json",
     "hrr-geo.json": "application/json",  # GEO subset of the JCO HRR list
+    # The Operator Guide and its figures. Every figure is a screenshot of this
+    # interface, captured by tools/guide_shots.sh; recapture them when the
+    # layout changes rather than redrawing them by hand.
+    "guide.html": "text/html; charset=utf-8",
+    "guide-overview.png": _PNG,
+    "guide-top.png": _PNG,
+    "guide-bar.png": _PNG,
+    "guide-rail.png": _PNG,
+    "guide-plot.png": _PNG,
+    "guide-legend.png": _PNG,
+    "guide-inspector.png": _PNG,
+    "guide-coplanar.png": _PNG,
+    "guide-country.png": _PNG,
+    "guide-stale.png": _PNG,
 }
 _ASSET_PATHS: dict[str, str] = {name: os.path.join(_STATIC, name) for name in _ASSET_MEDIA}
 
@@ -505,7 +519,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.13", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.14", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

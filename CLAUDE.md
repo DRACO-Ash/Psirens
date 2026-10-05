@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.13; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.14; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -53,15 +53,15 @@ rather than leaving `last_ingest_errors: []`.
 **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
 one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
 two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
-loop-capture finding, and 1.6.13 colours the RA needle by affiliation
-(see Open items).
+loop-capture finding, 1.6.13 colours the RA needle by affiliation, and 1.6.14
+adds the HTML Operator Guide (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.13: it carries everything.
+Upload 1.6.14: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -255,6 +255,15 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   or relative window).
 - `security.py` — token gate and rate limiting.
 - `main.py` — FastAPI app factory, routes, the tracks payload builder.
+- `static/guide.html` — the HTML Operator Guide, served at `/static/guide.html`
+  and linked from the top right of the SPA. Self-contained, no build step, same
+  dark theme. Carries annotated screenshots with clickable hotspots, two live
+  canvas demos (marker anatomy, and libration against drift), a five-question
+  self-check, a glossary and a reference card. Its FIGURES are real screenshots
+  of this interface, captured by `tools/guide_shots.sh`; recapture them when the
+  layout changes rather than redrawing them. Every figure is a registered asset
+  in `main._ASSET_MEDIA`, which is an allowlist, so a new figure that nobody
+  registers 404s in production.
 - `static/index.html` — the single-file canvas SPA (no build step). Version-agnostic
   render pipeline: `transform` (tracks to render objects), `drawTrails`,
   `drawHead` (+ `raNeedle`), the inspector modal, view/window/range controls.
@@ -264,6 +273,12 @@ Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
 `test_store.py`, `test_tle.py`.
 Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
 by the exporter, never hand-typed, so every "valid" line genuinely checksums.
+
+`tools/guide_seed.py` and `tools/guide_shots.sh` / `guide_shots.js` — seed a
+representative local store from the bundled HRR snapshot (real names, countries
+and ranks; synthesised geometry) and capture the guide's figures by driving the
+real controls. NOT part of the pipeline: run them when the interface changes.
+`GUIDE_SHOT_AGE_HOURS=400 GUIDE_SHOT_MODE=stale` captures the staleness banner.
 
 `tools/udl_elset_probe.py` — Script-mode, stdlib-only live probe of `/udl/elset`.
 Checks the four assumptions the native-TLE work rests on (line presence, satNo
@@ -307,7 +322,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   record arrived. `last_ingest_added: 0` is a second trap: on its own it
   cannot tell a quiet feed from a rejected one. `/readyz` stays 200 when
   stale by design.
-- `GET /healthz`, `/favicon.ico`, `/static/{name}`.
+- `GET /healthz`, `/favicon.ico`, `/static/{name}`. `{name}` is an ALLOWLIST
+  key, never a filesystem path built from input; the Operator Guide and its ten
+  figures are entries in it.
 
 ## Packaging and release
 
@@ -653,6 +670,44 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   non-JSON error body made `.json()` reject, the catch blanked the HRR map,
   and every REAL object silently vanished from the plot with no stated cause.
   Now checked, and the HRR note states the reason.
+- OPERATOR GUIDE: ADDED in 1.6.14. Owner asked for an engaging, comprehensive
+  in-app guide, 5 October 2026. `src/psirens/static/guide.html`, linked from a
+  Guide control at the top right of the title bar, opening in a new tab.
+  WHAT IT CONTAINS: eighteen sections, from a four-step one-minute version
+  through the axes, marker anatomy, ranks, the needle and affiliation, the
+  drift fit, the control bar, the rail, the inspector field by field, the
+  co-planar chart, data freshness, views and classification, four playbooks, a
+  self-check quiz, a glossary and a reference card of every threshold the
+  interface uses. Sticky contents with scroll-spy, a live search that hides
+  non-matching sections, and a print stylesheet.
+  FIGURES ARE REAL. `tools/guide_seed.py` builds a store from the bundled JCO
+  snapshot, so names, countries and ranks are the real list and the watchlist,
+  country panel and priority mix look like the real thing; the orbital geometry
+  is synthesised, because this machine has no feed access, and the guide says
+  so beside the figures. `tools/guide_shots.sh` then drives the real controls
+  (click a watchlist row, wait for the conjunction screen, open the co-planar
+  modal, select a country) and captures ten PNGs totalling about 1.9MB.
+  INTERACTIVE: each annotated figure carries percentage-positioned hotspot
+  BUTTONS (keyboard reachable, not divs) that drive a caption panel; two live
+  canvases redraw from the same rules the plot uses, one for marker anatomy and
+  one showing how a 30-minute difference reads an eccentricity libration as
+  drift; and a five-question quiz scores itself.
+  GATED, because a second shipped page is the one-rule-per-cycle trap with a
+  new filename. The four SPA text rules now run over BOTH pages, the eslint
+  step extracts and lints the guide's script alongside the SPA's, `sniff_check`
+  already covered it (`sonar.sources=src`), and the layout probe loads the
+  guide, asserts every figure actually rendered, that the contents and hotspots
+  were built, that clicking a hotspot changes the caption, that the live canvas
+  sized itself, and that nothing threw. Server-side twins of the figure and
+  alt-text checks live in `tests/test_api.py`, so they also run in the platform
+  test stage where there is no browser.
+  PROVEN: removing one figure from `main._ASSET_MEDIA` makes the probe fail
+  with "the guide has 1 figure(s) that did not load", naming the asset.
+  FALSE POSITIVE FOUND AND RECORDED: the `WEB-WINDOW` rule (`\bwindow\.`) fired
+  five times on the guide's PROSE, on sentences ending "...the window." A text
+  gate written for code meets ordinary English the moment a documentation page
+  ships from the same tree. The prose was reworded rather than the rule
+  weakened, because the rule is load-bearing; noted in SNIFFS.md 3.15.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
