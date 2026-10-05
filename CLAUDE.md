@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.15; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.16; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -54,15 +54,15 @@ rather than leaving `last_ingest_errors: []`.
 one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
 two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
 loop-capture finding, 1.6.13 colours the RA needle by affiliation, 1.6.14
-adds the HTML Operator Guide, and 1.6.15 makes that guide something an operator
-uses rather than reads (see Open items).
+adds the HTML Operator Guide, 1.6.15 makes that guide something an operator
+uses rather than reads, and 1.6.16 is the review pass over it (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.15: it carries everything.
+Upload 1.6.16: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -280,6 +280,12 @@ representative local store from the bundled HRR snapshot (real names, countries
 and ranks; synthesised geometry) and capture the guide's figures by driving the
 real controls. NOT part of the pipeline: run them when the interface changes.
 `GUIDE_SHOT_AGE_HOURS=400 GUIDE_SHOT_MODE=stale` captures the staleness banner.
+
+`tools/guide_standalone.py` — writes a single-file offline copy of the guide
+with every figure inlined as a data URI, for review before an upload. It never
+edits the shipped page. Use it whenever someone needs to exercise the sandbox,
+drills, tour and self-check without a server:
+`python3 tools/guide_standalone.py --out /tmp/guide-review.html`.
 
 `tools/udl_elset_probe.py` — Script-mode, stdlib-only live probe of `/udl/elset`.
 Checks the four assumptions the native-TLE work rests on (line presence, satNo
@@ -753,6 +759,23 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   the drill progress dots (extracted into `drillMarkClass`). The `WEB-WINDOW`
   prose false positive recurred once more on a new quiz question and was again
   reworded, not suppressed.
+- OPERATOR GUIDE review pass: 1.6.16, before the upload Ash asked to see first.
+  THREE CAPTURED FIGURES WERE ORPHANS. `guide-top.png`, `guide-plot.png` and
+  `guide-legend.png` were captured, registered as assets and packaged, and
+  referenced by nothing. Now used: the title bar beside the screen overview,
+  the belt at default zoom in the axes section, and the legend strip under the
+  ranks, where it carries the point that priority and affiliation are two
+  different channels. The probe's figure count moved from 7 to 10, which is
+  how the orphans would have been noticed sooner.
+  LABEL CLIPPING, found in a review screenshot of the sandbox: names drawn to
+  the right of a marker ran off the right edge, so two objects near 180deg read
+  as "TJS-" and a truncated "OBJECT 63157". `labelAt` now measures the text and
+  flips it to the left of the marker when it would overflow. On a plot that
+  wraps at the seam, the right edge is exactly where objects collect.
+  CONSOLE ERROR ON A FILE-SERVED COPY: `showVersion` fetched `/api/meta`
+  unconditionally, which on a `file://` copy logged "URL scheme file is not
+  supported" on a page that was otherwise working perfectly. It now only asks
+  when the page is actually being served over http or https.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

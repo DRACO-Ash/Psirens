@@ -313,6 +313,13 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     <div class="hotlist" id="list-overview"></div>
     <figcaption>Real World view, ranks R1 to R3 loaded, over a 24-hour window, with illustrative geometry.</figcaption>
   </figure>
+  <h3>The title bar</h3>
+  <figure>
+    <div class="fig"><img src="guide-top.png" alt="The title bar: product name, and on the right
+      the four summary readouts for objects in view, R1 to R2 count, drifting count and mean fix age."></div>
+    <figcaption>The four readouts follow every filter you apply, so they are the quickest check
+    that a filter is still on. <b>In view</b> shows the filtered count against the total held.</figcaption>
+  </figure>
 </section>
 
 <section id="axes">
@@ -339,6 +346,13 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">A dense vertical cluster</td><td>A popular slot. Several operators sharing a longitude band.</td></tr>
     </tbody>
   </table>
+
+  <figure>
+    <div class="fig"><img src="guide-plot.png" alt="The belt plot: longitude across the bottom,
+      inclination up the left, with markers, trails, drift arrowheads and bearing needles."></div>
+    <figcaption>The whole belt at default zoom. Most objects hug the bottom edge because most
+    operational satellites are actively station-kept at near-zero inclination.</figcaption>
+  </figure>
 
   <h3>Zoom and pan</h3>
   <div class="kbd-row"><kbd>scroll</kbd><span class="d">Zoom about the cursor, down to 0.05&deg; of
@@ -458,6 +472,14 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
         <td>3.4&nbsp;px</td><td>On demand</td></tr>
     </tbody>
   </table>
+  <figure>
+    <div class="fig"><img src="guide-legend.png" alt="The legend strip: the five priority ranks
+      with their colours, the three affiliation needle colours, and the trail and drift key."></div>
+    <figcaption>The legend sits under the plot and carries both keys: priority by marker colour,
+    affiliation by needle colour. If you remember one thing, remember that those are two different
+    channels.</figcaption>
+  </figure>
+
   <div class="note"><b>Why R4 and R5 wait.</b> They are three quarters of the list. Loading them
   on first paint would slow the opening picture for everyone to serve the minority of sessions
   that need them. Their chips read <i>tap to load</i> until you ask; after that, toggling them is
@@ -1061,11 +1083,18 @@ function drawTrail(ctx,px,py,drift,alpha){
   ctx.beginPath();ctx.moveTo(px+dir*span,py+4);
   ctx.quadraticCurveTo(px+dir*span*0.5,py+2,px,py);ctx.stroke();ctx.restore();
 }
-function labelAt(ctx,px,py,text,sz){
+function labelAt(ctx,px,py,text,sz,maxW){
   ctx.save();ctx.font="600 11.5px 'Segoe UI',system-ui,sans-serif";
+  // Flip to the left of the marker rather than run off the edge. Found in a
+  // review screenshot of the sandbox: two names near 180 degrees were cut in
+  // half, which on a plot that wraps is exactly where objects collect.
+  const textW=ctx.measureText(text).width;
+  const gap=sz+22;
+  const overflows=maxW!==undefined&&px+gap+textW>maxW-6;
+  const x=overflows?px-gap-textW:px+gap;
   ctx.globalAlpha=0.92;ctx.lineJoin="round";ctx.lineWidth=3;
-  ctx.strokeStyle="rgba(4,8,15,.9)";ctx.strokeText(text,px+sz+22,py+4);
-  ctx.fillStyle="#dde8f8";ctx.fillText(text,px+sz+22,py+4);ctx.restore();
+  ctx.strokeStyle="rgba(4,8,15,.9)";ctx.strokeText(text,x,py+4);
+  ctx.fillStyle="#dde8f8";ctx.fillText(text,x,py+4);ctx.restore();
 }
 function markerState(){
   return {
@@ -1093,7 +1122,7 @@ function drawMarkerDemo(){
   ctx.save();ctx.globalAlpha=alpha;
   if(s.rank<=2){ctx.shadowColor=colour;ctx.shadowBlur=14;}
   ctx.fillStyle=colour;drawHeadShape(ctx,px,py,s.drift,sz);ctx.restore();
-  labelAt(ctx,px,py,"TIANLIAN-3 01",sz);
+  labelAt(ctx,px,py,"TIANLIAN-3 01",sz,w);
   const dirWord=s.drift>0?"east":"west";
   const shape=Math.abs(s.drift)>0.08?("arrowhead, pointing "+dirWord):"circle (on station)";
   $("m-rank-v").textContent="R"+s.rank;
@@ -1317,6 +1346,9 @@ function buildQuiz(){
 
 /* ---- running version ------------------------------------------------- */
 function showVersion(){
+  // Opened from a file share or a review copy there is no app to ask, and an
+  // unguarded fetch logs a console error on a page that is working perfectly.
+  if(!/^https?:$/.test(globalThis.location.protocol)){return;}
   fetch("/api/meta").then(r=>{
     if(r.ok){return r.json();}
     throw new Error("meta unavailable");
@@ -1374,7 +1406,7 @@ function sbTrail(ctx,o,sc){
   ctx.save();ctx.strokeStyle=g;ctx.lineWidth=2;ctx.beginPath();
   ctx.moveTo(x0,sc.y(o.inc));ctx.lineTo(x1,sc.y(o.inc));ctx.stroke();ctx.restore();
 }
-function sbOne(ctx,o,sc){
+function sbOne(ctx,o,sc,w){
   const pos=sbPos(o),px=sc.x(pos.lon),py=sc.y(pos.inc);
   const sz=headSize(o.rank),alpha=ageAlpha(pos.age),colour=RANKS[o.rank].c;
   if(sb.trails){sbTrail(ctx,o,sc);}
@@ -1386,7 +1418,7 @@ function sbOne(ctx,o,sc){
     ctx.save();ctx.strokeStyle="#f0a52e";ctx.lineWidth=1.6;ctx.setLineDash([3,3]);
     ctx.beginPath();ctx.arc(px,py,sz+9,0,Math.PI*2);ctx.stroke();ctx.restore();
   }
-  if(sb.labels){labelAt(ctx,px,py,o.n,sz);}
+  if(sb.labels){labelAt(ctx,px,py,o.n,sz,w);}
   return {id:o.id,px,py,r:sz+9};
 }
 function sbVisible(){return FLEET.filter(o=>sb.ranks.has(o.rank));}
@@ -1397,7 +1429,7 @@ function drawSandbox(){
   ctx.clearRect(0,0,w,h);ctx.fillStyle="#070c16";ctx.fillRect(0,0,w,h);
   const sc=sbScale(w,h);
   sbGrid(ctx,w,h,sc);
-  sb.hits=sbVisible().map(o=>sbOne(ctx,o,sc));
+  sb.hits=sbVisible().map(o=>sbOne(ctx,o,sc,w));
   sbPanel();
 }
 function driftWord(o){
