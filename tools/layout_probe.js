@@ -296,8 +296,63 @@ function checkBodyFits(m, label) {
       fail("uncaught exceptions in the Operator Guide: " +
            guideErrors.slice(0, 3).join(" | "));
     }
+    // The interactive half (1.6.15). A guide that only renders is a brochure;
+    // these are the parts the operator is meant to USE, so each one is checked
+    // the way a person would use it.
+    //
+    // The sandbox hit test is swept rather than clicked at computed pixels: a
+    // probe that recreates the plot's own padding maths would pass while the
+    // real geometry drifted underneath it.
+    await guide.locator("#sb-canvas").scrollIntoViewIfNeeded();
+    const sandbox = await guide.locator("#sb-canvas").boundingBox();
+    if (sandbox === null) { fail("the guide's sandbox canvas is not on the page."); }
+    // Most of the belt sits low on the plot, so sweep the bottom bands first.
+    const rows = [0.95, 0.9, 0.85, 0.78, 0.7, 0.58, 0.42];
+    let opens = 0;
+    for (const gy of rows) {
+      for (let gx = 0.06; gx < 0.99 && opens < 3; gx += 0.014) {
+        await guide.mouse.click(sandbox.x + sandbox.width * gx,
+                                sandbox.y + sandbox.height * gy);
+        const panel = await guide.textContent("#sb-panel");
+        if ((panel || "").includes("Affiliation")) { opens += 1; }
+      }
+      if (opens >= 3) { break; }
+    }
+    if (opens < 3) {
+      fail(`clicking the sandbox opened ${opens} object panels; the hit test ` +
+           `is not finding the markers it draws.`);
+    }
+    const drillFb = (await guide.textContent("#drill") || "");
+    if (!/Correct|Not that one/.test(drillFb)) {
+      fail("the sandbox clicks did not reach the drill, so the scored tasks " +
+           "cannot be completed.");
+    }
+    // Progress: marking a section as read must move the ring.
+    const pctBefore = await guide.textContent("#ringtxt");
+    await guide.locator("button[data-done]").first().click();
+    const pctAfter = await guide.textContent("#ringtxt");
+    if (pctBefore === pctAfter) {
+      fail(`marking a section as read left the progress ring at ${pctBefore}.`);
+    }
+    // The self-check: twelve questions, and answering one must score it.
+    const qCount = await guide.locator(".quiz").count();
+    if (qCount < 12) { fail(`the self-check built ${qCount} questions, expected 12.`); }
+    await guide.locator(".quiz .opts button").first().click();
+    const score = await guide.textContent("#quizscore");
+    if (!/1 of 1|0 of 1/.test(score || "")) {
+      fail(`answering a question left the score reading ${JSON.stringify(score)}.`);
+    }
+    // The tour: starting it must highlight a section and raise the control bar.
+    await guide.click("#tourbtn");
+    if (await guide.locator("section.tourlit").count() !== 1) {
+      fail("starting the tour did not highlight exactly one section.");
+    }
+    if (await guide.locator("#tourbar").count() !== 1) {
+      fail("the tour started without its control bar.");
+    }
     console.log(`  guide:      ${tocCount} sections, ${hotCount} hotspots, ` +
-                `${await guide.locator("img").count()} figures, no page errors`);
+                `${await guide.locator("img").count()} figures, ${qCount} questions, ` +
+                `sandbox + drills + tour live, no page errors`);
     await guideCtx.close();
 
     // ---------------------------------------------------------------------

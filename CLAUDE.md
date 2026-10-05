@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.14; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.15; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -53,15 +53,16 @@ rather than leaving `last_ingest_errors: []`.
 **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
 one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
 two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
-loop-capture finding, 1.6.13 colours the RA needle by affiliation, and 1.6.14
-adds the HTML Operator Guide (see Open items).
+loop-capture finding, 1.6.13 colours the RA needle by affiliation, 1.6.14
+adds the HTML Operator Guide, and 1.6.15 makes that guide something an operator
+uses rather than reads (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.14: it carries everything.
+Upload 1.6.15: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -708,6 +709,50 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   gate written for code meets ordinary English the moment a documentation page
   ships from the same tree. The prose was reworded rather than the rule
   weakened, because the rule is load-bearing; noted in SNIFFS.md 3.15.
+- OPERATOR GUIDE, made interactive: ADDED in 1.6.15. Owner asked for more
+  interactivity, fun and engagement, so that an operator who engages with the
+  guide knows the application. Twenty sections now, and the additions are the
+  parts you USE:
+  THE SANDBOX. A working miniature belt with ten deterministic objects, drawn
+  by the SAME functions the guide uses for its marker demo (`drawHeadShape`,
+  `drawNeedle`, `headSize`, `ageAlpha`), so the 0.08deg/day arrowhead, the R1-R2
+  glow, the affiliation needle and the 72-hour fade all behave as they do on the
+  real plot. Rank chips, trails, needles, names, an "age the data" toggle, a
+  time scrubber over seven days and a Play button that animates the drifters.
+  Click any object for a mini inspector carrying the real field set.
+  The fleet is DETERMINISTIC on purpose: the drills below each have exactly one
+  right answer, and a random population would make "the fastest westward
+  drifter" a different object every reload.
+  SIX SCORED DRILLS against that sandbox: fastest west, no usable baseline,
+  Unknown affiliation, the R1 nearest 0deg, the highest inclination, fastest
+  east. A wrong click names what you picked and sends you back to its panel.
+  Starting a drill turns every rank chip back on, so an answer can never be
+  hidden behind a filter.
+  PROGRESS. A "Mark this section as read" control on every section, a progress
+  ring in the header, and the set kept in `localStorage` behind try/catch (a
+  locked-down browser is not a reason to break the page).
+  GUIDED TOUR with a floating control bar, section highlight, and Back / Next /
+  End. KEYBOARD: `/` search, `n`/`p` next and previous, `g` mark as read, `t`
+  tour, `?` the shortcut sheet, `Esc` out.
+  SELF-CHECK grown from five questions to TWELVE, shuffled per attempt, with a
+  scored band and an optional printable familiarisation record that names the
+  reader, the score and how many sections they marked read. Nothing is sent
+  anywhere; it prints from the browser.
+  GATED: the layout probe now sweeps the sandbox canvas to prove the hit test
+  finds the markers it draws (it sweeps rather than clicking computed pixels,
+  because a probe that recreates the plot's own padding maths would pass while
+  the real geometry drifted underneath it), checks the drill reacted, that
+  marking a section moves the ring, that the self-check built twelve questions
+  and scores an answer, and that starting the tour highlights exactly one
+  section and raises its bar. PROVEN: setting the hit radius to zero makes it
+  fail with "clicking the sandbox opened 0 object panels".
+  TWO SCANNER FINDINGS, both fixed rather than argued: `sonarjs/pseudo-random`
+  on `Math.random` in the quiz shuffle (now `crypto.getRandomValues`, because
+  the scanner cannot tell a quiz from a token and the honest fix is cheaper
+  than the argument), and a nested ternary inside a nested template literal in
+  the drill progress dots (extracted into `drillMarkClass`). The `WEB-WINDOW`
+  prose false positive recurred once more on a new quiz question and was again
+  reworded, not suppressed.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

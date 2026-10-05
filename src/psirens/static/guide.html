@@ -148,7 +148,85 @@ mark{background:#3a2707;color:#ffd98a;border-radius:3px;padding:0 2px}
   color:var(--faint);font-size:12px}
 .kbd-row{display:flex;gap:10px;align-items:baseline;margin:6px 0}
 .kbd-row .d{color:var(--dim);font-size:13.5px}
-@media print{.toc,.gbar,.demo .ctl,.hotlist{display:none}.shell{grid-template-columns:1fr}
+/* ---- progress ring, tour, shortcuts ---------------------------------- */
+.ring{position:relative;width:38px;height:38px;flex:none}
+.ring svg{width:38px;height:38px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:3}
+.ring .rbg{stroke:#1b2740}
+.ring .rfg{stroke:#f0a52e;stroke-linecap:round;stroke-dasharray:97.4;stroke-dashoffset:97.4;
+  transition:stroke-dashoffset .4s}
+.ring span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10px;color:var(--dim)}
+.keysheet{position:fixed;top:64px;right:26px;z-index:60;background:#0e1524;border:1px solid var(--line2);
+  border-radius:10px;padding:14px 18px;box-shadow:0 18px 50px rgba(0,0,0,.6);width:290px}
+.keysheet h3{margin:0 0 8px;font-size:13px}
+.done{display:flex;align-items:center;gap:10px;margin:18px 0 4px;padding:10px 14px;
+  border:1px solid var(--line);border-radius:8px;background:#0c1322;max-width:78ch}
+.done button{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--dim)}
+.done .box{width:19px;height:19px;border:1.5px solid var(--line2);border-radius:5px;flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:12px;color:#0a1120}
+.done.on{border-color:#2f7d53;background:#0b1a13}
+.done.on .box{background:#3fd27b;border-color:#3fd27b}
+.done.on button{color:#bfe7cf}
+section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);border-radius:10px}
+.tourbar{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:60;display:flex;
+  align-items:center;gap:14px;background:#0e1524;border:1px solid var(--line2);border-radius:28px;
+  padding:9px 16px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+.tourbar .lbl{font-size:12.5px;color:var(--dim)}
+.tourbar b{color:var(--ink)}
+
+/* ---- sandbox --------------------------------------------------------- */
+.sandbox{background:#0b1220;border:1px solid var(--line2);border-radius:10px;padding:16px;margin:18px 0}
+.sandbox canvas{width:100%;height:360px;display:block;border-radius:7px;background:#070c16;cursor:pointer}
+.sbrow{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:12px}
+.sbrow .lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.chip{border:1px solid var(--line2);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--dim);
+  display:inline-flex;align-items:center;gap:7px}
+.chip .sw{width:9px;height:9px;margin:0}
+.chip.off{opacity:.42}
+.chip.on{color:var(--ink)}
+.sbgrid{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px}
+.sbpanel{background:#0e1524;border:1px solid var(--line);border-radius:9px;padding:14px;font-size:13px}
+.sbpanel h5{margin:0 0 9px;font-size:14.5px}
+.sbpanel dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:12.5px}
+.sbpanel dt{color:var(--faint)}
+.sbpanel dd{margin:0;text-align:right;font-family:var(--mono);color:var(--ink)}
+.sbhint{color:var(--faint);font-size:12.5px}
+.scrub{display:flex;align-items:center;gap:10px;margin-top:11px}
+.scrub input{flex:1;accent-color:#f0a52e}
+.scrub .t{font-family:var(--mono);font-size:12.5px;color:var(--accent);min-width:62px;text-align:right}
+@media(max-width:980px){.sbgrid{grid-template-columns:minmax(0,1fr)}}
+
+/* ---- drills ---------------------------------------------------------- */
+.drill{background:#0e1524;border:1px solid var(--line2);border-radius:10px;padding:15px 17px;margin:16px 0}
+.drill .task{font-size:15px;margin-bottom:8px}
+.drill .task b{color:var(--accent)}
+.drill .fb{font-size:13.5px;color:var(--dim);min-height:40px}
+.drill .fb.ok{color:#bfe7cf}
+.drill .fb.no{color:#f6d3cf}
+.drill .bar{display:flex;gap:9px;align-items:center;margin-top:10px}
+.drill .dots{display:flex;gap:5px;margin-left:auto}
+.drill .dots i{width:9px;height:9px;border-radius:50%;background:#1b2740;display:block}
+.drill .dots i.ok{background:#3fd27b}
+.drill .dots i.no{background:#E2483D}
+
+/* ---- quiz result ------------------------------------------------------ */
+.result{margin-top:16px;padding:16px 18px;border:1px solid var(--line2);border-radius:10px;
+  background:#0c1322}
+.result h4{margin:0 0 6px}
+.result .band{font-family:var(--mono);font-size:27px;color:var(--accent)}
+.record{margin-top:12px;font-size:12.5px;color:var(--dim)}
+.record input{background:#0b1220;border:1px solid var(--line2);border-radius:6px;color:var(--ink);
+  padding:5px 10px;font:inherit;font-size:13px;width:220px}
+
+/* ---- glossary popovers ----------------------------------------------- */
+.term{border-bottom:1px dotted var(--accent);cursor:help;color:var(--ink)}
+.pop{position:absolute;z-index:70;max-width:310px;background:#121b2e;border:1px solid var(--line2);
+  border-radius:8px;padding:10px 13px;font-size:12.5px;color:var(--dim);
+  box-shadow:0 14px 40px rgba(0,0,0,.6)}
+.pop b{color:var(--accent);display:block;margin-bottom:3px}
+
+@media print{.toc,.gbar,.demo .ctl,.hotlist,.keysheet,.tourbar,.sandbox,.drill{display:none}.shell{grid-template-columns:1fr}
   body{background:#fff;color:#111}.card,.note,.fig,.figcap{break-inside:avoid}}
 </style>
 </head>
@@ -157,10 +235,24 @@ mark{background:#3a2707;color:#ffd98a;border-radius:3px;padding:0 2px}
   <span class="brand">Bluestaq</span>
   <h1>PSIRENS Operator Guide<span id="appver">GEO Sentinel Command</span></h1>
   <div class="spacer"></div>
-  <input type="search" id="find" placeholder="Search the guide" aria-label="Search the guide">
+  <input type="search" id="find" placeholder="Search the guide  (press /)" aria-label="Search the guide">
+  <div class="ring" id="ring" title="Sections you have marked as read">
+    <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15.5"></circle>
+      <circle class="rfg" id="rfg" cx="18" cy="18" r="15.5"></circle></svg>
+    <span id="ringtxt">0%</span></div>
+  <button type="button" class="gbtn" id="tourbtn">Take the tour</button>
+  <button type="button" class="gbtn" id="keysbtn" aria-label="Keyboard shortcuts">?</button>
   <button type="button" class="gbtn" id="printbtn">Print</button>
   <a class="gbtn primary" href="/">Open PSIRENS</a>
 </header>
+<div class="keysheet" id="keysheet" hidden>
+  <h3>Keyboard</h3>
+  <div class="kbd-row"><kbd>/</kbd><span class="d">Jump to search</span></div>
+  <div class="kbd-row"><kbd>n</kbd><kbd>p</kbd><span class="d">Next or previous section</span></div>
+  <div class="kbd-row"><kbd>g</kbd><span class="d">Mark the section you are reading as read</span></div>
+  <div class="kbd-row"><kbd>t</kbd><span class="d">Start or stop the tour</span></div>
+  <div class="kbd-row"><kbd>Esc</kbd><span class="d">Close this, or leave the tour</span></div>
+</div>
 
 <div class="shell">
 <nav class="toc" id="toc" aria-label="Guide contents">
@@ -302,6 +394,49 @@ mark{background:#3a2707;color:#ffd98a;border-radius:3px;padding:0 2px}
       <p>The marker dims as its element set ages, bottoming out at 72 hours. Names and needles
       have a brightness floor so they stay readable when the marker does not.</p></div>
   </div>
+</section>
+
+<section id="sandbox">
+  <h2 class="sec">The sandbox <span class="pill">live</span></h2>
+  <p class="lede">A working belt you cannot break. Same drawing rules, same thresholds, same
+  inspector fields as the real plot. Scrub time and watch the drifters move. Click anything.</p>
+
+  <div class="sandbox">
+    <div class="sbrow">
+      <span class="lbl">Show</span><div id="sb-chips"></div>
+      <button type="button" class="chip on" id="sb-trails">Trails</button>
+      <button type="button" class="chip on" id="sb-needles">Needles</button>
+      <button type="button" class="chip on" id="sb-labels">Names</button>
+      <button type="button" class="chip" id="sb-age">Age the data</button>
+    </div>
+    <div class="sbgrid">
+      <div>
+        <canvas id="sb-canvas" width="900" height="360"
+          aria-label="An interactive miniature of the belt plot. Click an object to inspect it."></canvas>
+        <div class="scrub">
+          <span class="lbl">Time</span>
+          <input type="range" id="sb-time" min="0" max="168" step="1" value="0"
+            aria-label="Hours of simulated time">
+          <span class="t" id="sb-time-v">now</span>
+          <button type="button" class="chip" id="sb-play">Play</button>
+        </div>
+      </div>
+      <div class="sbpanel" id="sb-panel"></div>
+    </div>
+  </div>
+
+  <div class="note"><b>Everything here matches the real thing.</b> 0.08&deg;/day turns the circle
+  into an arrowhead. R1 and R2 draw bigger and glow. Needles colour by affiliation. The fade
+  bottoms out at 72 hours. If it behaves this way here, it behaves this way on the belt.</div>
+</section>
+
+<section id="drills">
+  <h2 class="sec">Drills <span class="pill">scored</span></h2>
+  <p class="lede">Six tasks on the sandbox above. Read the task, scroll up, click the object you
+  think it is. The sandbox scrolls into view when you start.</p>
+  <div class="drill" id="drill"></div>
+  <div class="note"><b>Why drills and not a reading list.</b> Nobody learns a plot by being told
+  what the symbols mean. You learn it by being asked to find something and getting it wrong once.</div>
 </section>
 
 <section id="priority">
@@ -677,8 +812,10 @@ mark{background:#3a2707;color:#ffd98a;border-radius:3px;padding:0 2px}
 
 <section id="check">
   <h2 class="sec">Check yourself</h2>
-  <p class="lede">Five questions. They are the five things that most often get misread.</p>
+  <p class="lede">Twelve questions, drawn in a different order each time. They are the things
+  that most often get misread on a real panel.</p>
   <div id="quiz"></div>
+  <div class="result" id="result" hidden></div>
 </section>
 
 <section id="glossary">
@@ -748,6 +885,7 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 const SECTIONS=[
   ["start","Start here"],["screen","The screen at a glance"],["axes","Reading the belt"],
   ["marker","Anatomy of a marker"],["priority","Priority: the HRR ranks"],
+  ["sandbox","The sandbox"],["drills","Drills"],
   ["affiliation","RA needle and affiliation"],["drift","Drift, and why it is fitted"],
   ["trails","Trails and age"],["bar","The control bar"],["rail","The left rail"],
   ["inspector","The inspector"],["coplanar","The Co-Planar view"],
@@ -1048,37 +1186,101 @@ function drawDriftDemo(){
 /* ---- quiz ------------------------------------------------------------ */
 const QUESTIONS=[
   {q:"A marker is bright red. What does that tell you?",
-   a:["It is rank R1, CRITICAL on the high-interest list",
-      "It is hostile","It is drifting west","Its data is stale"],
-   right:0,
+   a:["It is rank R1, CRITICAL on the high-interest list","It is hostile",
+      "It is drifting west","Its data is stale"],right:0,
    why:"Colour is priority and nothing else. Nationality is on the needle, not the marker."},
   {q:"An object shows Drift -3.80°/day but Track span 5.9° over 2000 fixes. Which do you believe?",
    a:["The drift, it is the more precise number","The span, and check the drift fit's rms",
-      "Neither, reload the page","Both, they measure different things"],
-   right:1,
-   why:"3.8°/day would cover 5.9° in under two days, but the span covers the whole stored history. The rms on the drift fit will tell you how noisy the rate is."},
+      "Neither, reload the page","Both, they measure different things"],right:1,
+   why:"3.8°/day would cover 5.9° in under two days, but the span covers the whole stored history."},
   {q:"A needle is drawn in white. What does that mean?",
    a:["The object is neutral in a conflict","No country was supplied by the feed",
-      "The country is known and on neither policy list","The element set is reconstructed"],
-   right:2,
-   why:"White is Other: a known country on neither list. Grey is Unknown, which means the feed gave no country at all."},
+      "The country is known and on neither policy list","The element set is reconstructed"],right:2,
+   why:"White is Other: a known country on neither list. Grey is Unknown, which means no country at all."},
   {q:"The amber banner says the data is 16 days old. What is the first thing you do?",
-   a:["Restart the service","Read the stated cause in the banner",
-      "Switch to Simulation","Widen the window to 30d"],
-   right:1,
-   why:"The banner carries the server's own reading of why the feed is dry: failing requests, nothing matching the list, or no completed pull. That decides what you do next."},
-  {q:"On the Co-Planar chart, which corner is the one worth a second look?",
-   a:["Top right","Bottom left","Top left","The dashed arc"],
-   right:1,
-   why:"Bottom left is small coplanar angle and small longitude separation: the same plane, in the same place. The dashed arcs are decoration on logarithmic axes."}
-];
+   a:["Restart the service","Read the stated cause in the banner","Switch to Simulation",
+      "Widen the window to 30d"],right:1,
+   why:"The banner carries the server's own reading of why the feed is dry. That decides what you do next."},
+  {q:"On the Co-Planar chart, which corner is worth a second look?",
+   a:["Top right","Bottom left","Top left","Wherever the dashed arc crosses"],right:1,
+   why:"Bottom left is small coplanar angle and small longitude separation: same plane, same place."},
+  {q:"An object sits at 6° inclination. The most likely explanation is:",
+   a:["It is accelerating","Its inclination is no longer being corrected",
+      "It is a simulated object","Its element set is reconstructed"],right:1,
+   why:"Inclination builds at roughly 0.8° a year once station-keeping stops. High up the plot often means retired in place."},
+  {q:"The inspector reads “no usable baseline” under Drift. That means:",
+   a:["The object is not moving","Under 24 hours of fixes, so no rate is claimed",
+      "The feed is down","The object has no element set"],right:1,
+   why:"Below one full sidereal day a rate would be measuring libration, not drift. Withholding it is the honest answer."},
+  {q:"A drift fit line ends “plain line” rather than “libration modelled”. You should:",
+   a:["Trust it more, it is simpler","Treat a small rate with more caution",
+      "Ignore the object","Re-pull the window"],right:1,
+   why:"It means the fixes were too sparse to resolve the once-a-day swing, so some of it may still be in the rate."},
+  {q:"An object draws hollow rather than filled. It is:",
+   a:["Stale","Low priority","Not REAL data: simulated, exercise or test","Missing a country"],right:2,
+   why:"Hollow is the data-mode cue. Simulation view is guaranteed to carry zero real objects."},
+  {q:"The copy control is missing from an element set. Why?",
+   a:["The object is classified above your level","The marking carries a caveat, so the gate fails closed",
+      "The lines are reconstructed","The feed is stale"],right:1,
+   why:"The control is offered only for a plain unclassified, caveat-free marking, and the reason is stated beside it."},
+  {q:"R4 and R5 chips read “tap to load”. That is because:",
+   a:["Those objects are not in the feed","They are three quarters of the list, fetched on demand",
+      "They need a team token","They are simulated"],right:1,
+   why:"First paint carries R1 to R3 so the opening picture is fast. The rest arrive when you ask."},
+  {q:"You press Refresh with a 30d span selected. What actually happens?",
+   a:["The screen redraws from what is already stored",
+      "A real pull from the feed, sliced and paced by the server","Nothing until the next hour",
+      "The store is cleared and rebuilt"],right:1,
+   why:"It is a live pull, rate limited, and deliberately sliced: asking for everything at once is what once left the picture a fortnight behind."}];
 let answered=0,correct=0;
+function shuffled(list){
+  // crypto rather than Math.random: not because shuffling a quiz is
+  // security-sensitive, but because the scanner cannot tell the difference and
+  // the honest fix is cheaper than arguing the instance.
+  const out=list.slice();
+  const bag=new Uint32Array(out.length);
+  globalThis.crypto.getRandomValues(bag);
+  for(let i=out.length-1;i>0;i-=1){
+    const j=bag[i]%(i+1);
+    const tmp=out[i];out[i]=out[j];out[j]=tmp;
+  }
+  return out;
+}
+let quizOrder=[];
 function quizHtml(item,i){
   return `<div class="quiz" data-qi="${i}">
     <div class="q"><b>Q${i+1}.</b> ${esc(item.q)}</div>
     <div class="opts">${item.a.map(
       (opt,k)=>`<button type="button" data-k="${k}">${esc(opt)}</button>`).join("")}</div>
     <div class="fb"></div></div>`;
+}
+function band(score,total){
+  const pct=score/total;
+  if(pct>=0.9){return "Ready for the console";}
+  if(pct>=0.7){return "Nearly there";}
+  if(pct>=0.5){return "Worth another pass";}
+  return "Re-read the sections you skipped";
+}
+function showResult(){
+  const host=$("result");
+  if(host===null||answered<QUESTIONS.length){return;}
+  host.hidden=false;
+  const stamp=new Date().toISOString().slice(0,16).replace("T"," ")+"Z";
+  host.innerHTML=`<h4>Self-check complete</h4>
+    <div class="band">${correct} of ${QUESTIONS.length} &middot; ${esc(band(correct,QUESTIONS.length))}</div>
+    <div class="record">A familiarisation record, if your unit keeps one. Nothing is sent anywhere;
+      this is printed from your own browser.<br>
+      <label for="whoami">Name</label>
+      <input id="whoami" placeholder="Your name" autocomplete="name">
+      <button type="button" class="gbtn" id="printrec">Print the record</button>
+      <div id="recline" style="margin-top:9px"></div></div>`;
+  $("printrec").addEventListener("click",()=>{
+    const who=$("whoami").value.trim()||"(unnamed)";
+    $("recline").innerHTML=`<b>PSIRENS Operator Guide familiarisation</b><br>`
+      +`${esc(who)} &middot; ${esc(stamp)} &middot; self-check ${correct}/${QUESTIONS.length} &middot; `
+      +`sections read ${readSet.size}/${SECTIONS.length}`;
+    globalThis.print();
+  });
 }
 function markAnswer(box,item,pick){
   if(box.dataset.done==="1"){return;}
@@ -1094,17 +1296,22 @@ function markAnswer(box,item,pick){
   const lead=ok?"Correct.":"Not quite.";
   box.querySelector(".fb").innerHTML=`<b>${lead}</b> ${esc(item.why)}`;
   $("quizscore").textContent=correct+" of "+answered+" right";
+  showResult();
 }
 function buildQuiz(){
   const host=$("quiz");
   if(host===null){return;}
+  answered=0;correct=0;
+  quizOrder=shuffled(QUESTIONS);
   host.innerHTML=`<div class="score" id="quizscore">0 of 0 right</div>`
-    +QUESTIONS.map(quizHtml).join("");
+    +quizOrder.map(quizHtml).join("");
+  const res=$("result");
+  if(res!==null){res.hidden=true;}
   host.addEventListener("click",ev=>{
     const btn=ev.target.closest(".opts button");
     if(btn===null){return;}
     const box=btn.closest(".quiz");
-    markAnswer(box,QUESTIONS[Number(box.dataset.qi)],Number(btn.dataset.k));
+    markAnswer(box,quizOrder[Number(box.dataset.qi)],Number(btn.dataset.k));
   });
 }
 
@@ -1120,6 +1327,362 @@ function showVersion(){
   }).catch(()=>{});
 }
 
+/* ---- the sandbox: a belt you cannot break ---------------------------- */
+// Deterministic on purpose. The drills below have exactly one right answer
+// each, and a random population would make "the fastest westward drifter" a
+// different object every reload.
+const FLEET=[
+  {id:"100172",n:"TIANLIAN-3 01",cc:"CHN",rank:1,lon:-150.6,inc:0.08,drift:0,ra:126,aff:"RED",age:0.5,base:true},
+  {id:"41748", n:"USA 270",      cc:"USA",rank:1,lon:-22.4, inc:0.4, drift:-0.02,ra:44, aff:"BLUE",age:1.2,base:true},
+  {id:"63524", n:"TJS-17",       cc:"CHN",rank:2,lon:158.6, inc:1.33,drift:0,   ra:81, aff:"RED",age:0.8,base:true},
+  {id:"90210", n:"DRIFTER-1",    cc:"CHN",rank:2,lon:64,    inc:2.1, drift:-3.4,ra:212,aff:"RED",age:2.5,base:true},
+  {id:"38977", n:"COSMOS 2590",  cc:"RUS",rank:3,lon:-97,   inc:2.9, drift:1.8, ra:300,aff:"RED",age:6,  base:true},
+  {id:"41836", n:"SES-10",       cc:"LUX",rank:3,lon:-67,   inc:0.05,drift:0.01,ra:15, aff:"OTHER",age:3,base:true},
+  {id:"28924", n:"EUTELSAT 174A",cc:"FRA",rank:4,lon:174,   inc:6.9, drift:0.6, ra:190,aff:"BLUE",age:14,base:true},
+  {id:"44476", n:"INTELSAT 39",  cc:"ITSO",rank:4,lon:62,   inc:0.12,drift:-0.03,ra:275,aff:"OTHER",age:40,base:true},
+  {id:"63157", n:"OBJECT 63157", cc:"",   rank:5,lon:120,   inc:4.1, drift:0.2, ra:95, aff:"UNKNOWN",age:70,base:true},
+  {id:"59001", n:"NEW ENTRY",    cc:"JPN",rank:5,lon:10,    inc:0.9, drift:0,   ra:150,aff:"BLUE",age:0.3,base:false}];
+const sb={ranks:new Set([1,2,3,4,5]),trails:true,needles:true,labels:true,aged:false,
+  hours:0,sel:null,playing:false,timer:null,hits:[]};
+const wrapLon=d=>(d+180)%360-180+(d<-180?360:0);
+function sbPos(o){
+  return {lon:wrapLon(o.lon+o.drift*(sb.hours/24)),inc:o.inc,
+    age:o.age+sb.hours+(sb.aged?36:0)};
+}
+function sbScale(w,h){
+  const padL=44,padR=16,padT=14,padB=30;
+  return {x:lon=>padL+(lon+180)/360*(w-padL-padR),
+    y:inc=>h-padB-inc/8*(h-padT-padB),padL,padB};
+}
+function sbGrid(ctx,w,h,sc){
+  ctx.strokeStyle="#15213a";ctx.lineWidth=1;ctx.fillStyle="#52678c";
+  ctx.font="10px 'Cascadia Mono',Consolas,monospace";
+  [-180,-120,-60,0,60,120,180].forEach(l=>{
+    const X=sc.x(l);ctx.beginPath();ctx.moveTo(X,0);ctx.lineTo(X,h-sc.padB);ctx.stroke();
+    ctx.fillText(l+"°",X-10,h-12);});
+  [0,2,4,6,8].forEach(i=>{
+    const Y=sc.y(i);ctx.beginPath();ctx.moveTo(sc.padL,Y);ctx.lineTo(w,Y);ctx.stroke();
+    ctx.fillText(i+"°",6,Y+3);});
+}
+function sbTrail(ctx,o,sc){
+  const back=Math.max(0,sb.hours-24);
+  const x0=sc.x(wrapLon(o.lon+o.drift*(back/24))),x1=sc.x(sbPos(o).lon);
+  if(Math.abs(x1-x0)<1.5){return;}
+  const g=ctx.createLinearGradient(x0,0,x1,0);
+  g.addColorStop(0,"rgba(150,180,230,0)");
+  g.addColorStop(1,"rgba(190,215,255,.6)");
+  ctx.save();ctx.strokeStyle=g;ctx.lineWidth=2;ctx.beginPath();
+  ctx.moveTo(x0,sc.y(o.inc));ctx.lineTo(x1,sc.y(o.inc));ctx.stroke();ctx.restore();
+}
+function sbOne(ctx,o,sc){
+  const pos=sbPos(o),px=sc.x(pos.lon),py=sc.y(pos.inc);
+  const sz=headSize(o.rank),alpha=ageAlpha(pos.age),colour=RANKS[o.rank].c;
+  if(sb.trails){sbTrail(ctx,o,sc);}
+  if(sb.needles){drawNeedle(ctx,px,py,o.ra,sz,AFFIL[o.aff].c,Math.max(0.7,alpha));}
+  ctx.save();ctx.globalAlpha=alpha;
+  if(o.rank<=2){ctx.shadowColor=colour;ctx.shadowBlur=14;}
+  ctx.fillStyle=colour;drawHeadShape(ctx,px,py,o.drift,sz);ctx.restore();
+  if(sb.sel===o.id){
+    ctx.save();ctx.strokeStyle="#f0a52e";ctx.lineWidth=1.6;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.arc(px,py,sz+9,0,Math.PI*2);ctx.stroke();ctx.restore();
+  }
+  if(sb.labels){labelAt(ctx,px,py,o.n,sz);}
+  return {id:o.id,px,py,r:sz+9};
+}
+function sbVisible(){return FLEET.filter(o=>sb.ranks.has(o.rank));}
+function drawSandbox(){
+  const cv=$("sb-canvas");
+  if(cv===null){return;}
+  const {ctx,w,h}=fit(cv);
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#070c16";ctx.fillRect(0,0,w,h);
+  const sc=sbScale(w,h);
+  sbGrid(ctx,w,h,sc);
+  sb.hits=sbVisible().map(o=>sbOne(ctx,o,sc));
+  sbPanel();
+}
+function driftWord(o){
+  if(!o.base){return "no usable baseline";}
+  if(Math.abs(o.drift)<=0.05){return "on station";}
+  return (o.drift>0?"+":"")+o.drift.toFixed(2)+"°/day "+(o.drift>0?"E":"W");
+}
+function sbPanel(){
+  const host=$("sb-panel");
+  if(host===null){return;}
+  const o=FLEET.find(f=>f.id===sb.sel);
+  if(o===undefined){
+    host.innerHTML=`<h5>Inspector</h5><p class="sbhint">Click any object on the plot.
+      You get the same fields the real inspector gives you, from the same rules.</p>`;
+    return;
+  }
+  const pos=sbPos(o);
+  const fitLine=o.base?"±0.004° rms · 72h · 37 fixes":"under 24h of fixes";
+  host.innerHTML=`<h5 style="color:${RANKS[o.rank].c}">${esc(o.n)}</h5>
+    <dl><dt>Catalogue</dt><dd>${esc(o.id)}${o.cc?" · "+esc(o.cc):""}</dd>
+    <dt>Priority</dt><dd style="color:${RANKS[o.rank].c}">R${o.rank} ${esc(RANKS[o.rank].n)}</dd>
+    <dt>Affiliation</dt><dd style="color:${AFFIL[o.aff].c}">${esc(AFFIL[o.aff].n)}</dd>
+    <dt>Longitude</dt><dd>${pos.lon.toFixed(2)}°E</dd>
+    <dt>Inclination</dt><dd>${pos.inc.toFixed(2)}°</dd>
+    <dt>Drift</dt><dd>${esc(driftWord(o))}</dd>
+    <dt>Drift fit</dt><dd>${esc(fitLine)}</dd>
+    <dt>Data age</dt><dd>${pos.age<1?"<1h":pos.age.toFixed(0)+"h"}</dd></dl>`;
+}
+function sbHit(ev){
+  const cv=$("sb-canvas"),box=cv.getBoundingClientRect();
+  const mx=ev.clientX-box.left,my=ev.clientY-box.top;
+  let best=null,bestD=16;
+  sb.hits.forEach(p=>{
+    const d=Math.hypot(p.px-mx,p.py-my);
+    if(d<bestD){bestD=d;best=p.id;}
+  });
+  return best;
+}
+function sbChips(){
+  $("sb-chips").innerHTML=[1,2,3,4,5].map(r=>
+    `<button type="button" class="chip on" data-rank="${r}" style="color:${RANKS[r].c}">`
+    +`<span class="sw" style="background:${RANKS[r].c}"></span>R${r}</button>`).join("");
+}
+function toggleChip(btn){
+  const r=Number(btn.dataset.rank);
+  const on=sb.ranks.has(r);
+  if(on){sb.ranks.delete(r);}else{sb.ranks.add(r);}
+  btn.classList.toggle("on",!on);
+  btn.classList.toggle("off",on);
+  drawSandbox();
+}
+function toggleFlag(id,key,label){
+  const btn=$(id);
+  sb[key]=!sb[key];
+  btn.classList.toggle("on",sb[key]);
+  btn.classList.toggle("off",!sb[key]);
+  if(label!==null){btn.textContent=label(sb[key]);}
+  drawSandbox();
+}
+function setHours(v){
+  sb.hours=v;
+  $("sb-time").value=String(v);
+  $("sb-time-v").textContent=v===0?"now":("+"+v+"h");
+  drawSandbox();
+}
+function togglePlay(){
+  sb.playing=!sb.playing;
+  $("sb-play").textContent=sb.playing?"Pause":"Play";
+  $("sb-play").classList.toggle("on",sb.playing);
+  if(sb.timer!==null){clearInterval(sb.timer);sb.timer=null;}
+  if(sb.playing){
+    sb.timer=setInterval(()=>{setHours((sb.hours+2)%169);},110);
+  }
+}
+function wireSandbox(){
+  if($("sb-canvas")===null){return;}
+  sbChips();
+  $("sb-chips").addEventListener("click",ev=>{
+    const b=ev.target.closest("button[data-rank]");
+    if(b!==null){toggleChip(b);}
+  });
+  $("sb-canvas").addEventListener("click",ev=>{
+    const id=sbHit(ev);
+    sb.sel=id;
+    drawSandbox();
+    if(id!==null){checkDrill(id);}
+  });
+  $("sb-trails").addEventListener("click",()=>toggleFlag("sb-trails","trails",null));
+  $("sb-needles").addEventListener("click",()=>toggleFlag("sb-needles","needles",null));
+  $("sb-labels").addEventListener("click",()=>toggleFlag("sb-labels","labels",null));
+  $("sb-age").addEventListener("click",()=>toggleFlag("sb-age","aged",
+    on=>on?"Fresh again":"Age the data"));
+  $("sb-time").addEventListener("input",ev=>setHours(Number(ev.target.value)));
+  $("sb-play").addEventListener("click",togglePlay);
+  setHours(0);
+}
+
+/* ---- drills on the sandbox ------------------------------------------- */
+const DRILLS=[
+  {t:"Click the object drifting <b>west</b> fastest.",a:"90210",
+   why:"DRIFTER-1 at -3.40°/day. West is negative, and the arrowhead points the way it goes."},
+  {t:"Click the object with <b>no usable drift baseline</b>.",a:"59001",
+   why:"NEW ENTRY has under 24 hours of fixes, so the rate is withheld rather than reported as zero."},
+  {t:"Click the object whose <b>affiliation is Unknown</b>.",a:"63157",
+   why:"OBJECT 63157 has no country in the feed, so its needle is grey. Unknown is a data gap, not a judgement."},
+  {t:"Click the <b>R1</b> object closest to <b>0° longitude</b>.",a:"41748",
+   why:"USA 270 at -22.4°. The other R1 sits out at -150.6°."},
+  {t:"Click the object with the <b>highest inclination</b>.",a:"28924",
+   why:"EUTELSAT 174A at 6.9°. High up the plot means inclination is no longer being corrected."},
+  {t:"Click the object drifting <b>east</b> fastest.",a:"38977",
+   why:"COSMOS 2590 at +1.80°/day. East is positive and the arrowhead points right."}];
+let drillAt=0,drillMarks=[];
+function drillMarkClass(i){
+  const m=drillMarks[i];
+  if(m===undefined){return "";}
+  return m?"ok":"no";
+}
+function drillDots(){
+  const dots=DRILLS.map((_,i)=>'<i class="'+drillMarkClass(i)+'"></i>').join("");
+  return '<div class="dots">'+dots+"</div>";
+}
+function renderDrill(){
+  const host=$("drill");
+  if(host===null){return;}
+  if(drillAt>=DRILLS.length){
+    const got=drillMarks.filter(Boolean).length;
+    host.innerHTML=`<div class="task">Drills complete: <b>${got} of ${DRILLS.length}</b> first time.</div>
+      <div class="fb">Every one of these is a judgement you will make on the real belt.</div>
+      <div class="bar"><button type="button" class="chip on" id="drill-again">Run them again</button>
+      ${drillDots()}</div>`;
+    $("drill-again").addEventListener("click",()=>{drillAt=0;drillMarks=[];renderDrill();});
+    return;
+  }
+  host.innerHTML=`<div class="task"><b>Drill ${drillAt+1}.</b> ${DRILLS[drillAt].t}</div>
+    <div class="fb" id="drill-fb">Scroll up to the sandbox and click your answer.</div>
+    <div class="bar"><button type="button" class="chip on" id="drill-go">Show me the sandbox</button>
+    <button type="button" class="chip" id="drill-skip">Skip</button>${drillDots()}</div>`;
+  $("drill-go").addEventListener("click",()=>{
+    sb.ranks=new Set([1,2,3,4,5]);
+    Array.from(doc.querySelectorAll("#sb-chips button")).forEach(
+      b=>{b.classList.add("on");b.classList.remove("off");});
+    drawSandbox();
+    $("sandbox").scrollIntoView({block:"center"});
+  });
+  $("drill-skip").addEventListener("click",()=>{
+    if(drillMarks[drillAt]===undefined){drillMarks[drillAt]=false;}
+    drillAt+=1;renderDrill();
+  });
+}
+function checkDrill(id){
+  if(drillAt>=DRILLS.length){return;}
+  const d=DRILLS[drillAt],fb=$("drill-fb");
+  if(fb===null){return;}
+  const ok=id===d.a;
+  if(drillMarks[drillAt]===undefined){drillMarks[drillAt]=ok;}
+  const picked=FLEET.find(f=>f.id===id);
+  fb.className="fb "+(ok?"ok":"no");
+  if(ok){
+    fb.innerHTML=`<b>Correct.</b> ${d.why}`;
+    setTimeout(()=>{drillAt+=1;renderDrill();},1400);
+    return;
+  }
+  fb.innerHTML=`<b>Not that one.</b> You picked ${esc(picked.n)}. `
+    +`Read its panel on the right and try again.`;
+}
+
+/* ---- progress ----------------------------------------------------------- */
+const STORE_KEY="psirens-guide-read";
+let readSet=new Set();
+function loadRead(){
+  try{
+    const raw=globalThis.localStorage.getItem(STORE_KEY);
+    readSet=new Set(raw===null?[]:JSON.parse(raw));
+  }catch{readSet=new Set();}
+}
+function saveRead(){
+  try{globalThis.localStorage.setItem(STORE_KEY,JSON.stringify(Array.from(readSet)));}
+  catch{/* a locked-down browser is not a reason to break the page */}
+}
+function paintProgress(){
+  const pct=Math.round(readSet.size/SECTIONS.length*100);
+  const circ=2*Math.PI*15.5;
+  $("rfg").style.strokeDashoffset=String(circ*(1-pct/100));
+  $("ringtxt").textContent=pct+"%";
+  $("ring").title=readSet.size+" of "+SECTIONS.length+" sections marked as read";
+  SECTIONS.forEach(([id])=>{
+    const row=$("done-"+id);
+    if(row===null){return;}
+    const on=readSet.has(id);
+    row.classList.toggle("on",on);
+    row.querySelector(".box").textContent=on?"✓":"";
+    row.querySelector(".lab").textContent=on?"Marked as read":"Mark this section as read";
+  });
+}
+function toggleRead(id){
+  if(readSet.has(id)){readSet.delete(id);}else{readSet.add(id);}
+  saveRead();paintProgress();
+}
+function buildProgress(){
+  SECTIONS.forEach(([id,label])=>{
+    const sec=$(id);
+    if(sec===null){return;}
+    sec.insertAdjacentHTML("beforeend",
+      `<div class="done" id="done-${id}"><button type="button" data-done="${id}">`
+      +`<span class="box"></span><span class="lab">Mark this section as read</span></button></div>`);
+  });
+  doc.addEventListener("click",ev=>{
+    const b=ev.target.closest("button[data-done]");
+    if(b!==null){toggleRead(b.dataset.done);}
+  });
+  loadRead();paintProgress();
+}
+
+/* ---- guided tour -------------------------------------------------------- */
+let tourAt=-1;
+function tourBar(){
+  let bar=$("tourbar");
+  if(bar===null){
+    doc.body.insertAdjacentHTML("beforeend",
+      `<div class="tourbar" id="tourbar"><span class="lbl" id="tourlbl"></span>
+       <button type="button" class="gbtn" id="tourback">Back</button>
+       <button type="button" class="gbtn primary" id="tournext">Next</button>
+       <button type="button" class="gbtn" id="tourend">End</button></div>`);
+    bar=$("tourbar");
+    $("tourback").addEventListener("click",()=>tourGo(tourAt-1));
+    $("tournext").addEventListener("click",()=>tourGo(tourAt+1));
+    $("tourend").addEventListener("click",tourStop);
+  }
+  return bar;
+}
+function tourGo(i){
+  if(i<0||i>=SECTIONS.length){tourStop();return;}
+  const prev=$(SECTIONS[tourAt]?SECTIONS[tourAt][0]:"");
+  if(prev!==null){prev.classList.remove("tourlit");}
+  tourAt=i;
+  const [id,label]=SECTIONS[i];
+  const sec=$(id);
+  sec.classList.add("tourlit");
+  sec.scrollIntoView({block:"start"});
+  tourBar();
+  $("tourlbl").innerHTML=`<b>${esc(label)}</b> &middot; ${i+1} of ${SECTIONS.length}`;
+  $("tourbtn").textContent="Stop the tour";
+}
+function tourStop(){
+  const cur=SECTIONS[tourAt];
+  if(cur!==undefined){const el=$(cur[0]);if(el!==null){el.classList.remove("tourlit");}}
+  tourAt=-1;
+  const bar=$("tourbar");
+  if(bar!==null){bar.remove();}
+  $("tourbtn").textContent="Take the tour";
+}
+function tourToggle(){
+  if(tourAt>=0){tourStop();return;}
+  tourGo(0);
+}
+
+/* ---- keyboard ----------------------------------------------------------- */
+function currentSection(){
+  const mid=globalThis.innerHeight*0.35;
+  let found=SECTIONS[0][0];
+  SECTIONS.forEach(([id])=>{
+    const el=$(id);
+    if(el!==null&&el.getBoundingClientRect().top<=mid){found=id;}
+  });
+  return found;
+}
+function onKey(ev){
+  const tag=(ev.target.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="select"||tag==="textarea"){
+    if(ev.key==="Escape"){ev.target.blur();}
+    return;
+  }
+  const map={
+    "/":()=>{ev.preventDefault();$("find").focus();},
+    "n":()=>tourGo(tourAt<0?0:tourAt+1),
+    "p":()=>tourGo(tourAt<0?0:tourAt-1),
+    "g":()=>toggleRead(currentSection()),
+    "t":tourToggle,
+    "?":()=>{$("keysheet").hidden=!$("keysheet").hidden;},
+    "Escape":()=>{$("keysheet").hidden=true;tourStop();},
+  };
+  const act=map[ev.key];
+  if(act!==undefined){act();}
+}
+
 /* ---- wiring ---------------------------------------------------------- */
 function wire(ids,fn){
   ids.forEach(id=>{const el=$(id);if(el!==null){el.addEventListener("input",fn);}});
@@ -1129,12 +1692,18 @@ spy();
 Object.keys(HOTSPOTS).forEach(buildFigure);
 Object.keys(HOTSPOTS).forEach(k=>{if($("fig-"+k)!==null){showHot(k,0);}});
 buildQuiz();
+buildProgress();
+wireSandbox();
+renderDrill();
 showVersion();
 wire(["m-rank","m-drift","m-ra","m-age","m-aff"],drawMarkerDemo);
 wire(["k-ecc","k-drift","k-base"],drawDriftDemo);
 $("find").addEventListener("input",ev=>runSearch(ev.target.value));
 $("printbtn").addEventListener("click",()=>globalThis.print());
-globalThis.addEventListener("resize",()=>{drawMarkerDemo();drawDriftDemo();});
+$("tourbtn").addEventListener("click",tourToggle);
+$("keysbtn").addEventListener("click",()=>{$("keysheet").hidden=!$("keysheet").hidden;});
+doc.addEventListener("keydown",onKey);
+globalThis.addEventListener("resize",()=>{drawMarkerDemo();drawDriftDemo();drawSandbox();});
 drawMarkerDemo();
 drawDriftDemo();
 })();
