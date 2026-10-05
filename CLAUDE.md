@@ -38,26 +38,29 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.13; 1.6.12 UPLOADED, 10 of 11 stages green)
+## Current state (repo 1.6.13; DEPLOYED 1.6.12, Active)
 
-Keep these apart. FACT, 26 September 2026: a live `/api/meta` carried
-`refresh_lookback_hours` and the whole ingest-health block, which only exist
-from 1.6.6, so **the deployed build is 1.6.6 or later**. The exact deployed
-version is TBC for that reading because `/api/meta` did not report it; from
-1.6.10 it does, so this inference never has to be made again.
+Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
+Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
+is Active**. That closes the version question the 26 September diagnosis could
+only infer: the deployed build is 1.6.12, and from 1.6.10 `/api/meta` reports
+it, so the inference never has to be made again.
+CONSEQUENCE worth acting on: the 1.6.6 slicing fix, the 1.6.9 ingest stage
+counts and `ingest_diagnosis`, and the 1.6.11 drift fit are now LIVE. If the
+feed is still dry, `GET /api/meta` on the deployed app now names the cause
+rather than leaving `last_ingest_errors: []`.
 1.6.7 adds the country filter, 1.6.8 clears a Code Quality contrast finding,
 **1.6.9 makes a rejected upstream request impossible to mistake for a quiet
 one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
 two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
 loop-capture finding, and 1.6.13 colours the RA needle by affiliation
 (see Open items).
-FACT, 5 October 2026, from the App Store Pipeline and Versions tab: **1.6.12
-is uploaded and passed all TEN gates, Code Quality among them**, with Deploy
-the eleventh stage and still running at the time of the screenshot; the app
-header read "Pending Approval". The Deploy outcome is TBC until Ash confirms.
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
+Also observed: the app header moved from "Pending Approval" to "Active" once
+Deploy passed, and an "Open App" control appeared. Approval and deployment are
+the same milestone here, not two.
 Upload 1.6.13: it carries everything.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
@@ -107,8 +110,10 @@ Shipped features:
 
 ## Pushing to origin
 
-Owner rule, 3 September 2026: once a build has a GREEN TEN-GATE DEPLOY on the
-App Store, the repository may be pushed to origin without asking. Before that
+Owner rule, 3 September 2026: once a build has a GREEN DEPLOY on the App Store,
+the repository may be pushed to origin without asking. (The rule was written as
+"ten-gate"; the pipeline is eleven stages, ten gates then Deploy. The milestone
+is the green Deploy, most recently 1.6.12 on 5 October 2026.) Before that
 milestone, commit locally and leave the push to Ash.
 
 ## Golden verify loop (run before ANY packaging or upload)
