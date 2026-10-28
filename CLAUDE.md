@@ -358,6 +358,14 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 
 - This repo is now the source of truth. The prior chat sandbox reset its working
   tree each session and rebuilt from a zip; that caveat no longer applies here.
+- CONTAINER RESET, seen TWICE (11 September and 28 October 2026): the session
+  starts on the stale branch `claude/psirens-takeover-setup-xhxjdu` at `f6639f7`,
+  which is the 1.5.3 state, and the CLAUDE.md loaded at start-up is that old
+  copy. Nothing is lost: every commit is on `origin/main`. FIRST ACTION in any
+  session whose CLAUDE.md does not match the version in
+  `src/psirens/main.py`: `git fetch origin main` and check
+  `git rev-list --count HEAD..origin/main` BEFORE touching anything, then
+  `git checkout -B main origin/main`.
 - Live UDL and Space-Track need Ash's credentials
   (`~/.config/phase_offset/credentials.ini`, section `[udl]`) and network. Tests
   do not: they run offline in demo mode. Do not commit credentials.
@@ -816,6 +824,12 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   signal, tagged FACT / INFERENCE / TBC. Read it before bumping a dependency
   or touching the Dockerfile base image, and convert its TBC items to FACT
   the first time one of those gates fails.
+- `QUALITY-LEDGER.md` — the dated REGISTER of all 30 code-quality issues raised
+  against this app from 1.4.14 to 1.6.16: what was raised, by which gate, what
+  caused it, the fix, the guard and the proof, plus a JSON manifest for
+  ingestion by other projects. `SNIFFS.md` is the rulebook (how to avoid them);
+  this is the evidence (what they cost and in what order they arrive). Built for
+  Ash, 28 October 2026, to hand to other Claude Code applications.
 - `SNIFFS.md` — the code-quality sniff compendium, written to be handed to
   other projects, with `tools/sniff_check.py` as its runnable checker (stdlib
   only, single file, `--self-test`). Read it before arguing with a Code Quality
