@@ -569,13 +569,24 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   PROVEN: removing the one line in `_absorb_stats` that records the failure
   makes `test_the_refresher_reports_a_rejected_feed_as_an_error` fail with
   `assert []`, which is the live symptom byte for byte.
-  STILL OPEN, and it needs Ash, not code: 1.6.9 makes the cause reportable,
-  it does not fix the feed. The deployed container's logs already carry
-  `UDL elset fetch failed ... (never fatal)` for every failed slice; read
-  them, or deploy 1.6.9 and read `ingest_diagnosis`. And whatever the cause,
-  the 2026-09-09 gap will NOT close on its own: the scheduled refresh looks
-  back 24 hours by design, so a backfill pull over the gap is needed once the
-  feed is answering.
+  RESOLVED ON THE SCREEN, 9 November 2026, and this is the payoff. The live
+  staleness banner read: "Data is 1.2 days old ... Reported cause: upstream
+  requests are failing: UDLElsetSource: 1/1 upstream request(s) failed:
+  HTTP 401." Ash changed the UDL password in the environment variables and
+  the feed resumed. CAUSE, confirmed by the owner: the deployment's copy of
+  the credential, not the account and not the request shape.
+  WHAT THIS COST, BEFORE AND AFTER. September: the same class of failure
+  reported `added: 0` with `errors: []`, took a code change to diagnose, and
+  ran for 403 hours. November: the cause was named on the screen, unprompted,
+  and the fix was one environment variable. That is the whole argument for
+  counting what a resilient layer swallows.
+  NOTE on the shape: `1/1` is expected, not a loop fault. `REFRESH_LOOKBACK_
+  HOURS` (24) divided by `UDL_SLICE_HOURS` (24) is exactly one request per
+  cycle. A larger window would show more.
+  STILL TRUE whenever this recurs: the gap does NOT close on its own, because
+  the scheduled refresh looks back 24 hours by design. A backfill pull over
+  the gap is needed once the feed is answering:
+  `POST /api/pull?mode=real&hours=N` with N comfortably past the outage.
 - Running version on the API: ADDED in 1.6.10. The 26 September diagnosis
   could establish only "1.6.6 or later", by inferring from which keys the
   payload happened to carry, which is exactly the kind of guess this repo
