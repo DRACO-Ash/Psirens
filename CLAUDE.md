@@ -67,9 +67,15 @@ the same milestone here, not two.
 Upload 1.6.18: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
 items. 1.6.17 exists in the repository and was never uploaded, because 1.6.18
-superseded it before the upload; the platform has never seen either. The feed was dry from 9 October to 9 November on an HTTP 401 and is
-answering again; a backfill pull over the gap is still outstanding, also in
-Open items.
+superseded it before the upload; the platform has never seen either.
+CORRECTION, 10 November 2026, to a line written earlier the same day: an
+earlier draft of this section said the feed was "dry from 9 October to 9
+November". NOTHING RECORDED SUPPORTS THAT. The only evidence is the live
+banner Ash read on 9 November, which said the data was 1.2 DAYS old, and the
+cause was HTTP 401. So the outage was of the order of a day or two, not a
+month. The 403-hour figure elsewhere in this file belongs to the SEPARATE
+September episode and was being mixed in. The backfill is still outstanding;
+see the entry in Open items for what it is now actually for.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -329,6 +335,22 @@ with every figure inlined as a data URI, for review before an upload. It never
 edits the shipped page. Use it whenever someone needs to exercise the sandbox,
 drills, tour and self-check without a server:
 `python3 tools/guide_standalone.py --out /tmp/guide-review.html`.
+
+`tools/backfill_pull.py` — Script-mode, stdlib-only driver for a backfill over
+`POST /api/pull`. CHUNKS the window, because `/api/pull` runs it synchronously
+inside the request: a 90-day pull is 90 upstream slices and 178 seconds of
+deliberate pausing before any network time, held on one connection, which a
+platform ingress will close long before the server finishes. The default chunk
+is 144 hours (six slices). A failed chunk does not stop the run; the summary
+prints the exact `--start/--end` to re-run. `--check` reads `/api/meta` and
+REFUSES to start against a build older than 1.6.17, because below that a
+re-pull of a held epoch is discarded and no `raan_deg` is filled, so the
+backfill would have to be run twice. Token from `PSIRENS_TOKEN` or an unechoed
+prompt, never an argument (a command line is in the shell history and in `ps`).
+`--self-test` runs offline and counts its own checks. NOT part of the deploy
+zip. VERIFIED end to end against a local token-gated instance, not just
+self-tested: `--check` reported 1.6.18 and cleared it, a run without the token
+exited 2 with a stated reason, and a two-chunk run added 229 samples.
 
 `tools/udl_elset_probe.py` — Script-mode, stdlib-only live probe of `/udl/elset`.
 Checks the four assumptions the native-TLE work rests on (line presence, satNo
@@ -634,6 +656,10 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   the scheduled refresh looks back 24 hours by design. A backfill pull over
   the gap is needed once the feed is answering:
   `POST /api/pull?mode=real&hours=N` with N comfortably past the outage.
+  SIZE OF THIS ONE, stated carefully because it was overstated once already:
+  the banner said 1.2 days, so the outage was of the order of a day or two.
+  72 hours is comfortably past it. It is NOT a month: see the correction in
+  Current state.
 - Running version on the API: ADDED in 1.6.10. The 26 September diagnosis
   could establish only "1.6.6 or later", by inferring from which keys the
   payload happened to carry, which is exactly the kind of guess this repo
@@ -962,6 +988,32 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   neighbours there was nothing to collide, so the guard would have passed on a
   chart that could not fail. Four co-located objects now sit around BEIDOU-3 G1
   at 140E, which is also what a real GEO neighbourhood looks like.
+- BACKFILL PULL, still outstanding and NOT something this environment can run.
+  It needs the deployed app's URL, the team token and a route to an internal
+  host; this container has none of the three, and no deployed URL is recorded
+  anywhere in the repo. So `tools/backfill_pull.py` exists instead: the thing
+  that presses the button, built and verified here, for Ash to run.
+  WHAT IT IS NOW FOR, and this has changed. Closing the feed gap is the small
+  half: the banner said 1.2 days, so 72 hours covers it, and the rolling
+  24-hour refresh has already covered part of it. The LARGE half is that
+  `Store._enrich_sample` (1.6.17) fills a missing field on a re-pull of an
+  epoch already held. Every sample stored before 1.6.17 carries no `raan_deg`,
+  and the co-planar trail needs one per sample, so re-pulling the RETENTION
+  WINDOW is what turns the trails on across the existing history instead of
+  growing them from nothing over the next 90 days.
+  ORDER MATTERS. Upload 1.6.18 FIRST, then backfill. The deployed build is
+  1.6.12, where a re-pull of a held epoch is discarded whole, so a backfill run
+  now would fill nothing and have to be run again. `--check` enforces this
+  rather than trusting anyone to remember it.
+  SEQUENCE for Ash:
+    export PSIRENS_TOKEN=...
+    python3 tools/backfill_pull.py --base https://<app-url> --check
+    python3 tools/backfill_pull.py --base https://<app-url> --days 90
+  Expect 15 chunks at the 144-hour default, each one six upstream slices.
+  Watch `added` per chunk: it counts NEW epochs only, so a chunk reporting
+  `added 0` while the enrichment is doing its work is expected and not a
+  failure. `/api/meta` afterwards is the check that matters, and opening the
+  Co-Planar view on any object is the visible one.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
