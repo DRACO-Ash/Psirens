@@ -213,6 +213,66 @@ failure modes that are visible from here.
 ● If a dependency was bumped, run the golden loop, because a version change can
   break tests long before it breaks a scanner.
 
+## 4a. FIRST CONTAINER SCAN OUTPUT EVER READ (10 November 2026)
+
+This section is what the warning at the top asked for: the owner pasted real
+Container Scan output, so several TBCs below become FACT and the file stops
+being inference alone.
+
+**FACT. The scanner reads BOTH layers of the image.** Debian packages
+(`libc6`, `util-linux`, `libsqlite3-0`, `perl-base`, `ncurses`, `libpam*`,
+`tar`, `coreutils` and so on) AND installed Python distributions (`certifi`,
+`pip`, and the interpreter itself as `python-3.12.16`). Anything in the image
+is in scope; the runtime/test split in section 2 is therefore load-bearing,
+exactly as claimed, but for a reason now observed rather than assumed.
+
+**FACT. Findings are grouped by severity with counts**, and each carries the
+package at its exact installed version. Where a fixed version exists the entry
+adds a line of the form `Fix available: Upgrade <pkg>-<ver> to version <ver>
+or later`. Where none exists, there is no such line.
+
+**FACT, and the single most useful thing in the whole report.** Of roughly 190
+findings, **every "Fix available" line named one of only three packages**:
+
+| package | advisories | fix |
+|---|---|---|
+| `pip-25.0.1` | 6 (GHSA-qwm4, -4xh5, -jp4c, -wf93, -58qw, -6vgw) | 25.3 to 26.2.0 |
+| `python-3.12.16` | 8 | 3.13.x, or unreleased lines |
+| `certifi-2026.6.17` | 1 (GHSA-6q48-6c7w-9gw2) | 2026.10.18 |
+
+Everything else, the whole Debian set, **had no fix available**. The Dockerfile
+already runs `apt-get -y upgrade`, and the versions in the report are the
+current Debian 13 ones, so those findings are upstream-unfixed and nothing in
+this repository can clear them. Do not spend a cycle trying.
+
+**WHAT WAS DONE, in 1.6.20.**
+● `certifi` pinned to `2026.10.23` in both requirements files.
+● `pip`, `setuptools`, `pkg_resources` and `wheel` **removed from the image**,
+  from the venv AND from the interpreter's own `site-packages`. Nothing in this
+  container ever installs a package, so they are attack surface and a standing
+  finding that a version bump never really settles. VERIFIED locally without a
+  daemon: with all four removed, `import pip` raises, and gunicorn with the
+  uvicorn worker still serves 200 on `/`, `/healthz` and `/readyz`.
+● Base image moved to `python:3.13-slim`. VERIFIED: every pin installs on
+  3.13.17, including the two compiled ones (`pydantic_core`, `sgp4`), and all
+  216 tests pass.
+
+**STILL OPEN after all three, and stated so nobody re-chases them.**
+`CVE-2025-15367` (fix only in 3.15.0a6), `CVE-2026-116566` and
+`CVE-2026-103995` (fix only in 3.16.0) have no fix in any released stable
+Python. They will follow the interpreter whatever we do.
+
+**STILL TBC, and it is the one that matters: the severity at which this gate
+FAILS.** The pasted report shows Medium (75) and Low (59) and a higher band
+above them that was cut off. Whether the run passed or failed was not stated,
+so it is not recorded here. Get it from the pipeline UI and write it down: it
+decides whether ~130 unfixable Debian findings are a waiver conversation or
+simply noise.
+
+**TBC.** Whether a waiver or allowlist mechanism exists. If the gate does fail
+on unfixable OS findings, that mechanism is the only remaining lever, since the
+base image is already current and already upgraded at build time.
+
 ## 5. What to do when one of these gates finally fails
 
 Written now, while there is no pressure, because the SonarQube experience shows

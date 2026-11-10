@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.19; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.20; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -57,18 +57,19 @@ loop-capture finding, 1.6.13 colours the RA needle by affiliation, 1.6.14
 adds the HTML Operator Guide, 1.6.15 makes that guide something an operator
 uses rather than reads, 1.6.16 is the review pass over it, 1.6.17 makes the
 Co-Planar chart interactive and gives it history, 1.6.18 makes its labels
-legible in a crowd, and 1.6.19 clears five SonarJS findings that a weak linter
-preset had been hiding (see Open items).
+legible in a crowd, 1.6.19 clears five SonarJS findings that a weak linter
+preset had been hiding, and 1.6.20 acts on the first Container Scan output
+anyone has ever read (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.19: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.6.20: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
-items. 1.6.17 and 1.6.18 exist in the repository and were never uploaded, each
-superseded before the upload; the platform has never seen either.
+items. 1.6.17, 1.6.18 and 1.6.19 exist in the repository and were never uploaded,
+each superseded before the upload; the platform has never seen any of them.
 CORRECTION, 10 November 2026, to a line written earlier the same day: an
 earlier draft of this section said the feed was "dry from 9 October to 9
 November". NOTHING RECORDED SUPPORTS THAT. The only evidence is the live
@@ -1084,6 +1085,33 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   if/elif chains, so it is labelled rather than trusted silently.
   The "0 findings across 27 files" line above was true on the day; see the
   1.6.12 entry for the one false positive `tools/` has since acquired.
+- CONTAINER SCAN, first output ever read: ACTED ON in 1.6.20. Ash pasted the
+  report, 10 November 2026. DEPENDENCY-GATES.md section 4a is the record and
+  converts several of that file's TBCs to FACT; this is the summary.
+  THE FINDING THAT MATTERS. Of roughly 190 entries, EVERY "Fix available" line
+  named one of only three packages: `pip-25.0.1` (6 advisories),
+  `python-3.12.16` (8) and `certifi-2026.6.17` (1). The entire Debian set had
+  NO fix available. The Dockerfile already runs `apt-get -y upgrade` and the
+  reported versions are the current Debian 13 ones, so those are
+  upstream-unfixed and nothing here can clear them. Do not spend a cycle.
+  WHAT CHANGED. `certifi` to 2026.10.23 in both requirements files; `pip`,
+  `setuptools`, `pkg_resources` and `wheel` REMOVED from the image, from the
+  venv AND from the interpreter's own site-packages, because nothing in this
+  container ever installs a package and a version bump never really settles a
+  finding on a tool that should not be there; base image to `python:3.13-slim`.
+  VERIFIED, as far as this machine allows, and the gap stated: every pin
+  installs on 3.13.17 including the two compiled ones, all 216 tests pass on
+  3.13, and with the installers removed `import pip` raises while gunicorn
+  still serves 200 on `/`, `/healthz` and `/readyz`. CONTAINER BUILD ITSELF IS
+  UNVERIFIED: this container has the docker CLI but NO daemon, so the image
+  could not be built here. That is the one stage this change could newly fail.
+  STILL OPEN and not worth re-chasing: CVE-2025-15367, CVE-2026-116566 and
+  CVE-2026-103995 have fixes only in unreleased Python lines (3.15.0a6,
+  3.16.0). They follow the interpreter whatever we do.
+  UNKNOWN, and Ash is the only one who can close it: whether that scan PASSED
+  or FAILED. The paste showed Medium (75) and Low (59) with a higher band cut
+  off, and the verdict was not stated. It decides whether ~130 unfixable
+  Debian findings are a waiver conversation or simply noise.
 - `README.md` predates several features (RA needles, Simulation view, timescale/
   range pull, conjunctions, deep zoom). Refresh when convenient.
 
