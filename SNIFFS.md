@@ -363,6 +363,44 @@ So the rule is a habit:
 ● **re-run the full loop immediately before any upload**, however long the tree
   has been untouched. A green suite is evidence about the day it ran.
 
+### 3.17 A linter preset is not the scanner's profile GATE
+
+MEASURED, 10 November 2026, on eslint-plugin-sonarjs v3: the plugin ships 295
+rules and `configs.recommended` switches **65 of them OFF**. Several of those 65
+are in SonarQube's own default JavaScript profile, so a project linting with
+`recommended` gets a clean report while the server still has findings to raise.
+
+Running the full set over two pages this project had already gated found five
+real violations, in two rules:
+
+```
+sonarjs/no-unused-function-argument   S1172   4 instances
+sonarjs/array-constructor             S1528   1 instance
+```
+
+The ones worth adding on top of `recommended`, each a default-profile rule:
+
+```js
+'sonarjs/no-unused-function-argument': 'error',   // S1172
+'sonarjs/array-constructor':           'error',   // S1528
+'sonarjs/no-duplicate-string':         'error',   // S1192
+'sonarjs/no-collapsible-if':           'error',   // S1066
+'sonarjs/prefer-immediate-return':     'error',   // S1488
+'sonarjs/no-commented-code':           'error',   // S125
+'sonarjs/no-inconsistent-returns':     'error',   // S3801
+'no-unused-vars':                      'error',
+```
+
+**Give the added block its own red case.** The existing canary only proves the
+preset is running. Delete the added rules and that canary still passes, so the
+step would go on reporting a pass over a weaker gate than it claims. A second
+canary, violating one added rule, is what makes the addition load-bearing.
+
+**The general form, which is the part worth carrying to another project:** a
+plugin preset is curated for the plugin's users, not for your scanner's profile.
+Ask what the preset leaves out before trusting a green run, and check the answer
+by listing the rules rather than reading the documentation.
+
 ## 5. The meta-rules, which cost more than any sniff
 
 Four habits, each learned from a real failure. They are the reason the rules

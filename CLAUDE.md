@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.18; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.19; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -56,18 +56,19 @@ two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
 loop-capture finding, 1.6.13 colours the RA needle by affiliation, 1.6.14
 adds the HTML Operator Guide, 1.6.15 makes that guide something an operator
 uses rather than reads, 1.6.16 is the review pass over it, 1.6.17 makes the
-Co-Planar chart interactive and gives it history, and 1.6.18 makes its labels
-legible in a crowd (see Open items).
+Co-Planar chart interactive and gives it history, 1.6.18 makes its labels
+legible in a crowd, and 1.6.19 clears five SonarJS findings that a weak linter
+preset had been hiding (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.18: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.6.19: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
-items. 1.6.17 exists in the repository and was never uploaded, because 1.6.18
-superseded it before the upload; the platform has never seen either.
+items. 1.6.17 and 1.6.18 exist in the repository and were never uploaded, each
+superseded before the upload; the platform has never seen either.
 CORRECTION, 10 November 2026, to a line written earlier the same day: an
 earlier draft of this section said the feed was "dry from 9 October to 9
 November". NOTHING RECORDED SUPPORTS THAT. The only evidence is the live
@@ -237,6 +238,14 @@ prefer `throw error` over `return Promise.reject(error)` inside a `then`
 callback (failed the 1.5.2 upload; MEASURED: eslint-plugin-sonarjs does NOT
 carry this rule even with all 279 enabled, so only a real scanner or the grep
 gate catches it);
+MEASURED, 10 November 2026, and the reason the eslint block in
+`simulate-pipeline.sh` is no longer just the plugin preset: eslint-plugin-sonarjs
+ships 295 rules and `configs.recommended` switches **65 of them OFF**, several of
+which are in SonarQube's own default JavaScript profile. A green run of the
+preset therefore said nothing about those rules. The overlap is now enabled
+explicitly and carries its OWN red case, because the original canary only ever
+proved the preset was running: delete the added block and that canary still
+passes. See SNIFFS.md 3.17.
 FACT, 2 September 2026: 1.5.3 CLEARED Code Quality outright, the first PSIRENS
 build to do so. The gates below, each added after the failure that taught it,
 are what got it through; keep adding one per rule learned.
@@ -1014,6 +1023,41 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `added 0` while the enrichment is doing its work is expected and not a
   failure. `/api/meta` afterwards is the check that matters, and opening the
   Co-Planar view on any object is the visible one.
+- FIVE SONARJS FINDINGS BEHIND A GREEN GATE: FIXED in 1.6.19. Found by asking
+  the right question before an upload rather than after a rejection: is this
+  actually gated?
+  CAUSE, and it is a defect in the CHECK, not in the page. The SPA lint step
+  ran eslint-plugin-sonarjs with `configs.recommended`. MEASURED: that preset
+  switches 65 of the plugin's 295 rules OFF, and several of them are in
+  SonarQube's own default JavaScript profile. The gate was quieter than the
+  scanner it stands in for, and its output never said so.
+  WHAT THE FULL RULE SET FOUND on the two shipped pages:
+  * `raNeedle(ctx,px,py,o,sz,alpha)` in the SPA, `alpha` unread since 1.6.5
+    when the needle moved to its own floor (S1172);
+  * `plotSeries(ctx,...)` in the guide, which draws nothing and only computes
+    scales, so `ctx` was never used (S1172); renamed to `seriesScales`;
+  * `SECTIONS.forEach(([id,label])` in the guide, `label` unused (S1172);
+  * `data.tracks.map((t,i)=>coColour(i))`, the element never read (S1172);
+    now `[...data.tracks.keys()].map(coColour)`, with no unused parameter at
+    all rather than an underscore;
+  * `new Array(N).fill(0)` (S1528), now `Array.from`.
+  HOW WORRIED TO BE, answered with evidence rather than nerves: THREE of the
+  five were present in 1.6.12, which passed all eleven stages including Code
+  Quality on 5 October. So the tenant profile does NOT fail on S1172 or S1528,
+  and none of this was going to reject the upload. The two in `guide.html` are
+  the genuine unknown, because that page has NEVER been through Code Quality.
+  All five fixed anyway: they are trivial, and the point of an upload is to
+  learn something other than a rule we could have run locally.
+  GUARDED, with the trap avoided. The missing rules are now in the eslint
+  config AND have their OWN canary. The existing canary only proves the preset
+  is running, so deleting the added block would have left the step reporting a
+  pass over a weaker gate, which is exactly the D1 failure this repo already
+  paid for once. PROVEN: restoring the `alpha` parameter makes the loop fail
+  with `sonarjs/no-unused-function-argument` naming the line.
+  THE TRANSFERABLE RULE, in SNIFFS.md 3.17: a plugin preset is curated for the
+  plugin's users, not for your scanner's profile. List what it leaves out
+  before trusting a green run, and check by listing the rules rather than
+  reading the documentation.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
@@ -1054,8 +1098,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   signal, tagged FACT / INFERENCE / TBC. Read it before bumping a dependency
   or touching the Dockerfile base image, and convert its TBC items to FACT
   the first time one of those gates fails.
-- `QUALITY-LEDGER.md` — the dated REGISTER of all 32 code-quality issues raised
-  against this app from 1.4.14 to 1.6.18: what was raised, by which gate, what
+- `QUALITY-LEDGER.md` — the dated REGISTER of all 33 code-quality issues raised
+  against this app from 1.4.14 to 1.6.19: what was raised, by which gate, what
   caused it, the fix, the guard and the proof, plus a JSON manifest for
   ingestion by other projects. `SNIFFS.md` is the rulebook (how to avoid them);
   this is the evidence (what they cost and in what order they arrive). Built for

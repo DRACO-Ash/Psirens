@@ -383,7 +383,7 @@ function drawGrid(ctx,S){
   ctx.save();ctx.translate(14,(padT+H-padB)/2);ctx.rotate(-Math.PI/2);ctx.fillText("Inclination (\u00b0)",0,0);ctx.restore();
 }
 function drawRibbon(ctx,S,vis){
-  const {W,H,padL,padR,padB}=S;const N=180;const bins=new Array(N).fill(0);
+  const {W,H,padL,padR,padB}=S;const N=180;const bins=Array.from({length:N},()=>0);
   const lo=view.lonMin,span=view.lonMax-view.lonMin;
   vis.forEach(o=>{const w=wrap(o.lon);if(w>=lo&&w<=view.lonMax){let b=Math.floor((w-lo)/span*N);if(b>=N){b=N-1;}bins[b]++;}});
   const bmax=Math.max(1,...bins),ry=H-padB+22,rh=13,bw=(W-padL-padR)/N;
@@ -410,7 +410,7 @@ function drawTrails(ctx,S,vis){
   });
   ctx.globalAlpha=1;
 }
-function raNeedle(ctx,px,py,o,sz,alpha){
+function raNeedle(ctx,px,py,o,sz){
   if(o.ra==null){return;}                       // no element set, no bearing
   const r=o.ra*Math.PI/180,dx=Math.sin(r),dy=-Math.cos(r);  // RA 0 = north, clockwise
   const r0=sz+1.5,r1=sz+17;
@@ -425,7 +425,7 @@ function raNeedle(ctx,px,py,o,sz,alpha){
 function drawHead(ctx,S,o){
   const {x,y}=S,px=x(o.lon),py=y(o.inc),c=objCol(o),sz=headSize(o),nonreal=o.mode&&o.mode!=="REAL";
   const alpha=ageAlpha(o.ageH);
-  raNeedle(ctx,px,py,o,sz,alpha);               // bearing needle sits under the head
+  raNeedle(ctx,px,py,o,sz);                     // bearing needle sits under the head
   ctx.globalAlpha=alpha;
   if(o.rank!=null&&o.rank<=2){ctx.shadowColor=c;ctx.shadowBlur=14;}else{ctx.shadowBlur=0;}
   ctx.fillStyle=c;ctx.strokeStyle=c;ctx.lineWidth=1.4;
@@ -895,7 +895,7 @@ function coHintText(hidden){
   el.textContent=`click a point for details \u00b7 ${hidden} ${plural} hidden`;
 }
 function drawCoplanar(ctx,W,H,data){
-  ctx.clearRect(0,0,W,H);const d=coDims(W,H),sc=coScales(data,d),cols=data.tracks.map((t,i)=>coColour(i));
+  ctx.clearRect(0,0,W,H);const d=coDims(W,H),sc=coScales(data,d),cols=[...data.tracks.keys()].map(coColour);
   // Legend BEFORE the points, from 1.6.17. It carries an 80% opaque backdrop,
   // so drawing it last hid any head that landed in the top-right corner
   // entirely: the operator could still click it but could not see it.

@@ -1187,7 +1187,7 @@ function slope(pts){
   pts.forEach(p=>{sxx+=(p[0]-mx)*(p[0]-mx);sxy+=(p[0]-mx)*(p[1]-my);});
   return sxx<=0?0:sxy/sxx;
 }
-function plotSeries(ctx,w,h,pts,hours){
+function seriesScales(w,h,pts,hours){
   let lo=pts[0][1],hi=pts[0][1];
   pts.forEach(p=>{lo=Math.min(lo,p[1]);hi=Math.max(hi,p[1]);});
   const pad=Math.max(0.02,(hi-lo)*0.18);
@@ -1206,7 +1206,7 @@ function drawDriftDemo(){
   const pts=series(ecc,drift,hours);
   ctx.clearRect(0,0,w,h);
   ctx.fillStyle="#070c16";ctx.fillRect(0,0,w,h);
-  const sc=plotSeries(ctx,w,h,pts,hours);
+  const sc=seriesScales(w,h,pts,hours);
   ctx.strokeStyle="#15213a";ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(30,h-34);ctx.lineTo(w-20,h-34);ctx.stroke();
   ctx.save();ctx.strokeStyle="#4DA6FF";ctx.lineWidth=2;ctx.beginPath();
@@ -1659,7 +1659,7 @@ function toggleRead(id){
   saveRead();paintProgress();
 }
 function buildProgress(){
-  SECTIONS.forEach(([id,label])=>{
+  SECTIONS.forEach(([id])=>{
     const sec=$(id);
     if(sec===null){return;}
     sec.insertAdjacentHTML("beforeend",

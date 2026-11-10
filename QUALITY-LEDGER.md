@@ -4,7 +4,7 @@ Every code-quality issue raised against this application during development,
 what caused it, how it was fixed, and what now stops it recurring.
 
 Classification: Not Classified. Owner: Ash Higgins, Bluestaq Limited.
-Covers builds 1.4.14 to 1.6.18, 23 August to 10 November 2026, 32 issues.
+Covers builds 1.4.14 to 1.6.19, 23 August to 10 November 2026, 33 issues.
 
 ---
 
@@ -342,6 +342,26 @@ nothing.**
   document which runs it was built from.
 ● **Cost:** an incorrect document shared outside the team.
 
+### D8. The linter preset was weaker than the gate claimed (1.6.19)
+The SPA lint step ran eslint-plugin-sonarjs with `configs.recommended` and
+reported a clean page for months. **That preset switches 65 of the plugin's 295
+rules off**, and several of them are in SonarQube's own default JavaScript
+profile. The gate was therefore quieter than the scanner it was standing in for,
+and nothing in its output said so.
+
+Running the full rule set over the two shipped pages found five real violations
+in two default-profile rules: four unused function parameters (S1172) and one
+Array constructor (S1528). Three of them had shipped in a build that already
+cleared Code Quality, which is the evidence that the tenant profile does not
+fail on them, and is also the reason they survived unseen.
+
+Fixed in the source, and the missing rules added to the gate with **their own
+red case**: the existing canary only proves the preset is running, so deleting
+the added block would have left the step reporting a pass over a weaker gate.
+
+**A preset is curated for the plugin's users, not for your scanner's profile.
+List what it leaves out before trusting a green run.**
+
 ### D6. A false positive in our own checker
 The zero-fraction pattern `\d+\.0` matched `127.0.0.1`. Found by running the
 checker over our own tree before publishing it. Fixed with a trailing negative
@@ -403,8 +423,8 @@ Ordered by return on effort, from this project's evidence.
 ```json
 {
   "project": "PSIRENS",
-  "covers": {"from": "1.4.14", "to": "1.6.18",
-             "dates": "2026-08-23/2026-11-10", "issues": 32},
+  "covers": {"from": "1.4.14", "to": "1.6.19",
+             "dates": "2026-08-23/2026-11-10", "issues": 33},
   "categories": {
     "A": "rejected by the platform quality gate",
     "B": "caught by local gates before upload",
@@ -495,6 +515,11 @@ Ordered by return on effort, from this project's evidence.
      "fixed_in": "1.6.18", "cost": "an unreadable chart in exactly the case it exists for",
      "guard": "probe asserts a small view drops more labels than a large one",
      "note": "third instance of the same defect class on a third page; the guard measures the decision, not the pixels"},
+
+    {"id": "D8", "title": "linter preset silently weaker than the scanner profile",
+     "fixed_in": "1.6.19", "cost": "five real violations sat unseen behind a green gate",
+     "guard": "add the default-profile rules the preset omits, with their own red case",
+     "note": "eslint-plugin-sonarjs recommended switches 65 of 295 rules off; measured, not assumed"},
 
     {"id": "E1", "title": "text rule fires on a Playwright Locator",
      "resolution": "scope web rules to shipped pages, record the exception"},

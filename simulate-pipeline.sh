@@ -131,13 +131,36 @@ else
     # $SIM. Linting from elsewhere makes eslint silently ignore the file and
     # report success, which is worse than having no gate at all.
     ln -sfn "$SPA_LINT_CACHE/node_modules" node_modules
+    # MEASURED, 10 November 2026, and the reason this block is not just
+    # `recommended`: 65 of the plugin's 295 rules are switched OFF in that
+    # preset, and several of them ARE in SonarQube's default JavaScript
+    # profile. Running `recommended` alone therefore reports a clean page
+    # while the server-side profile still has rules to say. The ones added
+    # below are the overlap, found by running the plugin's full rule set over
+    # our own two shipped pages and then checking each hit against a build
+    # that had already cleared Code Quality.
     cat > eslint.config.mjs <<'ESLINTCFG'
 import sonarjs from 'eslint-plugin-sonarjs';
 export default [
   { files: ['**/*.js'],
     languageOptions: { ecmaVersion: 2023, sourceType: 'script' },
     plugins: { sonarjs },
-    rules: { ...sonarjs.configs.recommended.rules, 'no-negated-condition': 'error' } },
+    rules: {
+      ...sonarjs.configs.recommended.rules,
+      'no-negated-condition': 'error',
+      // Off in `recommended`, on in SonarQube's default profile.
+      'sonarjs/no-unused-function-argument': 'error',   // S1172
+      'sonarjs/array-constructor': 'error',             // S1528
+      'sonarjs/no-duplicate-string': 'error',           // S1192
+      'sonarjs/no-collapsible-if': 'error',             // S1066
+      'sonarjs/prefer-immediate-return': 'error',       // S1488
+      'sonarjs/no-commented-code': 'error',             // S125
+      'sonarjs/no-inconsistent-returns': 'error',       // S3801
+      'sonarjs/no-variable-usage-before-declaration': 'error',
+      'sonarjs/no-nested-switch': 'error',
+      'sonarjs/for-in': 'error',
+      'no-unused-vars': 'error',
+    } },
 ];
 ESLINTCFG
     python3 - <<'EXTRACT'
@@ -151,11 +174,18 @@ for page, out in (("index.html", "_spa_lint.js"), ("guide.html", "_guide_lint.js
 # (sonarjs/no-invariant-returns). If it is not flagged, eslint is not really
 # running here and the step must not report a pass. Verified by hand that
 # this snippet trips the rule and that a clean file does not.
+# A SECOND canary covers the rules added above `recommended`. Without it the
+# whole added block could be deleted or silently stop applying and this step
+# would still report a pass on the strength of the first canary alone.
 open("_spa_lint_canary.js", "w").write(
     "function canary(flag) {\n"
     "  if (flag) { return 'same'; }\n"
     "  return 'same';\n"
     "}\n")
+open("_spa_lint_canary2.js", "w").write(
+    "function unusedArg(used, spare) { return used + 1; }\n"
+    "function ctor() { return new Array(4); }\n"
+    "module.exports = { unusedArg, ctor };\n")
 EXTRACT
     node --check _spa_lint.js || { echo "FAIL: SPA script is not valid JavaScript"; exit 1; }
     node --check _guide_lint.js || { echo "FAIL: guide script is not valid JavaScript"; exit 1; }
@@ -163,12 +193,17 @@ EXTRACT
     if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint_canary.js >/dev/null 2>&1; then
       echo "FAIL: SPA lint canary was NOT flagged; the linter is not running"; exit 1
     fi
+    if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint_canary2.js >/dev/null 2>&1; then
+      echo "FAIL: the rules added above the sonarjs preset did NOT flag their"
+      echo "      own red case (unused parameter, Array constructor). The"
+      echo "      extra block is not applying."; exit 1
+    fi
     if ./node_modules/.bin/eslint --config eslint.config.mjs _spa_lint.js _guide_lint.js; then
-      echo "SPA lint OK (eslint + eslint-plugin-sonarjs bit the canary, no findings in the SPA or the guide)"
+      echo "SPA lint OK (eslint + eslint-plugin-sonarjs bit BOTH canaries, no findings in the SPA or the guide)"
     else
       echo "FAIL: SonarJS findings in a shipped page (see above)"; exit 1
     fi
-    rm -f _spa_lint.js _guide_lint.js _spa_lint_canary.js eslint.config.mjs node_modules
+    rm -f _spa_lint.js _guide_lint.js _spa_lint_canary.js _spa_lint_canary2.js eslint.config.mjs node_modules
   fi
 fi
 # ---------------------------------------------------------------------------
