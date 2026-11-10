@@ -47,6 +47,10 @@ def _profile(sat: str) -> dict:
         "lon0": lon0, "inc": inc, "drift": drift,
         "ecc": 0.0002 + _unit(sat, "e") * 0.0024,
         "raan": _unit(sat, "raan") * 360.0,
+        # Node regression, deg/day. Small and NEGATIVE for every object, which
+        # is why a co-planar trail runs mostly up and down: longitudes move far
+        # faster than planes do. Synthesised like the rest of the geometry.
+        "node_rate": -(0.005 + _unit(sat, "node") * 0.02),
         "argp": _unit(sat, "argp") * 360.0,
         "ma": _unit(sat, "ma") * 360.0,
     }
@@ -67,6 +71,11 @@ def _samples(sat: str, prof: dict, end: datetime) -> list[dict]:
             "epoch": (end + timedelta(days=t)).isoformat(),
             "sub_lon_deg": round((lon + 180.0) % 360.0 - 180.0, 4),
             "inclination_deg": round(prof["inc"], 4),
+            # Per-sample RAAN, as a real sample carries from 1.6.17. The NEWEST
+            # sample lands on prof["raan"], the same value the elset below
+            # carries, so the chart's elset-derived head joins its sample-
+            # derived trail instead of jumping away from it.
+            "raan_deg": round((prof["raan"] + prof["node_rate"] * t) % 360.0, 4),
         })
     return out
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -80,9 +80,16 @@ def test_tracks_drift_and_target_present(client):
 
 
 def test_manual_elset_roundtrip_no_token(client):
+    # RELATIVE epoch, deliberately. This was a hardcoded 2026-07-20, which sat
+    # inside the 90-day retention window when it was written and fell outside
+    # it on 18 October 2026, after which the injected object was pruned on
+    # merge and this test failed for ever. A fixture that goes through the
+    # store must be dated against now, or it is a time bomb with a long fuse.
+    # The object is a "temp inject" with a 2-hour TTL: recent was always the
+    # intent.
     payload = {
         "object_id": "MZ1", "name": "temp inject",
-        "epoch": datetime(2026, 7, 20, tzinfo=timezone.utc).isoformat(),
+        "epoch": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
         "inclination_deg": 2.0, "eccentricity": 0.0, "raan_deg": 10.0,
         "argp_deg": 0.0, "mean_anomaly_deg": 0.0,
         "mean_motion_rev_per_day": 1.0027, "data_mode": "SIMULATED",

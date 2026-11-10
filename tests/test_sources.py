@@ -348,3 +348,19 @@ def test_slices_helper_is_exact():
         _slices(_NOW - timedelta(hours=49), _NOW, 24)[-1]
     assert first[0] == _NOW - timedelta(hours=49)
     assert last[1] == _NOW
+
+
+# -- RAAN is retained per sample (1.6.17) ---------------------------------
+def test_a_sample_carries_raan_so_a_plane_can_be_reconstructed():
+    """Inclination alone cannot define an orbital plane. Without RAAN on the
+    sample the co-planar chart can only ever draw the newest elset, which is
+    why it drew one point per object for four builds."""
+    from psirens.sources import _sample_from_elements
+
+    sample = _sample_from_elements(
+        inclination_deg=1.9, eccentricity=0.0002, raan_deg=123.4,
+        argp_deg=20.0, mean_anomaly_deg=30.0, mean_motion_rev_per_day=1.0027,
+        bstar=0.0, epoch=datetime(2026, 11, 10, tzinfo=timezone.utc))
+    assert sample is not None
+    assert sample["raan_deg"] == 123.4
+    assert {"epoch", "sub_lon_deg", "inclination_deg", "raan_deg"} <= set(sample)

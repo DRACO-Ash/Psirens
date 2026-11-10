@@ -439,7 +439,9 @@ def _coplanar(request: Request) -> JSONResponse:
         return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
     data = request.app.state.store.load()
     payload = coplanar_for(data, target, half_width_deg=cfg.coplanar_half_width_deg,
-                           names=_hrr_names(request))
+                           names=_hrr_names(request),
+                           max_points=cfg.coplanar_max_points,
+                           pair_hours=cfg.coplanar_pair_hours)
     return _cors(JSONResponse(payload), cfg)
 
 
@@ -519,7 +521,7 @@ def create_app(cfg: Config | None = None,
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
 
-    app = FastAPI(title="PSIRENS", version="1.6.16", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.6.17", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

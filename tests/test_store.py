@@ -158,3 +158,84 @@ def test_a_pull_without_candidates_leaves_existing_ones_alone(tmp_path):
     s.merge_samples(_rec("A", [now - timedelta(days=1)]),
                     retention_days=90, max_samples=100, now=now)
     assert set(s.load()["objects"]["A"]["elset_candidates"]) == {"LeoLabs"}
+
+
+# -- the retention boundary, specified rather than assumed (1.6.17) --------
+#
+# A test fixture dated 2026-07-20 passed for three months and then failed for
+# ever, because wall-clock time carried it past the 90-day retention window and
+# the merge pruned the object it had just injected. Nothing described that
+# boundary, so nothing caught the rot: the failure read as "the manual elset
+# route is broken". These two tests say out loud where the edge is.
+def test_a_sample_just_inside_retention_survives_the_merge(tmp_path):
+    now = datetime.now(timezone.utc)
+    store = Store(str(tmp_path))
+    store.merge_samples({"INSIDE": {
+        "name": "inside", "data_mode": "SIMULATED", "classification_marking": "U",
+        "source": "T", "origin": "MANUAL", "target": None,
+        "samples": [{"epoch": (now - timedelta(days=89)).isoformat(),
+                     "sub_lon_deg": 10.0, "inclination_deg": 1.0}],
+    }}, retention_days=90, max_samples=100, now=now)
+    assert "INSIDE" in store.load()["objects"]
+
+
+def test_a_sample_just_outside_retention_is_pruned_on_merge(tmp_path):
+    """And the object goes with it when nothing else of it survives, which is
+    why an aged fixture reads as a broken route rather than an aged fixture."""
+    now = datetime.now(timezone.utc)
+    store = Store(str(tmp_path))
+    store.merge_samples({"OUTSIDE": {
+        "name": "outside", "data_mode": "SIMULATED", "classification_marking": "U",
+        "source": "T", "origin": "MANUAL", "target": None,
+        "samples": [{"epoch": (now - timedelta(days=91)).isoformat(),
+                     "sub_lon_deg": 10.0, "inclination_deg": 1.0}],
+    }}, retention_days=90, max_samples=100, now=now)
+    assert "OUTSIDE" not in store.load()["objects"]
+
+
+# -- a re-pull enriches an epoch it already holds (1.6.17) -----------------
+def test_a_repull_fills_a_field_the_stored_sample_is_missing(tmp_path):
+    """Samples written before `raan_deg` existed would otherwise stay without
+    it for the whole retention window, because a sample at a known epoch used
+    to be discarded wholesale. This is what lets a backfill pull reconstruct
+    the co-planar trail rather than only extend it."""
+    now = datetime.now(timezone.utc)
+    epoch = (now - timedelta(hours=2)).isoformat()
+    store = Store(str(tmp_path))
+    bare = {"epoch": epoch, "sub_lon_deg": 10.0, "inclination_deg": 1.0}
+    store.merge_samples({"A": {"name": "a", "data_mode": "REAL",
+                               "classification_marking": "U", "source": "T",
+                               "origin": "UDL", "target": None,
+                               "samples": [bare]}},
+                        retention_days=90, max_samples=100, now=now)
+    richer = dict(bare, raan_deg=42.5)
+    added = store.merge_samples({"A": {"name": "a", "data_mode": "REAL",
+                                       "classification_marking": "U",
+                                       "source": "T", "origin": "UDL",
+                                       "target": None, "samples": [richer]}},
+                                retention_days=90, max_samples=100, now=now)
+    held = store.load()["objects"]["A"]["samples"]
+    assert len(held) == 1, "the same epoch must not duplicate"
+    assert held[0]["raan_deg"] == 42.5
+    assert added == 0, "enriching is not a new epoch; last_ingest_added must not inflate"
+
+
+def test_a_repull_never_overwrites_a_value_already_held(tmp_path):
+    """Anti-shrink cuts both ways: fill what is missing, never replace what is
+    there. A later provider disagreeing about an epoch must not silently
+    rewrite the archive."""
+    now = datetime.now(timezone.utc)
+    epoch = (now - timedelta(hours=2)).isoformat()
+    store = Store(str(tmp_path))
+    first = {"epoch": epoch, "sub_lon_deg": 10.0, "inclination_deg": 1.0,
+             "raan_deg": 11.0}
+    meta = {"name": "a", "data_mode": "REAL", "classification_marking": "U",
+            "source": "T", "origin": "UDL", "target": None}
+    store.merge_samples({"A": dict(meta, samples=[first])},
+                        retention_days=90, max_samples=100, now=now)
+    store.merge_samples({"A": dict(meta, samples=[dict(first, raan_deg=99.0,
+                                                       sub_lon_deg=77.0)])},
+                        retention_days=90, max_samples=100, now=now)
+    held = store.load()["objects"]["A"]["samples"][0]
+    assert held["raan_deg"] == 11.0
+    assert held["sub_lon_deg"] == 10.0

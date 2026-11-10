@@ -150,6 +150,8 @@ class Config:
     # epoch within it. `any` disables class ranking (plain newest-fix-wins).
     tle_source_priority: str = "commercial,government,unknown"
     coplanar_half_width_deg: float = 20.0  # +/- longitude window for the coplanar view
+    coplanar_max_points: int = 60          # trail points per track, newest kept
+    coplanar_pair_hours: float = 6.0       # how near in time two samples must be to pair
     scheduler_enabled: bool = True  # background refresh loop; off in tests
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
@@ -201,4 +203,6 @@ def load_config() -> Config:
         tle_source_priority=_env("TLE_SOURCE_PRIORITY",
                                  "commercial,government,unknown"),
         coplanar_half_width_deg=_env_float("COPLANAR_HALF_WIDTH_DEG", 20),
+        coplanar_max_points=_env_int("COPLANAR_MAX_POINTS", 60),
+        coplanar_pair_hours=_env_float("COPLANAR_PAIR_HOURS", 6),
     )

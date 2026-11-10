@@ -139,6 +139,11 @@ def _sample_from_elements(
         "epoch": epoch.astimezone(timezone.utc).isoformat(),
         "sub_lon_deg": round(lon, 4),
         "inclination_deg": round(inclination_deg, 4),
+        # RAAN is retained PER SAMPLE from 1.6.17. Inclination alone cannot
+        # define a plane, so without this the co-planar chart can only ever
+        # draw one point per object: the newest elset. `coplanar.py` has
+        # carried a points list since 1.6.0 waiting for exactly this field.
+        "raan_deg": round(raan_deg, 4),
     }
 
 
@@ -521,29 +526,34 @@ class DemoElsetSource:
         now = end
         out: dict[str, dict] = {}
 
-        # 1) Station-kept anchors (REAL), one point at `now`.
+        # 1) Station-kept anchors (REAL). Each carries a 30-day FLAT trail and
+        # its own RAAN from 1.6.17. A station-kept object still has a history,
+        # and the co-planar trail is built by pairing a neighbour's samples
+        # against the PRIMARY's, so an anchor holding a single point would cap
+        # every neighbour's trail at one point offline and leave the new path
+        # unexercised by the probe.
         anchors = [
-            ("41836", "SES-10", -67.0, 0.02, "REAL"),
-            ("28924", "EUTELSAT 174A", 174.0, 0.05, "REAL"),
-            ("43683", "BEIDOU-3 G1", 140.0, 1.9, "REAL"),
-            ("41748", "USA 270", 105.0, 3.6, "REAL"),
+            ("41836", "SES-10", -67.0, 0.02, "REAL", 15.0),
+            ("28924", "EUTELSAT 174A", 174.0, 0.05, "REAL", 95.0),
+            ("43683", "BEIDOU-3 G1", 140.0, 1.9, "REAL", 210.0),
+            ("41748", "USA 270", 105.0, 3.6, "REAL", 300.0),
         ]
-        for oid, name, lon, inc, mode in anchors:
+        for oid, name, lon, inc, mode, raan in anchors:
             out[oid] = self._track(oid, name, mode, "DEMO", None,
-                                   self._span(now, 1, lon, inc, 0.0))
+                                   self._span(now, 30, lon, inc, 0.0, raan))
 
         # 2) Longitude drifter (REAL), moving east ~0.9 deg/day over 40 days.
         out["90210"] = self._track(
             "90210", "DRIFTER-1", "REAL", "DEMO", None,
-            self._span(now, 40, 120.0, 3.1, 0.9),
+            self._span(now, 40, 120.0, 3.1, 0.9, 128.0),
         )
         # 3) Relocating satellite (SIMULATED), west then station-keeping.
         out["99001"] = self._track(
             "99001", "RELOCATE-SIM", "SIMULATED", "DEMO", None,
-            self._span(now, 30, 90.0, 0.4, -1.4),
+            self._span(now, 30, 90.0, 0.4, -1.4, 44.0),
         )
         # 4) Inclined-orbit object climbing in inclination (TEST).
-        incl = self._span(now, 25, 62.0, 0.5, 0.0)
+        incl = self._span(now, 25, 62.0, 0.5, 0.0, 262.0)
         for k, s in enumerate(incl):
             s["inclination_deg"] = round(0.5 + 0.11 * k, 4)
         out["55555"] = self._track("55555", "INCLINED-TEST", "TEST", "DEMO", None, incl)
@@ -551,33 +561,44 @@ class DemoElsetSource:
         # 5) EXERCISE inspector closing on anchor 43683 (its labelled target).
         out["77777"] = self._track(
             "77777", "INSPECTOR-EX", "EXERCISE", "DEMO", "43683",
-            self._span(now, 20, 133.0, 1.5, 0.35),
+            self._span(now, 20, 133.0, 1.5, 0.35, 208.0),
         )
         for oid, rec in out.items():  # synthesise a GEO elset so offline works
             head = rec["samples"][-1]
             rec["elset"] = self._demo_elset(
                 oid, head["sub_lon_deg"], head["inclination_deg"],
-                datetime.fromisoformat(head["epoch"]))
+                datetime.fromisoformat(head["epoch"]), head["raan_deg"])
         self.last_stats = FetchStats(objects=len(out))
         return out
 
     @staticmethod
-    def _demo_elset(oid: str, lon: float, inc: float, epoch: datetime) -> dict:
+    def _demo_elset(oid: str, lon: float, inc: float, epoch: datetime,
+                    raan: float = 0.0) -> dict:
         """Approximate mean elements placing a circular GEO object near `lon`:
-        with raan=argp=0 and e~0, sub-longitude ~= mean anomaly minus GMST."""
+        with argp=0 and e~0, right ascension ~= RAAN + mean anomaly, so the
+        sub-longitude is RAAN + mean anomaly - GMST. The RAAN is carried in
+        rather than fixed at zero so the elset and the newest SAMPLE describe
+        the SAME plane; a zero here would put every demo object in the
+        equatorial node and make the elset-derived head of the co-planar chart
+        contradict the sample-derived trail beneath it."""
         jd, fr = jday(epoch.year, epoch.month, epoch.day, epoch.hour,
                       epoch.minute, epoch.second + epoch.microsecond / 1e6)
         gmst_deg = math.degrees(gmst_rad(jd + fr))
-        mean_anom = (lon + gmst_deg) % 360.0
+        mean_anom = (lon + gmst_deg - raan) % 360.0
         return _elset_dict(
             sat_no=oid, epoch=epoch, inclination_deg=inc, eccentricity=0.0002,
-            raan_deg=0.0, argp_deg=0.0, mean_anomaly_deg=mean_anom,
+            raan_deg=raan, argp_deg=0.0, mean_anomaly_deg=mean_anom,
             mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
             classification="U", intl_desig="",
             provenance=ElsetProvenance(source="DEMO"))
 
     def _span(self, now: datetime, days: int, lon0: float, inc: float,
-              rate: float) -> list[dict]:
+              rate: float, raan: float = 0.0) -> list[dict]:
+        """A synthetic trail. Each point carries RAAN from 1.6.17, as a real
+        sample now does, so the offline demo exercises the co-planar trail
+        instead of silently taking the no-history path that a store full of
+        pre-1.6.17 samples takes. The node regresses at the GEO rate recorded
+        in CONTEXT-001 (-0.0134 deg/day), which is small but not zero."""
         pts = []
         n = max(2, days)
         # Quantise to midnight UTC so repeated same-day refreshes produce
@@ -591,6 +612,7 @@ class DemoElsetSource:
                 "epoch": t.astimezone(timezone.utc).isoformat(),
                 "sub_lon_deg": round(lon, 4),
                 "inclination_deg": round(inc, 4),
+                "raan_deg": round((raan - 0.0134 * (n - 1 - k)) % 360.0, 4),
             })
         return pts
 

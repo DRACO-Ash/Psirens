@@ -137,6 +137,28 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   .cobtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
   .comodal{position:fixed;display:none;flex-direction:column;top:70px;left:70px;width:975px;max-width:95vw;height:725px;max-height:90vh;min-width:420px;min-height:320px;background:#0a1120;border:1px solid var(--line2);border-radius:9px;box-shadow:0 18px 60px rgba(0,0,0,.6);z-index:40;overflow:hidden;resize:both}
   .comodal.show{display:flex}
+  /* Absolutely positioned so it can never act as an intrinsic floor on the
+     flex body, which is the defect 1.6.3 fixed. */
+  /* TOP RIGHT on purpose, where the legend sits: that corner means far in
+     plane AND far in longitude, the least interesting reading on the
+     chart, so it is the one place furniture can cover. Bottom left is
+     the co-orbital corner and must stay clear. The legend hides while
+     the panel is open, which also settles its long-standing redundancy
+     with the point labels. */
+  .copanel{position:absolute;right:12px;top:12px;width:268px;max-height:78%;overflow:auto;
+    background:#0b1322;border:1px solid #2b3d63;border-radius:8px;padding:11px 13px;
+    color:#eaf1fb;font-size:12px;box-shadow:0 14px 40px rgba(0,0,0,.6);z-index:2}
+  .copanel h4{margin:0 0 7px;font-size:13.5px;display:flex;align-items:center;gap:7px}
+  .copanel .cp-x{margin-left:auto;font-size:15px;line-height:1;color:#8ea3c4}
+  .copanel .cp-x:hover{color:#fff}
+  .copanel dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0}
+  .copanel dt{color:#8ea3c4}
+  .copanel dd{margin:0;text-align:right;font-family:var(--mono);font-size:11.5px}
+  .copanel .cp-note{margin-top:8px;color:#8ea3c4;font-size:11px;line-height:1.45}
+  .copanel .cp-go{margin-top:9px;width:100%;border:1px solid #2b3d63;border-radius:6px;
+    padding:5px 0;font-size:11.5px;color:#eaf1fb;background:#17223a}
+  .copanel .cp-go:hover{border-color:var(--accent)}
+  .cohint{position:absolute;right:12px;bottom:10px;font-size:10.5px;color:#7f93b3;z-index:2}
   .comodal-hd{display:flex;align-items:center;gap:8px;padding:9px 8px 9px 12px;cursor:move;user-select:none;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(56,95,175,.22),rgba(56,95,175,.04));border-radius:8px 8px 0 0}
   .comodal-ttl{flex:1;font-weight:600;font-size:13px}
   /* min-height/min-width 0: a flex item defaults to min-*:auto, which takes
@@ -242,7 +264,9 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 </section>
 <section class="comodal" id="comodal" aria-label="Co-planar view">
   <div class="comodal-hd" id="comodal-hd"><span class="comodal-ttl" id="comodal-ttl">Co-Planar view</span><button type="button" class="imodal-x" id="comodal-x" aria-label="Close co-planar view" title="Close">×</button></div>
-  <div class="comodal-bd"><canvas id="cocanvas"></canvas><div class="comuted" id="comsg"></div></div>
+  <div class="comodal-bd"><canvas id="cocanvas"></canvas><div class="comuted" id="comsg"></div>
+    <div class="copanel" id="copanel" hidden></div>
+    <div class="cohint">click a point for details</div></div>
 </section>
 <div class="foot"><span class="b" id="banner">UNCLASSIFIED</span><span>PSIRENS · sub-satellite longitude via validated SGP4</span>
   <span style="margin-left:auto" id="laststatus">—</span></div>
@@ -676,6 +700,8 @@ document.getElementById("imodal-x").addEventListener("click",()=>{state.sel=null
 
 // ---- Co-Planar view -----------------------------------------------------
 let COPLANAR=null;
+let CO_HITS=[];     // head positions from the last draw, for hit testing
+let CO_SEL=null;    // the selected track id, or null
 const CO_ARCS=[{cop:1,lon:10,c:"217,178,58"},{cop:0.5,lon:5,c:"233,134,58"},{cop:0.25,lon:2,c:"226,72,61"}];
 const coColour=i=>`hsl(${(i*57)%360} 72% 62%)`;
 function coDims(W,H){return {padL:56,padR:20,padT:30,padB:42,x0:56,x1:W-20,y0:30,y1:H-42,W,H};}
@@ -731,25 +757,156 @@ function coPointLabel(t){
   const n=String(t.name||"").trim();
   if(n&&n!==String(t.id)){return n.slice(0,18);}
   return String(t.id);}
-function coPlot(ctx,d,sc,data,cols){
-  data.tracks.forEach((t,i)=>{const col=cols[i],pts=t.points;
-    if(pts.length>1){ctx.strokeStyle=col;ctx.globalAlpha=.7;ctx.lineWidth=1.3;ctx.beginPath();
-      pts.forEach((pt,k)=>{const X=sc.sx(pt.coplanar_deg),Y=sc.sy(pt.lon_diff_deg);if(k===0){ctx.moveTo(X,Y);}else{ctx.lineTo(X,Y);}});ctx.stroke();ctx.globalAlpha=1;}
-    const last=pts[pts.length-1],X=sc.sx(last.coplanar_deg),Y=sc.sy(last.lon_diff_deg);
-    ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,4,0,7);ctx.fill();ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
-    ctx.fillStyle="#c7d4ea";ctx.font="9.5px system-ui,sans-serif";ctx.textAlign="left";ctx.fillText(coPointLabel(t),X+7,Y+3);});}
-function coLegend(ctx,d,data,cols){
-  const items=data.tracks.slice(0,12),lh=14,w=124,x=d.x1-w-6,y0=d.y0+6;if(!items.length){return;}
+// Trails fade oldest to newest, the same idiom as the belt plot, so the
+// direction of travel through the chart reads without a legend. A track
+// converging on the bottom left is closing in plane AND in longitude.
+function coTrail(ctx,sc,pts,col,on){
+  if(pts.length<2){return;}
+  ctx.strokeStyle=col;ctx.lineWidth=on?2.1:1.3;ctx.lineCap="round";
+  for(let k=1;k<pts.length;k+=1){
+    const a=pts[k-1],b=pts[k];
+    ctx.globalAlpha=(on?0.45:0.2)+(k/pts.length)*(on?0.5:0.4);
+    ctx.beginPath();ctx.moveTo(sc.sx(a.coplanar_deg),sc.sy(a.lon_diff_deg));
+    ctx.lineTo(sc.sx(b.coplanar_deg),sc.sy(b.lon_diff_deg));ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+}
+// The legend's box, computed once so the point labels can avoid it. Twelve
+// is the row cap; 14px is the row height and 124px the width.
+function coLegendBox(d,data){
+  const n=Math.min(12,data.tracks.length);
+  // No legend while the detail panel is open: the panel occupies the same
+  // corner, names the selected object in full, and every point is labelled.
+  if(n===0||CO_SEL!==null){return null;}
+  return {x:d.x1-130,y:d.y0+6,w:124,h:n*14+8};
+}
+function coInBox(box,x,y){
+  if(box===null){return false;}
+  return x>=box.x-3&&x<=box.x+box.w+3&&y>=box.y-3&&y<=box.y+box.h+3;
+}
+function coHead(ctx,sc,t,col,on,box){
+  const last=t.points[t.points.length-1];
+  const X=sc.sx(last.coplanar_deg),Y=sc.sy(last.lon_diff_deg);
+  if(on){ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(X,Y,9,0,7);ctx.stroke();}
+  ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,on?5.5:4,0,7);ctx.fill();
+  ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
+  // A label that would land inside the legend is DROPPED, not drawn over it:
+  // the legend already carries the same name, so nothing is lost, and two
+  // strings on the same pixels leave neither readable. The MARKER still draws,
+  // because a point hidden behind furniture is a point the operator cannot see
+  // to click.
+  if(!coInBox(box,X+8,Y)){
+    ctx.fillStyle=on?"#ffffff":"#c7d4ea";
+    ctx.font=(on?"600 10.5px":"9.5px")+" system-ui,sans-serif";ctx.textAlign="left";
+    ctx.fillText(coPointLabel(t),X+8,Y+3);
+  }
+  return {id:String(t.id),x:X,y:Y};
+}
+function coPlot(ctx,sc,data,cols,box){
+  CO_HITS=[];
+  data.tracks.forEach((t,i)=>{
+    const on=CO_SEL===String(t.id);
+    coTrail(ctx,sc,t.points,cols[i],on);
+    CO_HITS.push(coHead(ctx,sc,t,cols[i],on,box));
+  });
+}
+function coLegend(ctx,box,data,cols){
+  if(box===null){return;}
+  const items=data.tracks.slice(0,12);
   ctx.fillStyle="rgba(8,14,28,.80)";ctx.strokeStyle="rgba(120,150,200,.25)";ctx.lineWidth=1;
-  ctx.beginPath();ctx.rect(x,y0,w,items.length*lh+8);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.rect(box.x,box.y,box.w,box.h);ctx.fill();ctx.stroke();
   ctx.textAlign="left";ctx.font="9.5px system-ui,sans-serif";
-  items.forEach((t,i)=>{const yy=y0+11+i*lh;ctx.fillStyle=cols[i];ctx.beginPath();ctx.arc(x+9,yy-3,4,0,7);ctx.fill();
-    ctx.fillStyle="#c7d4ea";ctx.fillText(esc(t.id)+" "+esc((t.name||"").slice(0,13)),x+18,yy);});}
+  items.forEach((t,i)=>{const yy=box.y+11+i*14;ctx.fillStyle=cols[i];
+    ctx.beginPath();ctx.arc(box.x+9,yy-3,4,0,7);ctx.fill();
+    const on=CO_SEL===String(t.id);
+    ctx.fillStyle=on?"#ffffff":"#c7d4ea";
+    ctx.font=(on?"600 9.5px":"9.5px")+" system-ui,sans-serif";
+    ctx.fillText(esc(t.id)+" "+esc((t.name||"").slice(0,13)),box.x+18,yy);});}
 function drawCoplanar(ctx,W,H,data){
   ctx.clearRect(0,0,W,H);const d=coDims(W,H),sc=coScales(data,d),cols=data.tracks.map((t,i)=>coColour(i));
-  coArcs(ctx,d,sc);coGrid(ctx,d,sc);coPlot(ctx,d,sc,data,cols);coLegend(ctx,d,data,cols);
+  // Legend BEFORE the points, from 1.6.17. It carries an 80% opaque backdrop,
+  // so drawing it last hid any head that landed in the top-right corner
+  // entirely: the operator could still click it but could not see it.
+  // Furniture never occludes data.
+  const box=coLegendBox(d,data);
+  coArcs(ctx,d,sc);coGrid(ctx,d,sc);coLegend(ctx,box,data,cols);coPlot(ctx,sc,data,cols,box);
   if(!data.tracks.length){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.font="12px system-ui,sans-serif";
     ctx.fillText("No co-planar neighbours within \u00b1"+data.half_width_deg+"\u00b0",(d.x0+d.x1)/2,(d.y0+d.y1)/2);}}
+// ---------------------------------------------------------------------------
+// Interactivity (1.6.17). The chart used to be a picture: it showed WHERE a
+// neighbour sat without saying WHAT it was, so an operator had to close the
+// modal and find the object again to answer "which one is that?".
+// ---------------------------------------------------------------------------
+function coHit(ev){
+  const c=document.getElementById("cocanvas"),box=c.getBoundingClientRect();
+  const mx=ev.clientX-box.left,my=ev.clientY-box.top;
+  let best=null,bestD=14;
+  CO_HITS.forEach(h=>{const dd=Math.hypot(h.x-mx,h.y-my);
+    if(dd<bestD){bestD=dd;best=h.id;}});
+  return best;
+}
+function coTrack(id){
+  if(COPLANAR===null||id===null){return null;}
+  return COPLANAR.tracks.find(t=>String(t.id)===id)||null;
+}
+function coSpanHours(pts){
+  if(pts.length<2){return 0;}
+  const a=Date.parse(pts[0].epoch||""),b=Date.parse(pts[pts.length-1].epoch||"");
+  if(Number.isNaN(a)||Number.isNaN(b)){return 0;}
+  return (b-a)/3600000;
+}
+const coRow=(k,v)=>`<dt>${esc(k)}</dt><dd>${v}</dd>`;
+function coTrailRow(pts){
+  if(pts.length<2){
+    // Honest about an empty trail rather than drawing nothing and saying
+    // nothing: samples stored before 1.6.17 carry no RAAN, so there is no
+    // plane to compute a historic angle from.
+    return coRow("Trail","<span style=\"color:#8ea3c4\">no history yet</span>");
+  }
+  return coRow("Trail",pts.length+" pts \u00b7 "+coSpanHours(pts).toFixed(0)+"h");
+}
+function coKnownRows(o){
+  return coRow("Priority",`<span style="color:${rankCol(o.rank)}">R${o.rank}</span>`)
+    +coRow("Affiliation",`<span style="color:${affil(o).c}">${esc(affil(o).n)}</span>`)
+    +coRow("Longitude",o.lon.toFixed(2)+"\u00b0E")
+    +coRow("Inclination",o.inc.toFixed(2)+"\u00b0")
+    +coRow("Drift",esc(driftText(o)))
+    +coRow("Data age",esc(ageLabel(o.ageH)));
+}
+function coPanel(){
+  const el=document.getElementById("copanel"),t=coTrack(CO_SEL);
+  if(t===null){el.hidden=true;el.innerHTML="";return;}
+  const o=findObj(String(t.id)),last=t.points[t.points.length-1];
+  const known=o===null
+    ? `<div class="cp-note">Not in the current view, so only the chart values
+       are known here. Switch its priority chip on to load it.</div>`
+    : "";
+  const rows=coRow("Catalogue",esc(String(t.id)))
+    +coRow("Coplanar angle",last.coplanar_deg.toFixed(3)+"\u00b0")
+    +coRow("Longitude diff",last.lon_diff_deg.toFixed(3)+"\u00b0")
+    +coTrailRow(t.points)
+    +(o===null?"":coKnownRows(o));
+  const go=o===null?"":`<button type="button" class="cp-go" id="cp-go">Open in inspector</button>`;
+  el.hidden=false;
+  el.innerHTML=`<h4>${esc(coPointLabel(t))}<button type="button" class="cp-x"
+    id="cp-x" aria-label="Close details">\u00d7</button></h4><dl>${rows}</dl>${known}${go}`;
+  document.getElementById("cp-x").addEventListener("click",()=>{coSelect(null);});
+  const goBtn=document.getElementById("cp-go");
+  if(goBtn!==null){goBtn.addEventListener("click",()=>{state.sel=String(t.id);paint();});}
+}
+function coSelect(id){
+  CO_SEL=id;
+  coPanel();
+  sizeCo();
+}
+(function(){
+  const cv=document.getElementById("cocanvas");
+  if(cv===null){return;}
+  cv.addEventListener("click",ev=>{coSelect(coHit(ev));});
+  cv.addEventListener("mousemove",ev=>{
+    cv.style.cursor=coHit(ev)===null?"default":"pointer";});
+})();
+
 function sizeCo(){const c=document.getElementById("cocanvas");if(COPLANAR===null){return;}
   const r=c.getBoundingClientRect();if(r.width<2){return;}const dpr=Math.min(2,globalThis.devicePixelRatio||1);
   c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);
@@ -772,9 +929,10 @@ function openCoplanar(id){if(!id){return;}document.getElementById("comodal").cla
     if(!j.primary){COPLANAR=null;document.getElementById("comsg").textContent=j.detail||"no element set for this object";return;}
     document.getElementById("comsg").textContent="";
     document.getElementById("comodal-ttl").textContent="Co-Planar \u00b7 "+esc(j.primary.name||j.primary.id)+"  ("+j.tracks.length+" in \u00b1"+j.half_width_deg+"\u00b0)";
-    COPLANAR=j;sizeCo();}).catch(e=>{COPLANAR=null;
+    COPLANAR=j;CO_SEL=null;coPanel();sizeCo();}).catch(e=>{COPLANAR=null;
     document.getElementById("comsg").textContent="co-planar unavailable: "+e.message;});}
-function closeCoplanar(){document.getElementById("comodal").classList.remove("show");COPLANAR=null;}
+function closeCoplanar(){document.getElementById("comodal").classList.remove("show");
+  COPLANAR=null;CO_SEL=null;coPanel();}
 document.getElementById("comodal-x").addEventListener("click",closeCoplanar);
 // Keep the canvas sharp when the operator drags the modal's resize corner.
 // Redraw only when the measured box actually changed: resizing the canvas is

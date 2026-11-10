@@ -92,6 +92,30 @@ async function settle(page) {
          && document.getElementById("comsg").textContent.trim() === "",
       null, { timeout: 20000 }).catch(() => {});
     await settle(page);
+    // Select a point so the figure shows the detail panel (1.6.17), not just
+    // the scatter. The sweep uses the page's own hit test rather than
+    // recomputing the plot's padding and log scales, which would drift apart.
+    const spot = await page.evaluate(() => {
+      const cv = document.getElementById("cocanvas");
+      const b = cv.getBoundingClientRect();
+      for (let y = 0; y < b.height; y += 7) {
+        for (let x = 0; x < b.width; x += 7) {
+          cv.style.cursor = "default";
+          cv.dispatchEvent(new MouseEvent("mousemove", {
+            clientX: b.left + x, clientY: b.top + y, bubbles: true }));
+          if (cv.style.cursor === "pointer") { return { x: b.left + x, y: b.top + y }; }
+        }
+      }
+      return null;
+    });
+    if (spot === null) {
+      console.log("FAIL: no co-planar point was clickable, the figure would " +
+                  "not show the detail panel");
+      process.exitCode = 1;
+    } else {
+      await page.mouse.click(spot.x, spot.y);
+      await settle(page);
+    }
     await shot(page.locator("#comodal"), "guide-coplanar.png");
     await page.click("#comodal-x");
     await page.click("#imodal-x");

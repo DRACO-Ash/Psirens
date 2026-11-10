@@ -727,7 +727,28 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     <li><b>Both axes are logarithmic.</b> The objects that matter cluster within a degree of zero,
       and a linear axis piles them all against the origin where you cannot tell them apart.</li>
     <li><b>Bottom left is the corner that matters.</b> Same plane, same longitude.</li>
+    <li><b>Each track is a trail, not a dot.</b> It runs from the oldest reading where both
+      objects were measured at about the same time through to the newest, faint to bright, so a
+      neighbour closing on your object draws a line heading into the bottom-left corner. Most
+      trails run mostly up and down, and that is the physics: longitudes change far faster than
+      orbital planes do.</li>
   </ul>
+  <div class="note"><b>A point with no trail is not a fault.</b> A historic plane needs the right
+  ascension of the ascending node stored with every reading, which PSIRENS began doing in version
+  1.6.17. Readings held from before that carry inclination only, and inclination alone cannot
+  define a plane, so they are skipped rather than guessed at. The trail grows as new readings
+  arrive. The panel says &ldquo;no history yet&rdquo; when there is none.</div>
+
+  <h3>Click a point to see what it is</h3>
+  <p>Every point is clickable. The panel that opens in the corner of the chart names the object
+  and gives its catalogue number, its coplanar angle and longitude difference at the newest
+  reading, and how many points the trail holds over how many hours. When the object is also
+  loaded in the current view you get its priority, affiliation, longitude, inclination, drift and
+  data age as well, and <b>Open in inspector</b> takes you straight to it.</p>
+  <div class="note"><b>The chart reads the whole store, the plot reads your filters.</b> So a
+  neighbour can appear here while its priority chip is switched off. The panel tells you when
+  that has happened rather than leaving the fields blank; switch the chip on and the full detail
+  fills in.</div>
   <div class="note"><b>The left edge is not an error.</b> A perfectly coplanar object has an angle
   of exactly zero, which no logarithmic axis can place. Those points are clamped to 0.01&deg; and
   drawn on the left edge, which reads as &ldquo;coplanar&rdquo; and is correct.</div>
@@ -1000,7 +1021,9 @@ const HOTSPOTS={
     [10,12,82,70,"The field","Each point is one nearby object. Both axes are logarithmic."],
     [4,12,7,74,"Coplanar angle","Horizontal: the mutual tilt between the two orbital planes. The left edge is zero, clamped so a logarithmic axis can place it."],
     [10,84,82,10,"Longitude difference","Vertical scale runs up the left of the field: how far apart the two objects sit around the belt."],
-    [10,70,30,16,"The corner that matters","Bottom left: same plane and same longitude. That is co-orbital geometry."]]
+    [10,70,30,25,"The corner that matters","Bottom left: same plane and same longitude. That is co-orbital geometry. Nothing is ever drawn over this corner."],
+    [12,8,20,6,"A trail","Each track runs from its oldest paired reading to its newest, faint to bright. Trails run mostly up and down because longitudes change faster than orbital planes do."],
+    [71,7,28,25,"The detail panel","Click any point to open it. Catalogue number, the two chart values, the trail length, and the full object detail when it is loaded in the current view. It sits top right, the least interesting corner, and the legend steps aside for it."]]
 };
 function hotHtml(h,i){
   const [x,y,w,ht,title]=h;

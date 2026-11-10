@@ -112,6 +112,25 @@ def _retain_candidates(existing: dict, rec: dict) -> None:
             bucket[source] = el
 
 
+def _enrich_sample(held: dict, incoming: dict) -> None:
+    """Fill fields a stored sample is MISSING; never overwrite one it has.
+
+    The store's anti-shrink rule, applied at sample level. A re-pull at an
+    epoch already held used to be discarded whole, so a sample written before
+    a field existed stayed without it for the entire retention window. That is
+    what `raan_deg` hit in 1.6.17: every sample already in the store was frozen
+    without the one value the co-planar trail needs.
+
+    Deliberately NOT counted as an added sample. `last_ingest_added` is
+    load-bearing for the staleness diagnosis and has to keep meaning "new
+    epochs arrived", or a store that only ever re-reads the same window would
+    look healthy.
+    """
+    for key, value in incoming.items():
+        if value is not None and held.get(key) is None:
+            held[key] = value
+
+
 class Store:
     def __init__(self, data_dir: str):
         self.data_dir = data_dir
@@ -235,9 +254,12 @@ class Store:
                 _retain_candidates(existing, rec)  # newest per provider
                 by_epoch = {s["epoch"]: s for s in existing["samples"]}
                 for s in rec.get("samples", []):
-                    if s["epoch"] not in by_epoch:
+                    held = by_epoch.get(s["epoch"])
+                    if held is None:
                         by_epoch[s["epoch"]] = s
                         added += 1
+                        continue
+                    _enrich_sample(held, s)
                 merged = [
                     s for s in by_epoch.values()
                     if _parse(s["epoch"]) >= cutoff

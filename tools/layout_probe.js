@@ -177,6 +177,88 @@ function checkBodyFits(m, label) {
            `canvas attributes are acting as an intrinsic floor again.`);
     }
     // ---------------------------------------------------------------------
+    // Co-planar TRAILS and point DETAILS (1.6.17). Two guards, because the
+    // feature has two halves that fail independently.
+    //
+    // Half one is the data: a trail needs RAAN retained PER SAMPLE. Without
+    // it every track collapses to the single elset-derived head and the chart
+    // silently goes back to being a scatter of dots, with nothing on screen
+    // saying so. Reverting the `raan_deg` line in `_sample_from_elements`
+    // makes this assertion report one point per track.
+    //
+    // Half two is the hit test. The sweep below uses the PAGE'S OWN hit test
+    // (it moves the mouse and reads the cursor the page sets) rather than
+    // recreating the plot's padding and log-scale maths, which would pass
+    // while the real geometry drifted underneath it. That lesson is recorded
+    // against the 1.6.15 sandbox probe and applies here for the same reason.
+    // ---------------------------------------------------------------------
+    await setModal(page, 900, 800);   // room for the heads to separate
+    const co = await page.evaluate(
+      (id) => fetch("/api/coplanar?target=" + encodeURIComponent(id))
+        .then((r) => r.json()),
+      opened.id);
+    const tracks = co.tracks || [];
+    const longest = tracks.reduce((m, t) => Math.max(m, t.points.length), 0);
+    if (longest < 2) {
+      fail(`every co-planar track for ${opened.id} holds a single point, so ` +
+           `there is no trail to draw. Samples are not carrying raan_deg.`);
+    } else {
+      console.log(`  trails: ${tracks.length} track(s), longest ${longest} points`);
+    }
+
+    // Sweep for a head with real mousemove events; the page sets the pointer
+    // cursor only where coHit finds one.
+    const spot = await page.evaluate(() => {
+      const cv = document.getElementById("cocanvas");
+      const b = cv.getBoundingClientRect();
+      for (let y = 0; y < b.height; y += 9) {
+        for (let x = 0; x < b.width; x += 9) {
+          cv.style.cursor = "default";
+          cv.dispatchEvent(new MouseEvent("mousemove", {
+            clientX: b.left + x, clientY: b.top + y, bubbles: true }));
+          if (cv.style.cursor === "pointer") {
+            return { x: b.left + x, y: b.top + y };
+          }
+        }
+      }
+      return null;
+    });
+    if (spot === null) {
+      fail("sweeping the co-planar canvas found no clickable point, so the " +
+           "hit test never matches a head it has drawn.");
+    } else {
+      await page.mouse.click(spot.x, spot.y);   // a real click, not a dispatch
+      await page.waitForSelector("#copanel:not([hidden])", { timeout: 5000 })
+        .catch(() => {});
+      const panel = await page.evaluate(() => {
+        const el = document.getElementById("copanel");
+        return { hidden: el.hidden, text: (el.textContent || "").trim() };
+      });
+      if (panel.hidden) {
+        fail("clicking a co-planar point did not open the detail panel.");
+      } else {
+        // Every panel carries a Catalogue row, so the id is the exact check.
+        const named = tracks.some((t) => panel.text.includes(String(t.id)));
+        if (!named) {
+          fail(`the co-planar detail panel does not name any charted object: ` +
+               `${JSON.stringify(panel.text.slice(0, 120))}`);
+        }
+        if (!/\d+\s*pts/.test(panel.text)) {
+          fail(`the co-planar detail panel shows no trail length: ` +
+               `${JSON.stringify(panel.text.slice(0, 120))}`);
+        }
+        await page.click("#copanel .cp-x");
+        const stillOpen = await page.evaluate(
+          () => !document.getElementById("copanel").hidden);
+        if (stillOpen) {
+          fail("the co-planar detail panel's close control did not close it.");
+        }
+      }
+    }
+    const afterPanel = await measure(page, "with panel");
+    checkBodyFits(afterPanel, "with panel");
+
+    // ---------------------------------------------------------------------
     // The country filter (1.6.7). The design trap this guards: the country
     // panel counts from the UNFILTERED set. Counting from the filtered set
     // would collapse the panel to the single country selected, leaving no way

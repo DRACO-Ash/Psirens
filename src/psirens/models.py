@@ -86,6 +86,10 @@ class Sample(BaseModel):
     epoch: datetime
     sub_lon_deg: float
     inclination_deg: float
+    # Optional because samples stored before 1.6.17 do not carry it. A track
+    # draws a co-planar trail only across the samples that do; the rest are
+    # skipped rather than guessed at.
+    raan_deg: float | None = None
 
 
 class Track(BaseModel):

@@ -4,7 +4,7 @@ Every code-quality issue raised against this application during development,
 what caused it, how it was fixed, and what now stops it recurring.
 
 Classification: Not Classified. Owner: Ash Higgins, Bluestaq Limited.
-Covers builds 1.4.14 to 1.6.16, 23 August to 5 October 2026, 30 issues.
+Covers builds 1.4.14 to 1.6.17, 23 August to 10 November 2026, 31 issues.
 
 ---
 
@@ -243,6 +243,29 @@ oscillation **1.2e-13**.
   opened from a file share.
 **Reviewing your own output before handing it over finds things tests do not.**
 
+### C12. A test that rotted on the calendar (found 10 November 2026)
+A passing test fixture injected a record at a **hardcoded epoch**. The epoch sat
+inside the application's 90-day retention window when the test was written. On
+the day the window moved past it, the record began being pruned on merge and the
+assertion failed permanently. Nothing in the repository changed; the calendar
+did. The build that was sitting ready for upload had gone red without anyone
+touching it, and would have failed the platform test stage.
+
+Fixed with an epoch relative to `now`, plus two tests that pin the retention
+boundary itself (one day inside survives, one day outside is pruned), which the
+suite had never had.
+
+**No automated gate, and the reason is part of the entry.** The textual pattern
+(an absolute date in a test) occurs about twenty times in this suite and is
+harmless in nineteen of them, because those epochs never reach the prune. A rule
+at that signal-to-noise gets silenced within a week. The real condition is
+semantic: a fixture epoch that must sit *inside* a window measured from `now`.
+The standing rule is a habit, not a checker: **write it relative to `now`.**
+
+**A green suite is evidence about the day it ran, not about the code.** Re-run
+the full loop immediately before any upload, however long the tree has been
+untouched; "it was green when I built it" is not the same claim.
+
 ---
 
 ## 6. Defects in the checks themselves
@@ -358,8 +381,8 @@ Ordered by return on effort, from this project's evidence.
 ```json
 {
   "project": "PSIRENS",
-  "covers": {"from": "1.4.14", "to": "1.6.16",
-             "dates": "2026-08-23/2026-10-05", "issues": 30},
+  "covers": {"from": "1.4.14", "to": "1.6.17",
+             "dates": "2026-08-23/2026-11-10", "issues": 31},
   "categories": {
     "A": "rejected by the platform quality gate",
     "B": "caught by local gates before upload",
@@ -440,6 +463,11 @@ Ordered by return on effort, from this project's evidence.
      "cost": "an incorrect document shared outside the team",
      "guard": "read a green run end to end; record which runs the document was built from",
      "note": "a record built only from failed runs cannot see stages that appear only on success"},
+
+    {"id": "C12", "title": "test fixture epoch rotted past the retention window",
+     "found_in": "1.6.16", "fixed_in": "1.6.17", "cost": "a build that would have failed the platform test stage",
+     "guard": "write a fixture epoch relative to now; pin the retention boundary with tests",
+     "note": "no automated gate: the textual pattern is harmless in 19 of 20 occurrences, so a rule at that noise level gets silenced"},
 
     {"id": "E1", "title": "text rule fires on a Playwright Locator",
      "resolution": "scope web rules to shipped pages, record the exception"},

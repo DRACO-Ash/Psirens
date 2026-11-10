@@ -120,3 +120,89 @@ def test_a_genuine_stored_name_survives_when_hrr_has_none():
     store["objects"]["39017"]["name"] = "ZHONGXING-12"
     out = coplanar_for(store, "63157", names={})
     assert out["tracks"][0]["name"] == "ZHONGXING-12"
+
+
+# -- history trails (1.6.17) -----------------------------------------------
+#
+# The payload has carried a `points` list since 1.6.0, documented as "length 1
+# until per-sample RAAN". Samples now retain RAAN, so these assert the trail is
+# real: built from paired measurements, not from holding one value constant.
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from psirens.coplanar import coplanar_for  # noqa: E402
+
+_T0 = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
+
+
+def _trail_obj(lon, inc, raan, *, samples, name="OBJ"):
+    """A store-shaped object. `samples` is a list of (hours_ago, raan or None)."""
+    rows = []
+    for hours, s_raan in samples:
+        row = {"epoch": (_T0 - timedelta(hours=hours)).isoformat(),
+               "sub_lon_deg": lon, "inclination_deg": inc}
+        if s_raan is not None:
+            row["raan_deg"] = s_raan
+        rows.append(row)
+    rows.sort(key=lambda r: r["epoch"])
+    return {"name": name, "samples": rows,
+            "elset": {"inclination_deg": inc, "raan_deg": raan}}
+
+
+def _store(primary_samples, neighbour_samples):
+    return {"objects": {
+        "P": _trail_obj(0.0, 1.0, 10.0, samples=primary_samples, name="PRIMARY"),
+        "N": _trail_obj(3.0, 1.0, 12.0, samples=neighbour_samples, name="NEIGHBOUR"),
+    }}
+
+
+def test_a_track_is_one_point_when_samples_carry_no_raan():
+    """The pre-1.6.17 shape. Samples without RAAN cannot define a plane, so
+    the chart falls back to the single elset-derived point."""
+    data = _store([(6, None), (0, None)], [(6, None), (0, None)])
+    track = coplanar_for(data, "P")["tracks"][0]
+    assert len(track["points"]) == 1
+
+
+def test_a_trail_appears_once_samples_carry_raan():
+    data = _store([(12, 10.0), (6, 10.0), (0, 10.0)],
+                  [(12, 14.0), (6, 13.0), (0, 12.0)])
+    track = coplanar_for(data, "P")["tracks"][0]
+    assert len(track["points"]) > 1, "paired samples should produce a trail"
+    assert all(p["coplanar_deg"] >= 0 for p in track["points"])
+
+
+def test_the_trail_runs_oldest_to_newest():
+    """The SPA draws the polyline in array order and puts the marker on the
+    last point, so the order is load-bearing rather than cosmetic."""
+    data = _store([(12, 10.0), (6, 10.0), (0, 10.0)],
+                  [(12, 14.0), (6, 13.0), (0, 12.0)])
+    epochs = [p["epoch"] for p in coplanar_for(data, "P")["tracks"][0]["points"]]
+    assert epochs == sorted(epochs)
+
+
+def test_the_head_point_still_comes_from_the_elset():
+    """The invariant from 1.6.0: the head uses the newest elset overall, the
+    same source the plot head and the RA needle use, so changing the TLE
+    selection policy cannot move the plot and this chart apart. A trail must
+    not quietly replace it with a sample-derived head."""
+    data = _store([(12, 10.0), (0, 10.0)], [(12, 99.0), (0, 99.0)])
+    track = coplanar_for(data, "P")["tracks"][0]
+    from psirens.coplanar import coplanar_angle_deg
+    expected = round(coplanar_angle_deg(1.0, 10.0, 1.0, 12.0), 4)   # elset RAANs
+    assert track["points"][-1]["coplanar_deg"] == expected
+
+
+def test_a_sample_with_no_partner_in_time_makes_no_point():
+    """Two objects are sampled by different providers at different epochs. A
+    point pairing readings hours apart is not a measurement, so it is dropped
+    rather than drawn."""
+    far = _store([(0, 10.0)], [(48, 14.0), (0, 12.0)])
+    track = coplanar_for(far, "P", pair_hours=6)["tracks"][0]
+    assert len(track["points"]) == 1, "the 48h-old neighbour sample has no partner"
+
+
+def test_the_trail_is_capped():
+    many = [(h, 12.0 + h * 0.01) for h in range(40, 0, -1)]
+    data = _store([(h, 10.0) for h in range(40, 0, -1)], many)
+    track = coplanar_for(data, "P", max_points=5)["tracks"][0]
+    assert len(track["points"]) <= 6   # cap, plus the elset head

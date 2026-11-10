@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.16; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.17; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -55,14 +55,19 @@ one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
 two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
 loop-capture finding, 1.6.13 colours the RA needle by affiliation, 1.6.14
 adds the HTML Operator Guide, 1.6.15 makes that guide something an operator
-uses rather than reads, and 1.6.16 is the review pass over it (see Open items).
+uses rather than reads, 1.6.16 is the review pass over it, and 1.6.17 makes the
+Co-Planar chart interactive and gives it history (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.16: it carries everything.
+Upload 1.6.17: it carries everything. It also carries a fix 1.6.16 needed and
+did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
+items. The feed was dry from 9 October to 9 November on an HTTP 401 and is
+answering again; a backfill pull over the gap is still outstanding, also in
+Open items.
 Memory set to 1Gi in the App Store Configuration tab.
 Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
@@ -108,6 +113,20 @@ Shipped features:
   sidebar. The canvas is absolutely positioned and the
   modal body carries `min-height:0`/`min-width:0`: see the resize note in Open
   items before touching that CSS.
+  INTERACTIVE AND HISTORIC from 1.6.17. Every track is a TRAIL, oldest paired
+  reading to newest, and every point is CLICKABLE: a detail panel names the
+  object and carries the two chart values, the trail length and span, and the
+  full object detail (priority, affiliation, longitude, inclination, drift,
+  data age) plus an Open-in-inspector control whenever that object is loaded
+  in the current view. Trails run mostly vertically, which is the physics, not
+  a bug: longitudes change far faster than orbital planes do.
+  LAYOUT RULE, now enforced by where things are drawn: furniture never covers
+  the BOTTOM LEFT corner, because that corner is the whole point of the chart.
+  The detail panel sits TOP RIGHT, the far-in-plane-and-far-in-longitude
+  corner, and the legend hides while the panel is open; a point label that
+  would land inside the legend is dropped rather than drawn over it, since the
+  legend carries the same name. The MARKER is always drawn, because a point
+  hidden behind furniture is a point the operator cannot see to click.
 
 ## Pushing to origin
 
@@ -226,11 +245,18 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drift_deg_per_day` remains as the rate-only wrapper.
 - `config.py` — env-only config (UDL base/path, epoch param, retention, HRR
   cadence, conjunction window, memory-independent tunables).
-- `store.py` — atomic JSON store; anti-shrink `merge_samples`; `retain_only`
+- `store.py` — atomic JSON store; anti-shrink `merge_samples` (and
+  `_enrich_sample`, which FILLS a field a stored sample is missing on a re-pull
+  but never overwrites one it holds, and is deliberately NOT counted in
+  `last_ingest_added`); `retain_only`
   (prunes only REAL objects not on the HRR list; keeps non-REAL); elset retention
   (`_retain_elset` newest overall, `_retain_candidates` newest per provider,
   anti-shrink so a pull missing one provider never erases it).
-- `sources.py` — `UDLElsetSource`, `ManualElsetSource`, `DemoElsetSource`;
+- `sources.py` — `UDLElsetSource`, `ManualElsetSource`, `DemoElsetSource`
+  (whose synthetic belt carries per-object RAAN and real multi-day trails, so
+  the offline demo exercises the co-planar trail path the layout probe guards);
+  `_sample_from_elements` retains `raan_deg` PER SAMPLE from 1.6.17, which is
+  what makes a historic plane reconstructable at all;
   `_elset_dict` (the retained mean elements plus native `line1`/`line2`, `source`,
   `rev_no`, `mean_motion_dot`, `mean_motion_ddot`, `ephem_type`); `_udl_ts`
   (trailing-Z epoch form); `_record_elset` (files each fix under `elset`, newest
@@ -245,10 +271,18 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   because the cache is otherwise read verbatim and the bundled snapshot and a
   raw JCO record disagree on the key.
 - `coplanar.py` — coplanar angle from inclination and RAAN, the longitude-
-  difference wrap, and `coplanar_for` (the neighbourhood payload). Reads the
-  plane from `elset`, the newest fix overall, which is what the plot head and RA
-  needle use; it deliberately does NOT go through the TLE selection policy, so
-  changing `TLE_SOURCE_PRIORITY` cannot move the plot and the chart apart.
+  difference wrap, and `coplanar_for` (the neighbourhood payload). The HEAD of
+  every track reads the plane from `elset`, the newest fix overall, which is
+  what the plot head and RA needle use; it deliberately does NOT go through the
+  TLE selection policy, so changing `TLE_SOURCE_PRIORITY` cannot move the plot
+  and the chart apart. The TRAIL behind it (1.6.17) is built from the stored
+  SAMPLES instead: `_plane_rows` takes every sample that carries `raan_deg`,
+  and `_nearest_row` pairs each neighbour reading with the primary reading
+  closest in time, giving up rather than pairing across more than
+  `COPLANAR_PAIR_HOURS` (6). Two objects are sampled at different epochs by
+  different providers, so a point pairing readings hours apart would be an
+  invention. A sample with no RAAN is SKIPPED, never back-filled from the
+  current value: a shorter honest trail beats a long invented one.
 - `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native first,
   reconstruction fallback, with provenance). The element set that is served is
   also the one propagated, so the displayed line always produces the shown range.
@@ -310,8 +344,12 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 - `GET /api/conjunctions?target=<satNo>` — target TLE plus per-neighbour closest
   approach and TLEs.
 - `GET /api/coplanar?target=<satNo>` — the primary's plane plus, for each object
-  within the half-width, its coplanar angle and longitude difference. 400 when
-  `target` is absent.
+  within the half-width, a `points` list of {coplanar_deg, lon_diff_deg, epoch}
+  running oldest to newest. The LAST point is the elset-derived head; the ones
+  before it are the sample-derived trail and are present only where both
+  objects have samples carrying RAAN within `COPLANAR_PAIR_HOURS` of each
+  other. A track with one point is a track with no usable history, not an
+  error. Capped at `COPLANAR_MAX_POINTS` (60). 400 when `target` is absent.
 - `POST /api/pull?mode=<real|sim|combined>&hours=N` OR
   `&start=<ISO>&end=<ISO>` — operator pull; token-gated and rate-limited.
 - `POST /api/refresh` — force HRR + REAL refresh.
@@ -795,6 +833,93 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   unconditionally, which on a `file://` copy logged "URL scheme file is not
   supported" on a page that was otherwise working perfectly. It now only asks
   when the page is actually being served over http or https.
+- ROTTED TEST, found 10 November 2026 and the most important thing in this
+  entry: **1.6.16 would have FAILED the platform Test gate on the day it was
+  going to be uploaded**, and nothing about the change being uploaded caused
+  it. `test_manual_elset_roundtrip_no_token` injected a manual element set at
+  a HARDCODED epoch of 2026-07-20. That sat comfortably inside the 90-day
+  retention window when it was written; on 18 October 2026 it fell outside,
+  after which `merge_samples` pruned the injected object and the assertion
+  failed for ever. PROVEN pre-existing by stashing the working tree and
+  re-running: the failure is on the committed 1.6.16 source, not on the new
+  work. Dependency drift was ruled out first (every pin matched).
+  FIX: a RELATIVE epoch (`now - 1h`), plus two tests that pin the retention
+  boundary itself (89 days survives, 91 days is pruned), which the suite did
+  not have.
+  NO AUTOMATED GATE, and the reason is recorded rather than hidden: the
+  textual pattern (an absolute date in a test) appears about twenty times in
+  this suite and is harmless nineteen of them, because those epochs never
+  reach the retention prune. A rule at that signal-to-noise would be silenced
+  within a week. The real condition is semantic, not textual: a fixture epoch
+  that must sit INSIDE a window measured from `now`. The standing rule is
+  therefore a habit, not a checker: a test fixture whose epoch has to be
+  recent must be written relative to `now`.
+  LESSON, the general one: a green suite is evidence about the day it ran.
+  This repo had not run the loop between 18 October and 10 November, and the
+  build it was holding for upload had gone red in the meantime without anyone
+  touching it.
+- CO-PLANAR INTERACTIVITY AND TRAILS: ADDED in 1.6.17. Owner asked, 10
+  November 2026, to see the detail of the satellites held while in the chart
+  view, and then for trails in the same modal.
+  WHY THE TRAIL NEEDED A STORE CHANGE, not just a draw change. The chart read
+  the plane from `elset`, the newest fix per object, so it could only ever
+  draw ONE point per object however it was rendered. A historic plane needs
+  inclination AND RAAN at each epoch; the stored sample carried inclination
+  and sub-longitude only. `_sample_from_elements` now retains `raan_deg` per
+  sample. Inclination alone cannot define a plane, so samples written before
+  1.6.17 are SKIPPED rather than back-filled from today's RAAN, which would
+  draw a confident line through a quantity nobody measured.
+  SECOND-ORDER PROBLEM, and the more interesting one. Dedup by epoch meant a
+  re-pull of an epoch already stored was DISCARDED WHOLE, so every sample
+  already in the store would have stayed without `raan_deg` for the entire
+  90-day retention window, and the backfill pull that the 401 outage needs
+  anyway would have added nothing to the history. `Store._enrich_sample` now
+  fills fields a stored sample is MISSING while never overwriting one it has:
+  the store's anti-shrink rule applied at sample level. It is deliberately NOT
+  counted as an added sample, because `last_ingest_added` is load-bearing for
+  the staleness diagnosis and has to keep meaning "new epochs arrived".
+  PAIRING. `coplanar_for` builds each trail by pairing a neighbour's sample
+  with the primary's NEAREST IN TIME, and draws no point at all when the
+  nearest is more than `COPLANAR_PAIR_HOURS` (6) away. Different providers
+  sample different objects at different epochs; a point pairing readings hours
+  apart would be an artefact of the feed, not a geometry.
+  THE HEAD STAYS ELSET-DERIVED. The last point of every track is still the
+  newest fix overall, the same source the plot head and the RA needle use.
+  That is the 1.6.0 invariant that stops `TLE_SOURCE_PRIORITY` moving the plot
+  and the chart apart, and a sample-derived head would have quietly broken it.
+  FURNITURE NEVER COVERS DATA, and never covers the bottom-left corner. Three
+  small rules, each one found by looking at a real capture: the legend is
+  drawn BEFORE the points, so a head in its corner is visible rather than
+  hidden (an operator can click what they cannot see, which is worse than
+  useless); a point label that would land inside the legend is DROPPED, since
+  the legend already carries that name and two strings on the same pixels
+  leave neither readable; and the detail panel sits TOP RIGHT, where far in
+  plane and far in longitude is the least interesting reading on the chart,
+  with the legend hiding while it is open. The first attempt put the panel
+  bottom left, directly over the co-orbital corner the chart exists to show.
+  PROVEN, both halves, each against a deliberate revert:
+  * removing `raan_deg` from `_sample_from_elements` fails
+    `test_a_sample_carries_raan_so_a_plane_can_be_reconstructed`;
+  * removing it from the demo belt makes the layout probe report "every
+    co-planar track for 43683 holds a single point, so there is no trail to
+    draw" AND "the detail panel shows no trail length";
+  * setting the hit radius to zero makes the probe report "sweeping the
+    co-planar canvas found no clickable point".
+  The probe SWEEPS for a head with real mousemove events and reads the cursor
+  the page sets, then clicks it for real. It does not recompute the plot's
+  padding and log scales, for the reason recorded against the 1.6.15 sandbox:
+  a probe that reimplements the geometry passes while the real geometry drifts
+  underneath it.
+  DEMO BELT WIDENED to make the probe non-vacuous: the four station-kept
+  anchors now carry a 30-day flat trail and their own RAAN, and every demo
+  object has a distinct node. Trails are built by pairing against the PRIMARY,
+  so an anchor holding a single point would have capped every neighbour's
+  trail at one point and left the new path unexercised offline.
+  GUIDE UPDATED in the same change, because a shipped feature the guide does
+  not mention is the 1.6.16 orphan-figure problem in reverse: the Co-Planar
+  section gains the trail and detail-panel explanation, two hotspots and a
+  recaptured figure, and `tools/guide_seed.py` now seeds per-sample RAAN so
+  the figure shows real trails rather than a scatter.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
@@ -835,8 +960,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   signal, tagged FACT / INFERENCE / TBC. Read it before bumping a dependency
   or touching the Dockerfile base image, and convert its TBC items to FACT
   the first time one of those gates fails.
-- `QUALITY-LEDGER.md` — the dated REGISTER of all 30 code-quality issues raised
-  against this app from 1.4.14 to 1.6.16: what was raised, by which gate, what
+- `QUALITY-LEDGER.md` — the dated REGISTER of all 31 code-quality issues raised
+  against this app from 1.4.14 to 1.6.17: what was raised, by which gate, what
   caused it, the fix, the guard and the proof, plus a JSON manifest for
   ingestion by other projects. `SNIFFS.md` is the rulebook (how to avoid them);
   this is the evidence (what they cost and in what order they arrive). Built for

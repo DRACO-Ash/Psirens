@@ -329,6 +329,40 @@ need the real scanner:
   container scans actually fail a build. Never triggered for us, so never
   observed. Convert this to fact the first time one fires.
 
+### 3.16 A test fixture dated by the calendar
+
+NOT a scanner rule. It is here because it failed a build and because it is the
+clearest example of section 4's point: some conditions are semantic, and
+writing a textual rule for them makes things worse.
+
+MEASURED, 10 November 2026. A test injected a record at a hardcoded epoch of
+`2026-07-20`. The application prunes anything older than its 90-day retention
+window on merge. The test passed for three months and then failed permanently
+on 18 October, with no commit between the last green run and the red one. The
+build waiting to be uploaded had gone red on its own.
+
+```python
+# rots: fixed date, inside the retention window only until it is not
+"epoch": "2026-07-20T00:00:00+00:00",
+
+# holds: relative to now, so it is inside the window on every run
+"epoch": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
+```
+
+**Why there is no checker for it.** The textual pattern, an absolute date in a
+test file, occurs about twenty times in the suite that carried this defect and
+is harmless in nineteen of them: those epochs never reach the prune. A rule at
+that signal-to-noise is silenced within a week, and then the one real case is
+invisible again. The deciding condition is semantic, not textual: *must this
+fixture epoch sit inside a window measured from `now`?*
+
+So the rule is a habit:
+● a fixture epoch that must look recent is written relative to `now`;
+● the window boundary itself gets its own tests, one just inside and one just
+  outside, so the behaviour is pinned rather than assumed;
+● **re-run the full loop immediately before any upload**, however long the tree
+  has been untouched. A green suite is evidence about the day it ran.
+
 ## 5. The meta-rules, which cost more than any sniff
 
 Four habits, each learned from a real failure. They are the reason the rules

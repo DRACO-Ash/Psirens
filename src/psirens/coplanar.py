@@ -25,9 +25,10 @@ list so that is a data-only upgrade, not an interface change.
 
 from __future__ import annotations
 
+import bisect
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .models import display_name
 
@@ -101,10 +102,82 @@ def _latest_epoch(obj: dict) -> str | None:
     return samples[-1].get("epoch") if samples else None
 
 
+def _parse_epoch(raw) -> datetime | None:
+    try:
+        when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def _plane_rows(obj: dict) -> list[tuple]:
+    """(when, plane, sub_lon, epoch) for every sample that carries RAAN.
+
+    Samples written before 1.6.17 have no `raan_deg` and are SKIPPED, not
+    guessed at. Inclination alone cannot define a plane, and holding RAAN at
+    its present value to fill the gap would draw a confident line through a
+    quantity nobody measured. A shorter honest trail beats a long invented one.
+    """
+    rows = []
+    for s in obj.get("samples") or []:
+        raan, inc, lon = s.get("raan_deg"), s.get("inclination_deg"), s.get("sub_lon_deg")
+        if raan is None or inc is None or lon is None:
+            continue
+        when = _parse_epoch(s.get("epoch"))
+        if when is not None:
+            rows.append((when, OrbitPlane(float(inc), float(raan)),
+                         float(lon), s.get("epoch")))
+    rows.sort(key=lambda r: r[0])
+    return rows
+
+
+def _nearest_row(rows: list[tuple], times: list[datetime],
+                 when: datetime, tol: timedelta) -> tuple | None:
+    """The row closest in time to `when`, or None if the closest is beyond tol.
+
+    Two objects are sampled at different epochs by different providers, so a
+    co-planar point is only honest when both planes were measured at about the
+    same time. Outside the tolerance there is no point, rather than a point
+    pairing readings hours apart.
+    """
+    i = bisect.bisect_left(times, when)
+    best = None
+    for j in (i - 1, i):
+        if j < 0 or j >= len(rows):
+            continue
+        gap = abs(rows[j][0] - when)
+        if best is None or gap < best[0]:
+            best = (gap, rows[j])
+    if best is None or best[0] > tol:
+        return None
+    return best[1]
+
+
+def _trail(p_rows: list[tuple], p_times: list[datetime], obj: dict,
+           pair_hours: float, max_points: int, skip_epoch: str | None) -> list:
+    """Historic co-planar points for one neighbour, oldest first."""
+    rows = _plane_rows(obj)
+    if not rows or not p_rows:
+        return []
+    tol = timedelta(hours=pair_hours)
+    out = []
+    for when, plane, lon, epoch in rows[-max_points:]:
+        if epoch == skip_epoch:
+            continue           # the head point below already covers this epoch
+        match = _nearest_row(p_rows, p_times, when, tol)
+        if match is None:
+            continue
+        out.append(CoplanarPoint(round(match[1].angle_to(plane), 4),
+                                 round(longitude_difference_deg(lon, match[2]), 4),
+                                 epoch))
+    return out
+
+
 def coplanar_for(store_data: dict, primary_id: str, *,
                  half_width_deg: float = 20.0, cap: int = 40,
                  now: datetime | None = None,
-                 names: dict | None = None) -> dict:
+                 names: dict | None = None,
+                 max_points: int = 60, pair_hours: float = 6.0) -> dict:
     """Coplanar angle and absolute longitude difference of every stored object
     within +/-half_width longitude of the primary that carries an element set.
     Sorted nearest-plane first (then nearest in longitude) and capped."""
@@ -120,6 +193,9 @@ def coplanar_for(store_data: dict, primary_id: str, *,
         return {"primary": None, "tracks": [], "half_width_deg": half_width_deg,
                 "computed_at": now.isoformat(),
                 "detail": "primary has no element set"}
+    # The primary's own sampled planes, for pairing the history against.
+    p_rows = _plane_rows(primary)
+    p_times = [r[0] for r in p_rows]
     tracks: list[CoplanarTrack] = []
     for oid, obj in objects.items():
         if oid == primary_id:
@@ -131,10 +207,16 @@ def coplanar_for(store_data: dict, primary_id: str, *,
         lon_diff = longitude_difference_deg(lon, p_lon)
         if lon_diff > half_width_deg:
             continue
-        point = CoplanarPoint(round(p_plane.angle_to(plane), 4),
-                              round(lon_diff, 4), _latest_epoch(obj))
+        # The HEAD point stays elset-derived: the newest fix overall, the same
+        # source the plot head and the RA needle use. That invariant is why
+        # changing TLE_SOURCE_PRIORITY cannot move the plot and this chart
+        # apart, and a sample-derived head would quietly break it.
+        head = CoplanarPoint(round(p_plane.angle_to(plane), 4),
+                             round(lon_diff, 4), _latest_epoch(obj))
+        trail = _trail(p_rows, p_times, obj, pair_hours, max_points,
+                       _latest_epoch(obj))
         tracks.append(CoplanarTrack(
-            oid, display_name(oid, obj.get("name"), names), [point]))
+            oid, display_name(oid, obj.get("name"), names), trail + [head]))
     tracks.sort(key=lambda t: (t.latest.coplanar_deg, t.latest.lon_diff_deg))
     return {
         "primary": {
