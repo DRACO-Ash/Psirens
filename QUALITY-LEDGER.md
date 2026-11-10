@@ -4,7 +4,7 @@ Every code-quality issue raised against this application during development,
 what caused it, how it was fixed, and what now stops it recurring.
 
 Classification: Not Classified. Owner: Ash Higgins, Bluestaq Limited.
-Covers builds 1.4.14 to 1.6.17, 23 August to 10 November 2026, 31 issues.
+Covers builds 1.4.14 to 1.6.18, 23 August to 10 November 2026, 32 issues.
 
 ---
 
@@ -266,6 +266,28 @@ The standing rule is a habit, not a checker: **write it relative to `now`.**
 the full loop immediately before any upload, however long the tree has been
 untouched; "it was green when I built it" is not the same claim.
 
+### C13. Labels drawn blind on top of each other (1.6.18)
+Point names on a chart were drawn at a fixed offset to the right of every
+marker. In a sparse test view that looks correct. In a real 40-object
+neighbourhood five names landed on the same pixels and **none of them could be
+read**, and a name near the right edge ran off the canvas entirely.
+
+This is the **third page** in this project to hit the same defect class, after
+the main plot and the guide's sandbox, each fixed on the page that failed rather
+than across the pattern. The same lesson the `response.ok` family taught three
+times over.
+
+Fixed by trying four placements per name and dropping any that cannot be placed
+clear of the markers, the other names, the overlaying panel and the canvas edge,
+then **reporting the number dropped under the chart**. A label between two
+markers belongs to whichever one the eye picks, which is worse than no label.
+
+**The guard is the count, not the pixels.** Canvas text cannot be asserted on
+directly, but without avoidance every name always draws, so the dropped count is
+zero at every size. The probe asserts a small view hides at least one name and
+strictly more than a large one. **When you cannot measure the output, measure
+the decision the code made.**
+
 ---
 
 ## 6. Defects in the checks themselves
@@ -381,8 +403,8 @@ Ordered by return on effort, from this project's evidence.
 ```json
 {
   "project": "PSIRENS",
-  "covers": {"from": "1.4.14", "to": "1.6.17",
-             "dates": "2026-08-23/2026-11-10", "issues": 31},
+  "covers": {"from": "1.4.14", "to": "1.6.18",
+             "dates": "2026-08-23/2026-11-10", "issues": 32},
   "categories": {
     "A": "rejected by the platform quality gate",
     "B": "caught by local gates before upload",
@@ -468,6 +490,11 @@ Ordered by return on effort, from this project's evidence.
      "found_in": "1.6.16", "fixed_in": "1.6.17", "cost": "a build that would have failed the platform test stage",
      "guard": "write a fixture epoch relative to now; pin the retention boundary with tests",
      "note": "no automated gate: the textual pattern is harmless in 19 of 20 occurrences, so a rule at that noise level gets silenced"},
+
+    {"id": "C13", "title": "chart labels drawn blind, overprinting each other",
+     "fixed_in": "1.6.18", "cost": "an unreadable chart in exactly the case it exists for",
+     "guard": "probe asserts a small view drops more labels than a large one",
+     "note": "third instance of the same defect class on a third page; the guard measures the decision, not the pixels"},
 
     {"id": "E1", "title": "text rule fires on a Playwright Locator",
      "resolution": "scope web rules to shipped pages, record the exception"},

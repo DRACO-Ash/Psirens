@@ -266,7 +266,7 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   <div class="comodal-hd" id="comodal-hd"><span class="comodal-ttl" id="comodal-ttl">Co-Planar view</span><button type="button" class="imodal-x" id="comodal-x" aria-label="Close co-planar view" title="Close">×</button></div>
   <div class="comodal-bd"><canvas id="cocanvas"></canvas><div class="comuted" id="comsg"></div>
     <div class="copanel" id="copanel" hidden></div>
-    <div class="cohint">click a point for details</div></div>
+    <div class="cohint" id="cohint">click a point for details</div></div>
 </section>
 <div class="foot"><span class="b" id="banner">UNCLASSIFIED</span><span>PSIRENS · sub-satellite longitude via validated SGP4</span>
   <span style="margin-left:auto" id="laststatus">—</span></div>
@@ -780,35 +780,97 @@ function coLegendBox(d,data){
   if(n===0||CO_SEL!==null){return null;}
   return {x:d.x1-130,y:d.y0+6,w:124,h:n*14+8};
 }
-function coInBox(box,x,y){
-  if(box===null){return false;}
-  return x>=box.x-3&&x<=box.x+box.w+3&&y>=box.y-3&&y<=box.y+box.h+3;
-}
-function coHead(ctx,sc,t,col,on,box){
+function coHead(ctx,sc,t,col,on){
   const last=t.points[t.points.length-1];
   const X=sc.sx(last.coplanar_deg),Y=sc.sy(last.lon_diff_deg);
   if(on){ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(X,Y,9,0,7);ctx.stroke();}
   ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,on?5.5:4,0,7);ctx.fill();
   ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
-  // A label that would land inside the legend is DROPPED, not drawn over it:
-  // the legend already carries the same name, so nothing is lost, and two
-  // strings on the same pixels leave neither readable. The MARKER still draws,
-  // because a point hidden behind furniture is a point the operator cannot see
-  // to click.
-  if(!coInBox(box,X+8,Y)){
-    ctx.fillStyle=on?"#ffffff":"#c7d4ea";
-    ctx.font=(on?"600 10.5px":"9.5px")+" system-ui,sans-serif";ctx.textAlign="left";
-    ctx.fillText(coPointLabel(t),X+8,Y+3);
-  }
-  return {id:String(t.id),x:X,y:Y};
+  return {id:String(t.id),x:X,y:Y,on:on,text:coPointLabel(t)};
 }
-function coPlot(ctx,sc,data,cols,box){
-  CO_HITS=[];
-  data.tracks.forEach((t,i)=>{
+// ---------------------------------------------------------------------------
+// Label placement (1.6.17). Names used to be drawn blind at a fixed offset to
+// the right of every marker, so in the crowded middle of a real neighbourhood
+// several names landed on the same pixels and NONE of them could be read, and
+// a name near the right edge ran off the canvas. Both are the same defect the
+// guide's sandbox hit in 1.6.16: a label is only information if it is legible
+// and attached to the right point.
+//
+// Four candidate placements per name, and if none of them is clear the name is
+// DROPPED. A name that cannot be placed honestly is worse than no name,
+// because a label sitting between two markers reads as belonging to whichever
+// one the eye picks. The count of dropped names is reported under the chart,
+// so a crowded view says so rather than quietly losing labels.
+// ---------------------------------------------------------------------------
+const CO_SIDES=["r","l","u","d"];
+function coLabelRect(ctx,text,X,Y,side){
+  const w=ctx.measureText(text).width;
+  if(side==="r"){return {x:X+8,y:Y-6,w:w,h:12,tx:X+8,ty:Y+3,align:"left"};}
+  if(side==="l"){return {x:X-10-w,y:Y-6,w:w,h:12,tx:X-10,ty:Y+3,align:"right"};}
+  if(side==="u"){return {x:X-w/2,y:Y-21,w:w,h:12,tx:X,ty:Y-11,align:"center"};}
+  return {x:X-w/2,y:Y+10,w:w,h:12,tx:X,ty:Y+20,align:"center"};
+}
+function coOverlap(a,b){
+  return a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
+}
+function coFits(r,blocked,W,H){
+  if(r.x<3||r.x+r.w>W-3||r.y<3||r.y+r.h>H-3){return false;}
+  return !blocked.some(bb=>coOverlap(r,bb));
+}
+function coPlaceLabel(ctx,h,blocked,W,H){
+  for(const side of CO_SIDES){
+    const r=coLabelRect(ctx,h.text,h.x,h.y,side);
+    if(coFits(r,blocked,W,H)){return r;}
+  }
+  return null;
+}
+// The detail panel is an HTML overlay, so the canvas has no way to know it is
+// there. Measure it and treat it as furniture, or names go on drawing happily
+// underneath it. The legend has the same treatment; the two never coexist.
+function coPanelBox(){
+  const el=document.getElementById("copanel"),cv=document.getElementById("cocanvas");
+  if(el===null||cv===null||el.hidden){return null;}
+  const r=el.getBoundingClientRect(),c=cv.getBoundingClientRect();
+  if(r.width<2){return null;}
+  return {x:r.left-c.left,y:r.top-c.top,w:r.width,h:r.height};
+}
+function coLabels(ctx,heads,furniture,W,H){
+  // Markers block labels as well as other labels, so a name never sits on top
+  // of another object's point.
+  const blocked=heads.map(h=>({x:h.x-7,y:h.y-7,w:14,h:14}));
+  furniture.forEach(f=>blocked.push(f));
+  // Selected first, so the point the operator just clicked keeps its name even
+  // in a crowd, then the rest in draw order.
+  const order=heads.slice().sort((a,b)=>Number(b.on)-Number(a.on));
+  let hidden=0;
+  order.forEach(h=>{
+    ctx.font=(h.on?"600 10.5px":"9.5px")+" system-ui,sans-serif";
+    const r=coPlaceLabel(ctx,h,blocked,W,H);
+    if(r===null){
+      // The SELECTED track is never counted as hidden: the detail panel is
+      // carrying its name in full, so the chart is not withholding anything.
+      if(!h.on){hidden+=1;}
+      return;
+    }
+    blocked.push(r);
+    ctx.textAlign=r.align;
+    // Dark halo first, the 1.6.5 lesson: a name has to read over a dense field
+    // without a filled box hiding the data underneath it.
+    ctx.strokeStyle="rgba(4,8,16,.85)";ctx.lineWidth=2.6;ctx.lineJoin="round";
+    ctx.strokeText(h.text,r.tx,r.ty);
+    ctx.fillStyle=h.on?"#ffffff":"#c7d4ea";
+    ctx.fillText(h.text,r.tx,r.ty);
+  });
+  return hidden;
+}
+function coPlot(ctx,sc,data,cols,furniture,W,H){
+  const heads=data.tracks.map((t,i)=>{
     const on=CO_SEL===String(t.id);
     coTrail(ctx,sc,t.points,cols[i],on);
-    CO_HITS.push(coHead(ctx,sc,t,cols[i],on,box));
+    return coHead(ctx,sc,t,cols[i],on);
   });
+  CO_HITS=heads.map(h=>({id:h.id,x:h.x,y:h.y}));
+  return coLabels(ctx,heads,furniture,W,H);
 }
 function coLegend(ctx,box,data,cols){
   if(box===null){return;}
@@ -822,6 +884,16 @@ function coLegend(ctx,box,data,cols){
     ctx.fillStyle=on?"#ffffff":"#c7d4ea";
     ctx.font=(on?"600 9.5px":"9.5px")+" system-ui,sans-serif";
     ctx.fillText(esc(t.id)+" "+esc((t.name||"").slice(0,13)),box.x+18,yy);});}
+// Say what was dropped. A chart that silently loses names looks complete and
+// is not; a count under it tells the operator to widen the modal or click the
+// point instead of trusting a field they cannot fully read.
+function coHintText(hidden){
+  const el=document.getElementById("cohint");
+  if(el===null){return;}
+  if(hidden<1){el.textContent="click a point for details";return;}
+  const plural=hidden===1?"name":"names";
+  el.textContent=`click a point for details \u00b7 ${hidden} ${plural} hidden`;
+}
 function drawCoplanar(ctx,W,H,data){
   ctx.clearRect(0,0,W,H);const d=coDims(W,H),sc=coScales(data,d),cols=data.tracks.map((t,i)=>coColour(i));
   // Legend BEFORE the points, from 1.6.17. It carries an 80% opaque backdrop,
@@ -829,7 +901,9 @@ function drawCoplanar(ctx,W,H,data){
   // entirely: the operator could still click it but could not see it.
   // Furniture never occludes data.
   const box=coLegendBox(d,data);
-  coArcs(ctx,d,sc);coGrid(ctx,d,sc);coLegend(ctx,box,data,cols);coPlot(ctx,sc,data,cols,box);
+  const furniture=[box,coPanelBox()].filter(f=>f!==null);
+  coArcs(ctx,d,sc);coGrid(ctx,d,sc);coLegend(ctx,box,data,cols);
+  coHintText(coPlot(ctx,sc,data,cols,furniture,W,H));
   if(!data.tracks.length){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.font="12px system-ui,sans-serif";
     ctx.fillText("No co-planar neighbours within \u00b1"+data.half_width_deg+"\u00b0",(d.x0+d.x1)/2,(d.y0+d.y1)/2);}}
 // ---------------------------------------------------------------------------

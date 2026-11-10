@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.17; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.18; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -55,17 +55,19 @@ one**, 1.6.10 puts the running version on `/api/meta`, 1.6.11 replaces the
 two-point drift rate with a least-squares fit, 1.6.12 clears a Code Quality
 loop-capture finding, 1.6.13 colours the RA needle by affiliation, 1.6.14
 adds the HTML Operator Guide, 1.6.15 makes that guide something an operator
-uses rather than reads, 1.6.16 is the review pass over it, and 1.6.17 makes the
-Co-Planar chart interactive and gives it history (see Open items).
+uses rather than reads, 1.6.16 is the review pass over it, 1.6.17 makes the
+Co-Planar chart interactive and gives it history, and 1.6.18 makes its labels
+legible in a crowd (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.17: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.6.18: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
-items. The feed was dry from 9 October to 9 November on an HTTP 401 and is
+items. 1.6.17 exists in the repository and was never uploaded, because 1.6.18
+superseded it before the upload; the platform has never seen either. The feed was dry from 9 October to 9 November on an HTTP 401 and is
 answering again; a backfill pull over the gap is still outstanding, also in
 Open items.
 Memory set to 1Gi in the App Store Configuration tab.
@@ -127,6 +129,13 @@ Shipped features:
   would land inside the legend is dropped rather than drawn over it, since the
   legend carries the same name. The MARKER is always drawn, because a point
   hidden behind furniture is a point the operator cannot see to click.
+  LABELS ARE PLACED, NOT ASSUMED, from 1.6.18. Each name is tried right, left,
+  above and below its marker and drawn at the first placement clear of the
+  markers, the names already placed, the legend or detail panel, and the canvas
+  edge. Where none is clear the name is DROPPED and the count is reported under
+  the chart ("3 names hidden"), because a chart that silently loses names looks
+  complete and is not. The selected track is never counted, since the panel
+  carries its name in full.
 
 ## Pushing to origin
 
@@ -920,6 +929,39 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   section gains the trail and detail-panel explanation, two hotspots and a
   recaptured figure, and `tools/guide_seed.py` now seeds per-sample RAAN so
   the figure shows real trails rather than a scatter.
+- CO-PLANAR LABEL COLLISION: FIXED in 1.6.18, the open item the 1.6.2 entry
+  above parked as a design call and the 1.6.17 capture made unarguable.
+  Names were drawn BLIND at a fixed offset to the right of every marker. In the
+  guide's 40-object neighbourhood that put five names on the same pixels in the
+  dense knot around 0.1deg, where none of them could be read, and pushed a name
+  near the right edge off the canvas. Same defect class as the sandbox clipping
+  fixed in 1.6.16, which is the point: the fix was applied to the page that had
+  failed rather than to the pattern, exactly as 1.6.4 records for the
+  `response.ok` family.
+  FIX. `coLabels` tries each name right, left, above and below its marker and
+  takes the first placement clear of every marker, every name already placed,
+  the legend or detail panel, and the canvas edge. The SELECTED track is placed
+  first, so the point the operator just clicked keeps its name in a crowd. A
+  name with no clear placement is DROPPED rather than drawn: a label sitting
+  between two markers belongs to whichever one the eye picks, which is worse
+  than no label. Names gained the dark stroked halo the main plot has carried
+  since 1.6.5.
+  THE PANEL IS FURNITURE TOO. The detail panel is an HTML overlay, so the canvas
+  cannot see it; `coPanelBox` measures it and feeds it in as a blocker. Found by
+  looking at a capture where a name was drawn happily underneath it.
+  SAY WHAT WAS DROPPED. The hint line under the chart reports the count, so a
+  crowded view states its own limit instead of quietly losing labels. The
+  selected track is excluded from that count because the panel is carrying its
+  name.
+  GUARDED, and the guard is the count rather than the pixels: without avoidance
+  every name always draws, so the count is zero at every size. The probe asserts
+  that a 420x320 modal hides at least one name and strictly more than a
+  1000x820 one. PROVEN: making `coFits` return true unconditionally reports
+  "0 hidden at 1000x820, 0 at 420x320" and fails both assertions.
+  DEMO BELT WIDENED AGAIN, for the same reason as the trails: with two
+  neighbours there was nothing to collide, so the guard would have passed on a
+  chart that could not fail. Four co-located objects now sit around BEIDOU-3 G1
+  at 140E, which is also what a real GEO neighbourhood looks like.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
@@ -960,8 +1002,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   signal, tagged FACT / INFERENCE / TBC. Read it before bumping a dependency
   or touching the Dockerfile base image, and convert its TBC items to FACT
   the first time one of those gates fails.
-- `QUALITY-LEDGER.md` — the dated REGISTER of all 31 code-quality issues raised
-  against this app from 1.4.14 to 1.6.17: what was raised, by which gate, what
+- `QUALITY-LEDGER.md` — the dated REGISTER of all 32 code-quality issues raised
+  against this app from 1.4.14 to 1.6.18: what was raised, by which gate, what
   caused it, the fix, the guard and the proof, plus a JSON manifest for
   ingestion by other projects. `SNIFFS.md` is the rulebook (how to avoid them);
   this is the evidence (what they cost and in what order they arrive). Built for

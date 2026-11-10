@@ -563,6 +563,21 @@ class DemoElsetSource:
             "77777", "INSPECTOR-EX", "EXERCISE", "DEMO", "43683",
             self._span(now, 20, 133.0, 1.5, 0.35, 208.0),
         )
+        # 6) A co-located cluster around BEIDOU-3 G1 at 140E. Real neighbourhoods
+        # in the belt are crowded, and the offline belt was not: with two
+        # neighbours the co-planar chart could never exercise label collision,
+        # so the guard for it would have passed on a chart that had nothing to
+        # collide. Same reasoning as the 30-day anchor trails above.
+        cluster = [
+            ("90301", "CLUSTER-ALPHA", 138.5, 0.3, 203.0, 0.05),
+            ("90302", "CLUSTER-BRAVO", 141.2, 2.1, 212.0, -0.08),
+            ("90303", "CLUSTER-CHARLIE", 142.6, 1.2, 188.0, 0.12),
+            ("90304", "CLUSTER-DELTA", 136.9, 3.0, 249.0, -0.03),
+        ]
+        for oid, name, lon, inc, raan, rate in cluster:
+            out[oid] = self._track(oid, name, "REAL", "DEMO", None,
+                                   self._span(now, 15, lon, inc, rate, raan))
+
         for oid, rec in out.items():  # synthesise a GEO elset so offline works
             head = rec["samples"][-1]
             rec["elset"] = self._demo_elset(

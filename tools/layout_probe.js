@@ -259,6 +259,40 @@ function checkBodyFits(m, label) {
     checkBodyFits(afterPanel, "with panel");
 
     // ---------------------------------------------------------------------
+    // Label collision avoidance (1.6.17). Names used to be drawn blind at a
+    // fixed offset right of every marker, so in a crowded neighbourhood
+    // several landed on the same pixels and none could be read. A name that
+    // cannot be placed clear of the markers, the other names and the canvas
+    // edge is now DROPPED, and the chart reports how many it dropped.
+    //
+    // That count is the guard. Without avoidance every name always draws, so
+    // the count is zero at every size; with it, squeezing the modal has to
+    // hide more names than a roomy one does. Reverting coLabels to an
+    // unconditional fillText makes both assertions below fail.
+    // ---------------------------------------------------------------------
+    const hidden = async () => page.evaluate(() => {
+      const m = /(\d+)\s+names?\s+hidden/
+        .exec(document.getElementById("cohint").textContent || "");
+      return m ? Number(m[1]) : 0;
+    });
+    await setModal(page, 1000, 820);
+    await page.waitForTimeout(300);
+    const roomy = await hidden();
+    await setModal(page, 420, 320);
+    await page.waitForTimeout(300);
+    const tight = await hidden();
+    console.log(`  labels: ${roomy} hidden at 1000x820, ${tight} at 420x320`);
+    if (tight === 0) {
+      fail("no co-planar name was dropped even in a 420x320 modal, so names " +
+           "are still being drawn blind on top of each other.");
+    }
+    if (tight <= roomy) {
+      fail(`shrinking the modal hid ${tight} names where the roomy one hid ` +
+           `${roomy}. Label placement is not reacting to the space it has.`);
+    }
+    await setModal(page, 900, 800);
+
+    // ---------------------------------------------------------------------
     // The country filter (1.6.7). The design trap this guards: the country
     // panel counts from the UNFILTERED set. Counting from the filtered set
     // would collapse the panel to the single country selected, leaving no way
