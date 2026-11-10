@@ -158,6 +158,10 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   .copanel .cp-go{margin-top:9px;width:100%;border:1px solid #2b3d63;border-radius:6px;
     padding:5px 0;font-size:11.5px;color:#eaf1fb;background:#17223a}
   .copanel .cp-go:hover{border-color:var(--accent)}
+  .cohd{flex:none;height:22px;padding:0 8px;background:#17223a;border:1px solid #2b3d63;border-radius:5px;
+    color:#c7d4ea;font-size:11px;line-height:1;cursor:pointer}
+  .cohd:first-of-type{margin-left:auto}
+  .cohd:hover{border-color:var(--accent)}
   .cohint{position:absolute;right:12px;bottom:10px;font-size:10.5px;color:#7f93b3;z-index:2}
   .comodal-hd{display:flex;align-items:center;gap:8px;padding:9px 8px 9px 12px;cursor:move;user-select:none;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(56,95,175,.22),rgba(56,95,175,.04));border-radius:8px 8px 0 0}
   .comodal-ttl{flex:1;font-weight:600;font-size:13px}
@@ -263,7 +267,7 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
   <div class="imodal-bd" id="insp"></div>
 </section>
 <section class="comodal" id="comodal" aria-label="Co-planar view">
-  <div class="comodal-hd" id="comodal-hd"><span class="comodal-ttl" id="comodal-ttl">Co-Planar view</span><button type="button" class="imodal-x" id="comodal-x" aria-label="Close co-planar view" title="Close">×</button></div>
+  <div class="comodal-hd" id="comodal-hd"><span class="comodal-ttl" id="comodal-ttl">Co-Planar view</span><button type="button" class="cohd" id="comodal-swap" title="Put longitude difference on the horizontal axis and the coplanar angle on the vertical, or back">Swap axes</button><button type="button" class="cohd" id="comodal-reset" title="Return to the full extent of the data" hidden>Reset zoom</button><button type="button" class="imodal-x" id="comodal-x" aria-label="Close co-planar view" title="Close">×</button></div>
   <div class="comodal-bd"><canvas id="cocanvas"></canvas><div class="comuted" id="comsg"></div>
     <div class="copanel" id="copanel" hidden></div>
     <div class="cohint" id="cohint">click a point for details</div></div>
@@ -702,7 +706,23 @@ document.getElementById("imodal-x").addEventListener("click",()=>{state.sel=null
 let COPLANAR=null;
 let CO_HITS=[];     // head positions from the last draw, for hit testing
 let CO_SEL=null;    // the selected track id, or null
-const CO_ARCS=[{cop:1,lon:10,c:"217,178,58"},{cop:0.5,lon:5,c:"233,134,58"},{cop:0.25,lon:2,c:"226,72,61"}];
+// 1.6.21. Which quantity is on which axis, and the zoomed view bounds.
+// CO_SWAP false is the original orientation: coplanar angle across, longitude
+// difference up. Swapping is a TOGGLE rather than a new default because the
+// reference render and the whole Operator Guide describe the original, and the
+// corner that matters stays bottom left either way.
+// CO_VIEW is null for the full extent of the data, else {xmin,xmax,ymin,ymax}
+// in DATA units. Holding it in data units rather than as a scale factor means
+// a resize re-derives the same window instead of drifting.
+let CO_SWAP=false;
+let CO_VIEW=null;
+const CO_ZOOM_MIN_DECADES=0.08;   // about 20x in, past which labels collide
+// Thresholds keyed by the SAME field names the points use, so the arcs follow
+// the axes round rather than needing a swapped copy of the table.
+const CO_ARCS=[
+  {coplanar_deg:1,lon_diff_deg:10,c:"217,178,58"},
+  {coplanar_deg:0.5,lon_diff_deg:5,c:"233,134,58"},
+  {coplanar_deg:0.25,lon_diff_deg:2,c:"226,72,61"}];
 const coColour=i=>`hsl(${(i*57)%360} 72% 62%)`;
 function coDims(W,H){return {padL:56,padR:20,padT:30,padB:42,x0:56,x1:W-20,y0:30,y1:H-42,W,H};}
 function coYMax(maxl){if(maxl<=10){return 10;}if(maxl<=20){return 20;}return Math.pow(10,Math.ceil(Math.log10(maxl)));}
@@ -714,39 +734,75 @@ function coXMax(maxc){if(maxc<=1){return 1;}if(maxc<=10){return 10;}return Math.
 // exactly zero, which no log axis can place, so it is clamped to CO_XMIN and
 // sits on the left edge: the edge reads as "coplanar", which is correct.
 const CO_XMIN=0.01,CO_YMIN=0.1;
-function logScale(lo,hi,p0,p1,invert){
+// Values are clamped at the FIELD's floor, not at the view's lower bound. The
+// floor clamp is load-bearing: a perfectly coplanar object is exactly zero,
+// which no log axis can place, so it sits on the edge and reads as "coplanar".
+// Clamping at the VIEW bound instead would pile every off-screen point onto
+// the edges the moment the chart is zoomed, inventing a cluster. Out-of-view
+// points map outside the plot rect and are clipped away by the caller.
+function logScale(lo,hi,p0,p1,invert,floor){
   const llo=Math.log10(lo),lhi=Math.log10(hi);
-  return v=>{const lv=Math.log10(Math.min(hi,Math.max(lo,v))),f=(lv-llo)/(lhi-llo);
+  return v=>{const lv=Math.log10(Math.max(floor,v)),f=(lv-llo)/(lhi-llo);
     return invert?p1-f*(p1-p0):p0+f*(p1-p0);};}
+function logInv(lo,hi,p0,p1,invert){
+  const llo=Math.log10(lo),lhi=Math.log10(hi);
+  return px=>{const f=invert?(p1-px)/(p1-p0):(px-p0)/(p1-p0);
+    return Math.pow(10,llo+f*(lhi-llo));};}
 function logTicks(lo,hi){const out=[];
   for(let p=Math.floor(Math.log10(lo));p<=Math.ceil(Math.log10(hi));p++){const base=Math.pow(10,p);
     for(let m=1;m<10;m++){const v=base*m;if(v>=lo-1e-12&&v<=hi+1e-12){out.push({v,major:m===1});}}}
   return out;}
 function coFmt(v){if(v>=1){return String(v);}if(v>=0.1){return v.toFixed(1);}return v.toFixed(2);}
+// One entry per plotted quantity, so the axes can be exchanged by swapping two
+// field names rather than by duplicating every scale, grid and label.
+const CO_FIELDS={
+  coplanar_deg:{floor:CO_XMIN,seed:0.1,max:coXMax,label:"Coplanar Angle (\u00b0)"},
+  lon_diff_deg:{floor:CO_YMIN,seed:1,max:coYMax,label:"|Longitude Difference| (\u00b0)"},
+};
+function coDomain(data,field){
+  const f=CO_FIELDS[field];
+  let m=f.seed;
+  data.tracks.forEach(t=>t.points.forEach(pt=>{m=Math.max(m,pt[field]);}));
+  return {lo:f.floor,hi:f.max(m)};
+}
 function coScales(data,d){
-  let maxc=0.1,maxl=1;data.tracks.forEach(t=>t.points.forEach(pt=>{maxc=Math.max(maxc,pt.coplanar_deg);maxl=Math.max(maxl,pt.lon_diff_deg);}));
-  const xmin=CO_XMIN,xmax=coXMax(maxc),ymin=CO_YMIN,ymax=coYMax(maxl);
-  return {xmin,xmax,ymin,ymax,
-    sx:logScale(xmin,xmax,d.x0,d.x1,false),
-    sy:logScale(ymin,ymax,d.y0,d.y1,true)};}
+  const xf=CO_SWAP?"lon_diff_deg":"coplanar_deg";
+  const yf=CO_SWAP?"coplanar_deg":"lon_diff_deg";
+  const ax=coDomain(data,xf),ay=coDomain(data,yf);
+  const full={xmin:ax.lo,xmax:ax.hi,ymin:ay.lo,ymax:ay.hi};
+  const v=CO_VIEW===null?full:CO_VIEW;
+  return {xf,yf,full,
+    xmin:v.xmin,xmax:v.xmax,ymin:v.ymin,ymax:v.ymax,
+    xlabel:CO_FIELDS[xf].label,ylabel:CO_FIELDS[yf].label,
+    sx:logScale(v.xmin,v.xmax,d.x0,d.x1,false,CO_FIELDS[xf].floor),
+    sy:logScale(v.ymin,v.ymax,d.y0,d.y1,true,CO_FIELDS[yf].floor),
+    ix:logInv(v.xmin,v.xmax,d.x0,d.x1,false),
+    iy:logInv(v.ymin,v.ymax,d.y0,d.y1,true)};}
+// Only DECADE ticks carry a label at full extent, which is right when the axis
+// spans three of them. Zoomed inside a single decade that leaves one number on
+// the whole axis, or none, and an axis nobody can read is not an axis. Below
+// 1.5 decades every tick is labelled instead.
+function coDenseTicks(lo,hi){return (Math.log10(hi)-Math.log10(lo))<=1.5;}
 function coYGrid(ctx,d,sc){
+  const dense=coDenseTicks(sc.ymin,sc.ymax);
   logTicks(sc.ymin,sc.ymax).forEach(t=>{const py=sc.sy(t.v);
     ctx.strokeStyle=t.major?"rgba(120,150,200,.18)":"rgba(120,150,200,.06)";
     ctx.beginPath();ctx.moveTo(d.x0,py);ctx.lineTo(d.x1,py);ctx.stroke();
-    if(t.major){ctx.fillStyle="#7f93b3";ctx.textAlign="right";ctx.fillText(coFmt(t.v),d.x0-6,py+3);}});}
+    if(t.major||dense){ctx.fillStyle="#7f93b3";ctx.textAlign="right";ctx.fillText(coFmt(t.v),d.x0-6,py+3);}});}
 function coXGrid(ctx,d,sc){
+  const dense=coDenseTicks(sc.xmin,sc.xmax);
   logTicks(sc.xmin,sc.xmax).forEach(t=>{const px=sc.sx(t.v);
     ctx.strokeStyle=t.major?"rgba(120,150,200,.18)":"rgba(120,150,200,.06)";
     ctx.beginPath();ctx.moveTo(px,d.y0);ctx.lineTo(px,d.y1);ctx.stroke();
-    if(t.major){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.fillText(coFmt(t.v),px,d.y1+14);}});}
+    if(t.major||dense){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.fillText(coFmt(t.v),px,d.y1+14);}});}
 function coGrid(ctx,d,sc){
   ctx.font="10px system-ui,sans-serif";ctx.fillStyle="#7f93b3";ctx.lineWidth=1;
   coXGrid(ctx,d,sc);
   coYGrid(ctx,d,sc);
-  ctx.fillStyle="#9fb0cc";ctx.textAlign="center";ctx.fillText("Coplanar Angle (\u00b0)",(d.x0+d.x1)/2,d.H-7);
-  ctx.save();ctx.translate(15,(d.y0+d.y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText("|Longitude Difference| (\u00b0)",0,0);ctx.restore();}
+  ctx.fillStyle="#9fb0cc";ctx.textAlign="center";ctx.fillText(sc.xlabel,(d.x0+d.x1)/2,d.H-7);
+  ctx.save();ctx.translate(15,(d.y0+d.y1)/2);ctx.rotate(-Math.PI/2);ctx.fillText(sc.ylabel,0,0);ctx.restore();}
 function coArcs(ctx,d,sc){
-  CO_ARCS.forEach(a=>{const xr=sc.sx(a.cop)-d.x0,yr=d.y1-sc.sy(a.lon);if(xr<=0||yr<=0){return;}
+  CO_ARCS.forEach(a=>{const xr=sc.sx(a[sc.xf])-d.x0,yr=d.y1-sc.sy(a[sc.yf]);if(xr<=0||yr<=0){return;}
     ctx.beginPath();ctx.ellipse(d.x0,d.y1,xr,yr,0,-Math.PI/2,0);
     ctx.fillStyle=`rgba(${a.c},.05)`;ctx.fill();
     ctx.setLineDash([4,4]);ctx.strokeStyle=`rgba(${a.c},.7)`;ctx.lineWidth=1.1;ctx.stroke();ctx.setLineDash([]);});}
@@ -766,8 +822,8 @@ function coTrail(ctx,sc,pts,col,on){
   for(let k=1;k<pts.length;k+=1){
     const a=pts[k-1],b=pts[k];
     ctx.globalAlpha=(on?0.45:0.2)+(k/pts.length)*(on?0.5:0.4);
-    ctx.beginPath();ctx.moveTo(sc.sx(a.coplanar_deg),sc.sy(a.lon_diff_deg));
-    ctx.lineTo(sc.sx(b.coplanar_deg),sc.sy(b.lon_diff_deg));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(sc.sx(a[sc.xf]),sc.sy(a[sc.yf]));
+    ctx.lineTo(sc.sx(b[sc.xf]),sc.sy(b[sc.yf]));ctx.stroke();
   }
   ctx.globalAlpha=1;
 }
@@ -782,7 +838,7 @@ function coLegendBox(d,data){
 }
 function coHead(ctx,sc,t,col,on){
   const last=t.points[t.points.length-1];
-  const X=sc.sx(last.coplanar_deg),Y=sc.sy(last.lon_diff_deg);
+  const X=sc.sx(last[sc.xf]),Y=sc.sy(last[sc.yf]);
   if(on){ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(X,Y,9,0,7);ctx.stroke();}
   ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,on?5.5:4,0,7);ctx.fill();
   ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
@@ -813,14 +869,15 @@ function coLabelRect(ctx,text,X,Y,side){
 function coOverlap(a,b){
   return a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
 }
-function coFits(r,blocked,W,H){
-  if(r.x<3||r.x+r.w>W-3||r.y<3||r.y+r.h>H-3){return false;}
+function coFits(r,blocked,d){
+  // The PLOT RECT, not the canvas: a name in the axis gutter reads as a tick.
+  if(r.x<d.x0+2||r.x+r.w>d.x1-2||r.y<d.y0+2||r.y+r.h>d.y1-2){return false;}
   return !blocked.some(bb=>coOverlap(r,bb));
 }
-function coPlaceLabel(ctx,h,blocked,W,H){
+function coPlaceLabel(ctx,h,blocked,d){
   for(const side of CO_SIDES){
     const r=coLabelRect(ctx,h.text,h.x,h.y,side);
-    if(coFits(r,blocked,W,H)){return r;}
+    if(coFits(r,blocked,d)){return r;}
   }
   return null;
 }
@@ -834,7 +891,7 @@ function coPanelBox(){
   if(r.width<2){return null;}
   return {x:r.left-c.left,y:r.top-c.top,w:r.width,h:r.height};
 }
-function coLabels(ctx,heads,furniture,W,H){
+function coLabels(ctx,heads,furniture,d){
   // Markers block labels as well as other labels, so a name never sits on top
   // of another object's point.
   const blocked=heads.map(h=>({x:h.x-7,y:h.y-7,w:14,h:14}));
@@ -845,7 +902,7 @@ function coLabels(ctx,heads,furniture,W,H){
   let hidden=0;
   order.forEach(h=>{
     ctx.font=(h.on?"600 10.5px":"9.5px")+" system-ui,sans-serif";
-    const r=coPlaceLabel(ctx,h,blocked,W,H);
+    const r=coPlaceLabel(ctx,h,blocked,d);
     if(r===null){
       // The SELECTED track is never counted as hidden: the detail panel is
       // carrying its name in full, so the chart is not withholding anything.
@@ -863,14 +920,25 @@ function coLabels(ctx,heads,furniture,W,H){
   });
   return hidden;
 }
-function coPlot(ctx,sc,data,cols,furniture,W,H){
+function coInPlot(d,h){
+  return h.x>=d.x0-1&&h.x<=d.x1+1&&h.y>=d.y0-1&&h.y<=d.y1+1;
+}
+function coPlot(ctx,sc,d,data,cols,furniture){
+  // Trails and markers are CLIPPED to the plot rect. Once the chart zooms,
+  // a point outside the window must be absent, not smeared along the edge.
+  ctx.save();
+  ctx.beginPath();ctx.rect(d.x0,d.y0,d.x1-d.x0,d.y1-d.y0);ctx.clip();
   const heads=data.tracks.map((t,i)=>{
     const on=CO_SEL===String(t.id);
     coTrail(ctx,sc,t.points,cols[i],on);
     return coHead(ctx,sc,t,cols[i],on);
   });
-  CO_HITS=heads.map(h=>({id:h.id,x:h.x,y:h.y}));
-  return coLabels(ctx,heads,furniture,W,H);
+  ctx.restore();
+  // Only what is on screen is clickable or labelled. A hit box for a marker
+  // the operator cannot see would select an object at random.
+  const shown=heads.filter(h=>coInPlot(d,h));
+  CO_HITS=shown.map(h=>({id:h.id,x:h.x,y:h.y}));
+  return coLabels(ctx,shown,furniture,d);
 }
 function coLegend(ctx,box,data,cols){
   if(box===null){return;}
@@ -903,7 +971,12 @@ function drawCoplanar(ctx,W,H,data){
   const box=coLegendBox(d,data);
   const furniture=[box,coPanelBox()].filter(f=>f!==null);
   coArcs(ctx,d,sc);coGrid(ctx,d,sc);coLegend(ctx,box,data,cols);
-  coHintText(coPlot(ctx,sc,data,cols,furniture,W,H));
+  coHintText(coPlot(ctx,sc,d,data,cols,furniture));
+  // Publish the two pieces of chart state that are otherwise canvas pixels and
+  // therefore unobservable: which quantity is on the horizontal axis, and
+  // whether the view is the full extent. The layout probe asserts on these.
+  ctx.canvas.dataset.xaxis=sc.xf;
+  ctx.canvas.dataset.zoom=CO_VIEW===null?"full":"zoomed";
   if(!data.tracks.length){ctx.fillStyle="#7f93b3";ctx.textAlign="center";ctx.font="12px system-ui,sans-serif";
     ctx.fillText("No co-planar neighbours within \u00b1"+data.half_width_deg+"\u00b0",(d.x0+d.x1)/2,(d.y0+d.y1)/2);}}
 // ---------------------------------------------------------------------------
@@ -973,10 +1046,93 @@ function coSelect(id){
   coPanel();
   sizeCo();
 }
+// ---------------------------------------------------------------------------
+// Zoom and pan (1.6.21). The belt crowds: in a real 40-object neighbourhood
+// most of the interesting points sit inside one decade and the rest of the
+// chart is empty. Zoom works in LOG space, because the axes are logarithmic
+// and a linear zoom would crawl at one end and leap at the other.
+//
+// Every window is CLAMPED inside the full extent of the data, so no amount of
+// scrolling can lose the dataset or leave the operator staring at blank space
+// wondering whether the feed died.
+// ---------------------------------------------------------------------------
+function coZoomAxis(lo,hi,val,frac,factor,full){
+  const lfull=Math.log10(full.lo),hfull=Math.log10(full.hi);
+  const fullSpan=hfull-lfull;
+  const span=Math.max(CO_ZOOM_MIN_DECADES,
+                      Math.min(fullSpan,(Math.log10(hi)-Math.log10(lo))*factor));
+  const llo=clamp(Math.log10(val)-frac*span,lfull,hfull-span);
+  return {lo:Math.pow(10,llo),hi:Math.pow(10,llo+span)};
+}
+function coPanAxis(lo,hi,decades,full){
+  const lfull=Math.log10(full.lo),hfull=Math.log10(full.hi);
+  const span=Math.log10(hi)-Math.log10(lo);
+  const llo=clamp(Math.log10(lo)+decades,lfull,hfull-span);
+  return {lo:Math.pow(10,llo),hi:Math.pow(10,llo+span)};
+}
+function coFrame(){
+  if(COPLANAR===null){return null;}
+  const cv=document.getElementById("cocanvas"),r=cv.getBoundingClientRect();
+  if(r.width<2){return null;}
+  const d=coDims(r.width,r.height);
+  return {d,sc:coScales(COPLANAR,d)};
+}
+function coZoom(px,py,factor){
+  const f=coFrame();
+  if(f===null){return;}
+  const {d,sc}=f;
+  const fx=(px-d.x0)/(d.x1-d.x0),fy=(d.y1-py)/(d.y1-d.y0);
+  const nx=coZoomAxis(sc.xmin,sc.xmax,sc.ix(px),fx,factor,{lo:sc.full.xmin,hi:sc.full.xmax});
+  const ny=coZoomAxis(sc.ymin,sc.ymax,sc.iy(py),fy,factor,{lo:sc.full.ymin,hi:sc.full.ymax});
+  CO_VIEW={xmin:nx.lo,xmax:nx.hi,ymin:ny.lo,ymax:ny.hi};
+  coZoomUi();sizeCo();
+}
+function coPan(dx,dy){
+  const f=coFrame();
+  if(f===null||CO_VIEW===null){return;}
+  const {d,sc}=f;
+  const xd=(Math.log10(sc.xmax)-Math.log10(sc.xmin))*(-dx/(d.x1-d.x0));
+  const yd=(Math.log10(sc.ymax)-Math.log10(sc.ymin))*(dy/(d.y1-d.y0));
+  const nx=coPanAxis(sc.xmin,sc.xmax,xd,{lo:sc.full.xmin,hi:sc.full.xmax});
+  const ny=coPanAxis(sc.ymin,sc.ymax,yd,{lo:sc.full.ymin,hi:sc.full.ymax});
+  CO_VIEW={xmin:nx.lo,xmax:nx.hi,ymin:ny.lo,ymax:ny.hi};
+  sizeCo();
+}
+function coZoomUi(){
+  const b=document.getElementById("comodal-reset");
+  if(b!==null){b.hidden=CO_VIEW===null;}
+}
+function coResetZoom(){CO_VIEW=null;coZoomUi();sizeCo();}
+function coSwapAxes(){
+  CO_SWAP=!CO_SWAP;
+  CO_VIEW=null;        // the window is per axis assignment, so it cannot carry over
+  coZoomUi();sizeCo();
+}
 (function(){
   const cv=document.getElementById("cocanvas");
   if(cv===null){return;}
-  cv.addEventListener("click",ev=>{coSelect(coHit(ev));});
+  let drag=null,panned=false;
+  // passive:false because the page would otherwise scroll behind the modal.
+  cv.addEventListener("wheel",ev=>{
+    ev.preventDefault();
+    const b=cv.getBoundingClientRect();
+    coZoom(ev.clientX-b.left,ev.clientY-b.top,ev.deltaY>0?1.25:0.8);
+  },{passive:false});
+  cv.addEventListener("mousedown",ev=>{drag={x:ev.clientX,y:ev.clientY};panned=false;ev.preventDefault();});
+  globalThis.addEventListener("mousemove",ev=>{
+    if(drag===null){return;}
+    const dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;
+    if(Math.abs(dx)+Math.abs(dy)<4){return;}
+    drag={x:ev.clientX,y:ev.clientY};panned=true;coPan(dx,dy);
+  });
+  globalThis.addEventListener("mouseup",()=>{drag=null;});
+  // A drag that panned must not also select whatever was under the cursor
+  // when the mouse came up; the click fires after mouseup, so the flag has to
+  // outlive the drag object.
+  cv.addEventListener("click",ev=>{
+    if(panned){panned=false;return;}
+    coSelect(coHit(ev));
+  });
   cv.addEventListener("mousemove",ev=>{
     cv.style.cursor=coHit(ev)===null?"default":"pointer";});
 })();
@@ -1003,11 +1159,13 @@ function openCoplanar(id){if(!id){return;}document.getElementById("comodal").cla
     if(!j.primary){COPLANAR=null;document.getElementById("comsg").textContent=j.detail||"no element set for this object";return;}
     document.getElementById("comsg").textContent="";
     document.getElementById("comodal-ttl").textContent="Co-Planar \u00b7 "+esc(j.primary.name||j.primary.id)+"  ("+j.tracks.length+" in \u00b1"+j.half_width_deg+"\u00b0)";
-    COPLANAR=j;CO_SEL=null;coPanel();sizeCo();}).catch(e=>{COPLANAR=null;
+    COPLANAR=j;CO_SEL=null;CO_VIEW=null;coZoomUi();coPanel();sizeCo();}).catch(e=>{COPLANAR=null;
     document.getElementById("comsg").textContent="co-planar unavailable: "+e.message;});}
 function closeCoplanar(){document.getElementById("comodal").classList.remove("show");
-  COPLANAR=null;CO_SEL=null;coPanel();}
+  COPLANAR=null;CO_SEL=null;CO_VIEW=null;coZoomUi();coPanel();}
 document.getElementById("comodal-x").addEventListener("click",closeCoplanar);
+document.getElementById("comodal-swap").addEventListener("click",coSwapAxes);
+document.getElementById("comodal-reset").addEventListener("click",coResetZoom);
 // Keep the canvas sharp when the operator drags the modal's resize corner.
 // Redraw only when the measured box actually changed: resizing the canvas is
 // itself a layout change, and an unguarded observer would feed its own events.
@@ -1020,7 +1178,7 @@ document.getElementById("comodal-x").addEventListener("click",closeCoplanar);
     last=key;sizeCo();}).observe(m);})();
 document.getElementById("insp").addEventListener("click",ev=>{if(ev.target.closest("#cobtn")){openCoplanar(state.sel);}});
 (function(){const im=document.getElementById("comodal"),hd=document.getElementById("comodal-hd");let md=null;
-  hd.addEventListener("mousedown",ev=>{if(ev.target.closest("#comodal-x")){return;}const r=im.getBoundingClientRect();md={dx:ev.clientX-r.left,dy:ev.clientY-r.top};
+  hd.addEventListener("mousedown",ev=>{if(ev.target.closest("button")!==null){return;}const r=im.getBoundingClientRect();md={dx:ev.clientX-r.left,dy:ev.clientY-r.top};
     im.style.left=r.left+"px";im.style.top=r.top+"px";ev.preventDefault();});
   globalThis.addEventListener("mousemove",ev=>{if(md===null){return;}
     const L=clamp(ev.clientX-md.dx,0,globalThis.innerWidth-im.offsetWidth),T=clamp(ev.clientY-md.dy,0,globalThis.innerHeight-im.offsetHeight);

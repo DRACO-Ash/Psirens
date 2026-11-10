@@ -293,6 +293,62 @@ function checkBodyFits(m, label) {
     await setModal(page, 900, 800);
 
     // ---------------------------------------------------------------------
+    // Axis swap and zoom (1.6.21). Canvas state is pixels and cannot be
+    // asserted on, so drawCoplanar publishes the two facts that matter onto
+    // the canvas element: which quantity is on the horizontal axis, and
+    // whether the view is the full extent. Both assertions below fail if the
+    // control is wired to nothing.
+    // ---------------------------------------------------------------------
+    const axState = () => page.evaluate(() => {
+      const cv = document.getElementById("cocanvas");
+      return { xaxis: cv.dataset.xaxis, zoom: cv.dataset.zoom,
+               reset: !document.getElementById("comodal-reset").hidden };
+    });
+    const before = await axState();
+    if (before.xaxis !== "coplanar_deg") {
+      fail(`the chart opened with "${before.xaxis}" on the horizontal axis; ` +
+           `the documented default is the coplanar angle.`);
+    }
+    await page.click("#comodal-swap");
+    await page.waitForTimeout(250);
+    const swapped = await axState();
+    if (swapped.xaxis !== "lon_diff_deg") {
+      fail(`Swap axes left "${swapped.xaxis}" on the horizontal axis; the ` +
+           `control changed nothing.`);
+    }
+    await page.click("#comodal-swap");          // back to the default
+    await page.waitForTimeout(250);
+
+    // Zoom with a REAL wheel over the canvas, not by calling the handler.
+    const cbox = await page.evaluate(() => {
+      const r = document.getElementById("cocanvas").getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+    await page.mouse.move(cbox.x, cbox.y);
+    await page.mouse.wheel(0, -200);
+    await page.waitForTimeout(300);
+    const zoomed = await axState();
+    if (zoomed.zoom !== "zoomed") {
+      fail("scrolling over the co-planar canvas did not zoom it.");
+    }
+    if (!zoomed.reset) {
+      fail("the chart is zoomed but the Reset zoom control is still hidden, " +
+           "so there is no way back to the full extent.");
+    }
+    // Only click it if it is actually there: clicking a hidden control makes
+    // Playwright wait 30 seconds and turns a clear failure into a timeout.
+    if (zoomed.reset) {
+      await page.click("#comodal-reset");
+      await page.waitForTimeout(250);
+    }
+    const restored = await axState();
+    if (restored.zoom !== "full" || restored.reset) {
+      fail(`Reset zoom left the chart at "${restored.zoom}" with the control ` +
+           `${restored.reset ? "still shown" : "hidden"}.`);
+    }
+    console.log(`  axes:   swap -> ${swapped.xaxis}, wheel -> zoomed, reset -> full`);
+
+    // ---------------------------------------------------------------------
     // The country filter (1.6.7). The design trap this guards: the country
     // panel counts from the UNFILTERED set. Counting from the filtered set
     // would collapse the panel to the single country selected, leaving no way

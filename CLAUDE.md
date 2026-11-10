@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.20; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.21; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -58,18 +58,19 @@ adds the HTML Operator Guide, 1.6.15 makes that guide something an operator
 uses rather than reads, 1.6.16 is the review pass over it, 1.6.17 makes the
 Co-Planar chart interactive and gives it history, 1.6.18 makes its labels
 legible in a crowd, 1.6.19 clears five SonarJS findings that a weak linter
-preset had been hiding, and 1.6.20 acts on the first Container Scan output
-anyone has ever read (see Open items).
+preset had been hiding, 1.6.20 acts on the first Container Scan output
+anyone has ever read, and 1.6.21 gives the Co-Planar chart an axis swap and
+zoom (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.20: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.6.21: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
-items. 1.6.17, 1.6.18 and 1.6.19 exist in the repository and were never uploaded,
-each superseded before the upload; the platform has never seen any of them.
+items. 1.6.17 to 1.6.20 exist in the repository and were never uploaded, each
+superseded before the upload; the platform has never seen any of them.
 CORRECTION, 10 November 2026, to a line written earlier the same day: an
 earlier draft of this section said the feed was "dry from 9 October to 9
 November". NOTHING RECORDED SUPPORTS THAT. The only evidence is the live
@@ -144,6 +145,17 @@ Shipped features:
   the chart ("3 names hidden"), because a chart that silently loses names looks
   complete and is not. The selected track is never counted, since the panel
   carries its name in full.
+  AXIS SWAP AND ZOOM from 1.6.21. Two controls in the modal title bar. SWAP
+  AXES exchanges the two quantities; it is a TOGGLE defaulting to the original
+  orientation, because the reference render and the whole Operator Guide
+  describe that one and which arrangement reads better depends on the data.
+  The corner that matters stays bottom left either way. SCROLL TO ZOOM, centred
+  on the pointer, DRAG TO PAN, and Reset zoom appears only while zoomed. Zoom
+  works in LOG space to match the axes, is clamped inside the full extent of
+  the data so no amount of scrolling can lose the dataset, and below 1.5
+  decades of span every tick is labelled rather than just the decades: an axis
+  carrying one number is not an axis. Points outside the window are CLIPPED,
+  not clamped to the edge, and are neither clickable nor labelled.
 
 ## Pushing to origin
 
@@ -1059,6 +1071,57 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   plugin's users, not for your scanner's profile. List what it leaves out
   before trusting a green run, and check by listing the rules rather than
   reading the documentation.
+- CO-PLANAR AXIS SWAP AND ZOOM: ADDED in 1.6.21. Owner asked, 10 November
+  2026, to see the chart with longitude difference on the horizontal axis, and
+  to be able to zoom inside the modal.
+  WHY A TOGGLE, NOT A NEW DEFAULT. Which orientation reads better is a
+  property of the DATA, not of the chart. The modal is much wider than it is
+  tall, so whichever quantity spans more decades belongs on the horizontal
+  axis. MEASURED on the live screenshot Ash sent: the coplanar angles sat in a
+  narrow band near 1deg while the longitude differences spread over two
+  decades, so every point bunched against the right-hand edge and swapping
+  spreads them across the full width. MEASURED on the guide-seeded 40-object
+  neighbourhood: the two orientations are comparable (8 names hidden against
+  10). So neither is right in general, and the operator picks.
+  HOW IT IS BUILT. `CO_FIELDS` keys the floor, the seed, the max function and
+  the axis label by FIELD NAME, and the scales carry `xf`/`yf`. Everything that
+  plots reads `p[sc.xf]`, so the swap is two field names rather than a swapped
+  copy of every scale, grid, arc and label. `CO_ARCS` is keyed the same way, so
+  the threshold arcs follow the axes round.
+  ZOOM IN LOG SPACE, because the axes are logarithmic and a linear zoom would
+  crawl at one end and leap at the other. `CO_VIEW` holds the window in DATA
+  units, so a modal resize re-derives the same window instead of drifting.
+  Every window is clamped inside the full extent, so scrolling can never lose
+  the dataset or leave an operator staring at blank space wondering whether
+  the feed died.
+  TWO THINGS THE ZOOM FORCED, both found by looking at a capture rather than
+  by reasoning:
+  * TICK LABELS. Only decade ticks carried a label, which is right across
+    three decades and useless inside one: the first zoomed capture had a
+    single number on the whole Y axis. Below 1.5 decades every tick is
+    labelled now.
+  * CLIPPING. `logScale` clamped values into the domain, which is correct for
+    the CO_XMIN floor (a perfectly coplanar object is exactly zero and has to
+    sit on the edge) and wrong for a zoomed window, where it would pile every
+    off-screen point onto the edges and invent a cluster. It now clamps at the
+    FIELD FLOOR only, and the plot rect clips. Off-view heads are also removed
+    from `CO_HITS` and from the label pass: a hit box for a marker the operator
+    cannot see would select an object at random.
+  GUARDED, and the guard exists because canvas state is pixels. `drawCoplanar`
+  publishes `dataset.xaxis` and `dataset.zoom` on the canvas, and the probe
+  asserts the default orientation, that Swap axes changes it, that a REAL wheel
+  event over the canvas zooms, that Reset zoom appears only while zoomed and
+  restores the full extent. PROVEN: making `coSwapAxes` assign `CO_SWAP` to
+  itself reports `Swap axes left "coplanar_deg" on the horizontal axis`, and
+  inverting the guard in `coZoom` reports `scrolling over the co-planar canvas
+  did not zoom it`.
+  PROBE ROBUSTNESS, fixed in passing: the second red case took 30 seconds to
+  fail because Playwright waits for a hidden control rather than erroring. The
+  reset click is now conditional, so a real failure reports immediately.
+  KNOWN ROUGH EDGE, not fixed, design call for Ash: while zoomed the legend
+  still lists every track including the ones now off screen. Dimming the
+  off-view rows would need the head positions before the legend is drawn, which
+  is a reordering rather than a tweak. Say if you want it.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

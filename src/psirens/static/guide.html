@@ -739,6 +739,18 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   define a plane, so they are skipped rather than guessed at. The trail grows as new readings
   arrive. The panel says &ldquo;no history yet&rdquo; when there is none.</div>
 
+  <h3>Two controls in the title bar</h3>
+  <p><b>Swap axes</b> exchanges the two quantities: longitude difference across, coplanar angle up.
+  Nothing about the reading changes, because the corner that matters is bottom left either way, but
+  which arrangement is clearer depends on your data. The chart is wider than it is tall, so put
+  whichever quantity spans more decades on the horizontal axis and the cluster spreads out.</p>
+  <p><b>Scroll to zoom</b>, anywhere on the chart, centred on the pointer; drag to pan once you are
+  zoomed in. The zoom works in logarithmic steps, to match the axes, and it will not let you scroll
+  past the edge of the data, so you cannot end up staring at an empty chart wondering whether the
+  feed has died. Below about one decade of span every tick is labelled rather than just the
+  decades, so the axes stay readable all the way in. <b>Reset zoom</b> appears beside Swap axes as
+  soon as you are zoomed and takes you back to the full extent.</p>
+
   <h3>Click a point to see what it is</h3>
   <p>Every point is clickable. The panel that opens in the corner of the chart names the object
   and gives its catalogue number, its coplanar angle and longitude difference at the newest

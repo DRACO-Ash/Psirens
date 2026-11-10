@@ -297,6 +297,14 @@ driver scripts. MEASURED on this repo: `src` and `tests` are clean;
 
 ### 3.15 Text gates meet prose
 
+RECURRENCE COUNT, kept because it is the evidence: seven times now. Five on
+the guide's prose in 1.6.14, once more on a quiz question in 1.6.15, and in
+1.6.21 on a COMMENT IN THE APPLICATION'S OWN SOURCE, which had been assumed
+safe because it is code rather than documentation. It is not: comments are
+prose wherever they live, and "the zoomed view window." trips a rule looking
+for `window.` exactly as a sentence in a guide does. Reworded every time; the
+rule has never been weakened, because the thing it catches is real.
+
 A grep-shaped rule written against code behaves differently the moment a
 documentation page ships from the same tree. MEASURED, PSIRENS 5 October 2026:
 the `\bwindow\.` rule, which exists to catch `window.innerWidth` in page
