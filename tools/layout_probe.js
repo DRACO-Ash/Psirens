@@ -302,9 +302,17 @@ function checkBodyFits(m, label) {
     const axState = () => page.evaluate(() => {
       const cv = document.getElementById("cocanvas");
       return { xaxis: cv.dataset.xaxis, zoom: cv.dataset.zoom,
+               legendOff: Number(cv.dataset.legendoff),
                reset: !document.getElementById("comodal-reset").hidden };
     });
     const before = await axState();
+    // At the full extent every head is inside the plot rect by construction,
+    // so a dimmed row there would mean the legend and the plot disagree about
+    // what is on screen.
+    if (before.legendOff !== 0) {
+      fail(`${before.legendOff} legend row(s) are dimmed at the full extent, ` +
+           `where every track is on screen.`);
+    }
     if (before.xaxis !== "coplanar_deg") {
       fail(`the chart opened with "${before.xaxis}" on the horizontal axis; ` +
            `the documented default is the coplanar angle.`);
@@ -335,6 +343,13 @@ function checkBodyFits(m, label) {
       fail("the chart is zoomed but the Reset zoom control is still hidden, " +
            "so there is no way back to the full extent.");
     }
+    // Zoomed into one corner, some of the twelve listed tracks must now be off
+    // screen. A legend that still presents them all at full strength is
+    // claiming colours the operator cannot find.
+    if (zoomed.legendOff < 1) {
+      fail("no legend row was dimmed while zoomed, so the legend is still " +
+           "offering tracks that are not on screen.");
+    }
     // Only click it if it is actually there: clicking a hidden control makes
     // Playwright wait 30 seconds and turns a clear failure into a timeout.
     if (zoomed.reset) {
@@ -346,7 +361,11 @@ function checkBodyFits(m, label) {
       fail(`Reset zoom left the chart at "${restored.zoom}" with the control ` +
            `${restored.reset ? "still shown" : "hidden"}.`);
     }
-    console.log(`  axes:   swap -> ${swapped.xaxis}, wheel -> zoomed, reset -> full`);
+    if (restored.legendOff !== 0) {
+      fail(`after Reset zoom ${restored.legendOff} legend row(s) are still dimmed.`);
+    }
+    console.log(`  axes:   swap -> ${swapped.xaxis}, wheel -> zoomed ` +
+                `(${zoomed.legendOff} legend row(s) dimmed), reset -> full`);
 
     // ---------------------------------------------------------------------
     // The country filter (1.6.7). The design trap this guards: the country

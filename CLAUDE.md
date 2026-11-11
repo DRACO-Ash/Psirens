@@ -38,7 +38,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.21; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.6.22; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -59,17 +59,18 @@ uses rather than reads, 1.6.16 is the review pass over it, 1.6.17 makes the
 Co-Planar chart interactive and gives it history, 1.6.18 makes its labels
 legible in a crowd, 1.6.19 clears five SonarJS findings that a weak linter
 preset had been hiding, 1.6.20 acts on the first Container Scan output
-anyone has ever read, and 1.6.21 gives the Co-Planar chart an axis swap and
-zoom (see Open items).
+anyone has ever read, 1.6.21 gives the Co-Planar chart an axis swap and
+zoom, and 1.6.22 dims the legend rows whose object is off screen (see Open
+items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.21: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.6.22: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
-items. 1.6.17 to 1.6.20 exist in the repository and were never uploaded, each
+items. 1.6.17 to 1.6.21 exist in the repository and were never uploaded, each
 superseded before the upload; the platform has never seen any of them.
 CORRECTION, 10 November 2026, to a line written earlier the same day: an
 earlier draft of this section said the feed was "dry from 9 October to 9
@@ -156,6 +157,10 @@ Shipped features:
   decades of span every tick is labelled rather than just the decades: an axis
   carrying one number is not an axis. Points outside the window are CLIPPED,
   not clamped to the edge, and are neither clickable nor labelled.
+  LEGEND DIMMED, NOT FILTERED, from 1.6.22: while zoomed, a row whose object
+  has left the view drops to 30% alpha. Removing the row instead would
+  reshuffle the list as the operator pans and move the colour they were
+  following.
 
 ## Pushing to origin
 
@@ -1118,10 +1123,39 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   PROBE ROBUSTNESS, fixed in passing: the second red case took 30 seconds to
   fail because Playwright waits for a hidden control rather than erroring. The
   reset click is now conditional, so a real failure reports immediately.
-  KNOWN ROUGH EDGE, not fixed, design call for Ash: while zoomed the legend
-  still lists every track including the ones now off screen. Dimming the
-  off-view rows would need the head positions before the legend is drawn, which
-  is a reordering rather than a tweak. Say if you want it.
+  LEGEND DIMMING: done in 1.6.22, see its own entry below.
+- CO-PLANAR LEGEND DIMMING: ADDED in 1.6.22. Owner asked for it directly after
+  the 1.6.21 capture showed the legend presenting twelve tracks at full
+  strength while most of them had been zoomed off the screen.
+  HOW THE ORDERING PROBLEM WAS AVOIDED. The 1.6.21 note called this "a
+  reordering rather than a tweak" because the legend is drawn BEFORE the points
+  (the 1.6.17 rule that furniture must never occlude a head), so nothing knew
+  which heads would land on screen. Resolved without reordering anything:
+  `coHeadXY` computes a head position from the scales alone, and `coVisibleIds`
+  runs it over every track before the legend is drawn. The plot's own hit test
+  and the legend now share `coHeadXY` and `coInPlot`, so there is ONE idea of
+  "on screen"; two would have disagreed the first time either moved.
+  DIMMED, NOT REMOVED, and the reason is the pan. A legend that drops rows as
+  the view moves reshuffles under the cursor, and the colour the operator was
+  following jumps to a different line. 30% alpha on the whole row, dot
+  included.
+  GUARDED, again through `dataset` because the legend is canvas pixels:
+  `drawCoplanar` publishes `dataset.legendoff`, the count of dimmed rows among
+  those listed. The probe asserts ZERO at the full extent (where every head is
+  inside the plot rect by construction, so a dimmed row would mean the legend
+  and the plot disagree), at least one while zoomed into a corner, and zero
+  again after Reset zoom. PROVEN: forcing the row alpha to 1 and the count to 0
+  reports "no legend row was dimmed while zoomed, so the legend is still
+  offering tracks that are not on screen".
+  WHAT THE CAPTURE THEN SHOWED, and it is a NEW observation rather than a
+  defect in this change: zoomed hard into one corner, eleven of the twelve
+  listed rows dim, the twelfth is the one visible track, and ELEKTRO-L 4, which
+  IS on screen, does not appear in the legend at all because the list is capped
+  at twelve by nearest-plane order. So the legend can simultaneously name
+  objects the operator cannot see and omit one they can. The fix is to order
+  the twelve by visibility while zoomed, which would mean carrying the original
+  index with each row so the colours still line up. Left for Ash: it trades
+  list stability for usefulness and that is a judgement, not a bug.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

@@ -836,9 +836,12 @@ function coLegendBox(d,data){
   if(n===0||CO_SEL!==null){return null;}
   return {x:d.x1-130,y:d.y0+6,w:124,h:n*14+8};
 }
-function coHead(ctx,sc,t,col,on){
+function coHeadXY(sc,t){
   const last=t.points[t.points.length-1];
-  const X=sc.sx(last[sc.xf]),Y=sc.sy(last[sc.yf]);
+  return {x:sc.sx(last[sc.xf]),y:sc.sy(last[sc.yf])};
+}
+function coHead(ctx,sc,t,col,on){
+  const {x:X,y:Y}=coHeadXY(sc,t);
   if(on){ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(X,Y,9,0,7);ctx.stroke();}
   ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,on?5.5:4,0,7);ctx.fill();
   ctx.strokeStyle="rgba(0,0,0,.5)";ctx.lineWidth=1;ctx.stroke();
@@ -940,18 +943,40 @@ function coPlot(ctx,sc,d,data,cols,furniture){
   CO_HITS=shown.map(h=>({id:h.id,x:h.x,y:h.y}));
   return coLabels(ctx,shown,furniture,d);
 }
-function coLegend(ctx,box,data,cols){
-  if(box===null){return;}
-  const items=data.tracks.slice(0,12);
+// Which heads are inside the plot rect, computed from the scales rather than
+// from the draw, so the legend can be dimmed BEFORE the points are plotted.
+// It shares `coHeadXY` and `coInPlot` with the plot itself: two separate ideas
+// of "on screen" would disagree the first time either moved.
+function coVisibleIds(sc,d,data){
+  const out=new Set();
+  data.tracks.forEach(t=>{
+    if(coInPlot(d,coHeadXY(sc,t))){out.add(String(t.id));}
+  });
+  return out;
+}
+// Dimmed, not removed. A legend that drops rows as you pan reshuffles under
+// the cursor and the colour you were tracking moves; dimming keeps every row
+// where it was and still says which ones you can currently see.
+const CO_LEGEND_OFF_ALPHA=0.3;
+function coLegendRow(ctx,box,row,i,shown){
+  const yy=box.y+11+i*14;
+  ctx.globalAlpha=shown.has(String(row.t.id))?1:CO_LEGEND_OFF_ALPHA;
+  ctx.fillStyle=row.col;ctx.beginPath();ctx.arc(box.x+9,yy-3,4,0,7);ctx.fill();
+  const on=CO_SEL===String(row.t.id);
+  ctx.fillStyle=on?"#ffffff":"#c7d4ea";
+  ctx.font=(on?"600 9.5px":"9.5px")+" system-ui,sans-serif";
+  ctx.fillText(esc(row.t.id)+" "+esc((row.t.name||"").slice(0,13)),box.x+18,yy);
+  ctx.globalAlpha=1;
+}
+function coLegend(ctx,box,data,cols,shown){
+  if(box===null){return 0;}
+  const items=data.tracks.slice(0,12).map((t,i)=>({t,col:cols[i]}));
   ctx.fillStyle="rgba(8,14,28,.80)";ctx.strokeStyle="rgba(120,150,200,.25)";ctx.lineWidth=1;
   ctx.beginPath();ctx.rect(box.x,box.y,box.w,box.h);ctx.fill();ctx.stroke();
   ctx.textAlign="left";ctx.font="9.5px system-ui,sans-serif";
-  items.forEach((t,i)=>{const yy=box.y+11+i*14;ctx.fillStyle=cols[i];
-    ctx.beginPath();ctx.arc(box.x+9,yy-3,4,0,7);ctx.fill();
-    const on=CO_SEL===String(t.id);
-    ctx.fillStyle=on?"#ffffff":"#c7d4ea";
-    ctx.font=(on?"600 9.5px":"9.5px")+" system-ui,sans-serif";
-    ctx.fillText(esc(t.id)+" "+esc((t.name||"").slice(0,13)),box.x+18,yy);});}
+  items.forEach((row,i)=>coLegendRow(ctx,box,row,i,shown));
+  return items.filter(row=>!shown.has(String(row.t.id))).length;
+}
 // Say what was dropped. A chart that silently loses names looks complete and
 // is not; a count under it tells the operator to widen the modal or click the
 // point instead of trusting a field they cannot fully read.
@@ -970,8 +995,11 @@ function drawCoplanar(ctx,W,H,data){
   // Furniture never occludes data.
   const box=coLegendBox(d,data);
   const furniture=[box,coPanelBox()].filter(f=>f!==null);
-  coArcs(ctx,d,sc);coGrid(ctx,d,sc);coLegend(ctx,box,data,cols);
+  const shown=coVisibleIds(sc,d,data);
+  coArcs(ctx,d,sc);coGrid(ctx,d,sc);
+  const dimmed=coLegend(ctx,box,data,cols,shown);
   coHintText(coPlot(ctx,sc,d,data,cols,furniture));
+  ctx.canvas.dataset.legendoff=String(dimmed);
   // Publish the two pieces of chart state that are otherwise canvas pixels and
   // therefore unobservable: which quantity is on the horizontal axis, and
   // whether the view is the full extent. The layout probe asserts on these.
