@@ -469,6 +469,33 @@ prove it, by making the failure happen and asserting the report is not empty.
 An assertion that the list is non-empty, written against the live symptom, is
 the whole test.
 
+### 5.7 A green pipeline is evidence about the contract on the day it ran
+
+The twin of 3.16, and learned the same way. That rule says a passing test suite
+is evidence about the CODE on the day it ran, because a fixture can rot on the
+calendar. This one says a passing pipeline is evidence about the CONTRACT on the
+day it ran, because the platform can add a requirement without you touching
+anything.
+
+MEASURED, 11 November 2026. A platform pipeline read in detail on 5 October was
+recorded as eleven stages, all green. Five weeks later, with no build of ours
+changed, a new **Logging** check appeared carrying three findings, an explicit
+specification, and the sentence "This check does not block your release yet. It
+starts blocking on December 1, 2026."
+
+Three things follow.
+
+● **An advisory with a date on it is a deadline.** Treat the date as the due
+  date, not the point at which to start looking.
+● **Read the pipeline view on every upload**, not only when something fails. A
+  team that only opens the page on a red build learns about new requirements
+  when they become blocking, which is the most expensive moment.
+● **A dynamic check cannot be proxied by a grep.** This one runs the container,
+  sends requests with a header and reads stdout and stderr. The only honest
+  local stand-in is a test that starts the app, captures the streams and parses
+  them. Anything cheaper is checking that you wrote the code you meant to write,
+  not that the behaviour is right.
+
 ### 5.5 Watch what the coverage figure excludes
 
 MEASURED: 93.72 per cent across 157 tests, with the single-page application

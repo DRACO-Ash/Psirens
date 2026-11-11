@@ -178,7 +178,15 @@ pip install -r requirements.txt
 sh simulate-pipeline.sh        # MUST print "SIMULATION GREEN"
 ```
 
-THE PIPELINE IS ELEVEN STAGES, NOT TEN. FACT, 5 October 2026: ten gates
+THE PIPELINE WAS ELEVEN STAGES ON 5 OCTOBER 2026, AND A TWELFTH CHECK HAS
+APPEARED SINCE. A **Logging** check, badged Advisory, was read on 11 November
+2026: it does NOT block today and **starts blocking on 1 December 2026**. See
+the Open items entry and CONTEXT-001 section 7. Whether it is a twelfth stage
+or an advisory panel on an existing one is TBC. The general lesson is recorded
+there too: the platform adds checks, with deadlines, to pipelines that are
+already green, so read the Pipeline tab on EVERY upload rather than only when
+something fails.
+FACT, 5 October 2026: ten gates
 (Secret Detection, Dependencies, SAST Scan, Dependency Scanning, Test, Code
 Quality, Dockerfile Lint, Container Build, **DAST Scan**, Container Scan) then
 Deploy. DAST Scan was not in the earlier reading of this file and has always
@@ -1156,6 +1164,37 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   the twelve by visibility while zoomed, which would mean carrying the original
   index with each row so the colours still line up. Left for Ash: it trades
   list stability for usefulness and that is a judgement, not a bug.
+- LOGGING STANDARD, NOT YET BUILT, and it has a DEADLINE. FACT, 11 November
+  2026, from a Logging modal badged Advisory on the PSIRENS build: our logs
+  miss three parts of the platform logging standard, all Medium, and the check
+  **starts blocking on 1 December 2026**. The full specification is recorded in
+  CONTEXT-001 section 7; this is what to do about it.
+  WHY WE FAIL ALL THREE, from the source rather than from guessing:
+  `main.py:38` calls `logging.basicConfig(...)` with no handler, so Python
+  installs a `StreamHandler` on **stderr** and formats plain text. That is
+  "nothing on stdout" and "9 lines to stderr" in one line of code. Nothing in
+  `src/` writes to stdout at all. And there is no request-scoped context
+  anywhere, so no line could have carried `X-Request-Id`.
+  WHAT THE BUILD NEEDS: a JSON formatter on stdout carrying `timestamp` (UTC,
+  milliseconds), `severity_text`, `severity_number` (TRACE=1, DEBUG=5, INFO=9,
+  WARN=13, ERROR=17, FATAL=21), `body` and a FLAT `attributes`; exceptions as
+  `exception.type`/`.message`/`.stacktrace`; middleware putting
+  `X-Request-Id` into `attributes` as `http.request.header.x-request-id` for
+  every line emitted while handling a request. The standard also FORBIDS
+  `service.name`, tenant and app IDs, and `Authorization`/`Cookie` values,
+  tokens and query strings in a log line, so the formatter has to be the thing
+  that enforces that rather than trusting call sites.
+  GUARD IT MUST CARRY, because this check is DYNAMIC and no grep can stand in:
+  a test that drives the app with an `X-Request-Id` header, captures stdout,
+  parses every line as JSON and asserts the ID is in the attributes. Removing
+  the middleware must make it fail. A second assertion that stderr stays empty.
+  ONE QUESTION FOR ASH BEFORE IT IS BUILT, and it is the only blocker: the
+  standard asks for the `X-Auth-Request-Email` header to be logged as
+  `user.email`. That puts an identifiable individual in every request log line.
+  It is the platform's own requirement, so it is presumably covered by their
+  retention and access posture, but it is personal data and PSIRENS has not
+  logged any until now. Confirm it should go in, or say to omit that one field
+  and carry the finding.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

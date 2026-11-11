@@ -172,13 +172,82 @@ The local eslint plus eslint-plugin-sonarjs proxy does NOT cover the SonarQube W
 ● `S6819`: prefer the native element over an ARIA landmark role (region to a `<section>` with an accessible name, banner to `<header>`, navigation to `<nav>`, and the same for main, contentinfo, complementary, and form).
 ● prefer `element.dataset.x` over `getAttribute("data-x")`.
 
+### Logging standard: a NEW check, with a hard deadline
+
+**FACT, 11 November 2026**, read from a modal on the PSIRENS build titled
+**Logging**, badged **Advisory**, carrying a **View job log** control. Headline:
+"Your app's logs miss 3 parts of the logging standard".
+
+● **It does not block today. It starts blocking on 1 December 2026.** The modal
+  says so in those words: "This check does not block your release yet. It starts
+  blocking on December 1, 2026, so fix the items listed and upload a new
+  version." An advisory with a date on it is a deadline, not a suggestion.
+● THREE findings, every one **Medium**:
+  1. *Your app wrote nothing to standard output.* "The check found no log lines
+     on stdout. Write your logs to stdout, one JSON object per line."
+  2. *Your app writes logs to standard error.* "9 line(s) went to stderr. Write
+     every log line to stdout, including errors." It named the lines: 1 to 9.
+  3. *Request logs do not carry the request ID.* "The check sent two requests
+     with an X-Request-Id header, and no log line has that ID in its
+     attributes."
+● The check is **DYNAMIC**, like DAST Scan: it runs the container, sends real
+  requests carrying `X-Request-Id`, and reads the two streams. It is not static
+  analysis, so no local grep can stand in for it; only running the image and
+  reading its output can.
+
+**THE LOG LINE FORMAT, recorded verbatim in substance because it is the
+specification and guessing at it wastes an upload:**
+
+● One JSON object per line, written to **stdout**.
+● Top-level fields: `timestamp` (UTC, milliseconds), `severity_text`,
+  `severity_number`, `body`, `attributes`, and optionally `trace_id` and
+  `span_id`.
+● Severity pairs: TRACE=1, DEBUG=5, INFO=9, WARN=13, ERROR=17, FATAL=21.
+● `attributes` is a FLAT object. Exceptions go there as `exception.type`,
+  `exception.message` and `exception.stacktrace`.
+● Request lines carry the `X-Request-Id` header as
+  `http.request.header.x-request-id` and the `X-Auth-Request-Email` header as
+  `user.email`, both in `attributes`.
+● **No `service.name`, no tenant or app IDs, and never `Authorization` or
+  `Cookie` values, tokens or query strings.** The prohibition is part of the
+  standard, not our own caution.
+● The modal links "Logging requirements, with examples for Spring Boot, Node
+  and Python". NOT READ: that page is on the internal network and this build
+  container cannot reach it. Anyone with access should read it before building
+  to this spec, in case it carries detail the modal does not.
+
+**WHY PSIRENS FAILED ALL THREE, diagnosed from the source rather than guessed:**
+
+● `main.py` calls `logging.basicConfig(level=INFO, format="%(asctime)s
+  %(levelname)s %(name)s %(message)s")`. `basicConfig` with no handler installs
+  a `StreamHandler`, which defaults to **stderr**. That is findings 1 and 2 in
+  one line of code, and the format is plain text rather than JSON.
+● Nothing in `src/` writes to stdout at all: no `print`, no `sys.stdout`.
+● There is no request-scoped context anywhere, so finding 3 was unavoidable:
+  nothing could have carried the header into a log line.
+● The nine lines are ours, not the server's. Gunicorn's access log is off unless
+  `--access-logfile` is given, and the CMD does not give it.
+
+**THE GENERAL LESSON, and it is the one worth carrying to every App Store app:**
+the platform ADDS checks, with deadlines, to pipelines that are already green.
+The eleven-stage reading recorded above was taken on 5 October 2026 and did not
+include this; it appeared without any build of ours changing. An all-green
+pipeline is evidence about the contract on the day it ran, exactly as a green
+test suite is evidence about the code on the day it ran. **Read the Pipeline
+tab on every upload, not only when something fails.**
+
+**TBC, and do not guess at it:** whether Logging is a TWELFTH pipeline stage or
+an advisory panel hanging off an existing one. The modal has its own "View job
+log" button, which suggests its own job, but the stage list was not visible in
+the same view and has not been re-read since 5 October.
+
 ### Pre-flight and the durable fix
 
 ● `simulate-pipeline.sh` mirrors the platform test stage (`pip install -r requirements.txt`, then pytest with an 80% coverage floor) and then runs reactive gates that pre-empt the rules above: a Python AST gate covering BOTH cognitive complexity (the `cognitive_complexity` PyPI package matches the SonarSource algorithm exactly and fails any function over 15) and parameter count (fails any function over 13), `grep window.`, `grep role="(region|banner|navigation|main|contentinfo|complementary|form)"`, and `grep getAttribute("data-`.
 ● The grep gates are reactive substitutes, one per rule already learned. The durable fix is a real `sonar-scanner` run against the tenant SonarQube server before upload, which catches all of the above in one pass. The sandbox cannot reach the SonarQube host; a networked workstation can. Standing this up ends the one-rule-per-cycle pattern.
 ● When the gate fails, fix to the exact line it names, then add a local grep gate so that rule cannot recur.
 
-● **The App Store pipeline is ELEVEN stages, not ten.** FACT, 5 October 2026, read from the Pipeline and Versions tab for PSIRENS 1.6.12: ten gates (Secret Detection, Dependencies, SAST Scan, Dependency Scanning, Test, Code Quality, Dockerfile Lint, Container Build, DAST Scan, Container Scan) then Deploy as the eleventh. DAST Scan is DYNAMIC: it runs the built container and probes it, so the unauthenticated 200 on `/`, `/healthz` and `/readyz` is a requirement of that gate as well as of Deploy. It has passed on every PSIRENS build so far, which is why it went unrecorded until now; an always-green gate is still a gate. PSIRENS 1.6.12 passed all eleven, Deploy included, and the app went Active the same moment: on this platform approval and deployment are one milestone, not two.
+● **The App Store pipeline was ELEVEN stages on 5 October 2026**, and a Logging check has appeared since (see the logging section above, which leaves open whether it is a twelfth stage). FACT, 5 October 2026, read from the Pipeline and Versions tab for PSIRENS 1.6.12: ten gates (Secret Detection, Dependencies, SAST Scan, Dependency Scanning, Test, Code Quality, Dockerfile Lint, Container Build, DAST Scan, Container Scan) then Deploy as the eleventh. DAST Scan is DYNAMIC: it runs the built container and probes it, so the unauthenticated 200 on `/`, `/healthz` and `/readyz` is a requirement of that gate as well as of Deploy. It has passed on every PSIRENS build so far, which is why it went unrecorded until now; an always-green gate is still a gate. PSIRENS 1.6.12 passed all eleven, Deploy included, and the app went Active the same moment: on this platform approval and deployment are one milestone, not two.
 ● The platform's "Date Uploaded" column is not reliable. OBSERVED, 5 October 2026: a build uploaded that day was listed as "Jul 28, 2026". Recorded rather than explained; do not date a build from that column.
 
 ● **A UDL credential rejection surfaces as HTTP 401, and the account's password does rotate.** FACT, 9 November 2026, confirmed by the owner: the deployed app's scheduled pull began returning 401 and the picture froze; changing `UDL_PASSWORD` in the App Store environment variables restored it. 401 is the tenant refusing the user and password, as distinct from 403, which is an entitlement refusal; PSIRENS reports the status code verbatim from 1.6.9, so the two are distinguishable on the screen without opening a shell. Authentication is HTTP Basic rebuilt from `UDL_USER` and `UDL_PASSWORD` on every request, so there is no token on our side to expire: a 401 always means the tenant's view of the credential changed, or the deployment's copy did.
