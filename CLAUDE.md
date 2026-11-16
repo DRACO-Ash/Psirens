@@ -26,12 +26,19 @@ Universal rules, non-negotiable:
 - State assumptions inline and proceed; stop only for genuine blockers.
 - Credentials are never hardcoded, printed, or echoed.
 - UK English, no em-dashes, lead with the point, no filler.
-- PROPOSAL BEFORE BUILD. Owner rule, 16 November 2026: for any new feature or
+- PROPOSAL BEFORE BUILD. Owner rules, 16 November 2026: for any new feature or
   bold change, ship Ash a change proposal WITH IMAGES first, every time, and
-  implement only after Ash approves it. Proposals live under `proposals/`
-  (dated folder, `PROPOSAL.md`, figures, and the prototype that produced the
-  evidence). Mockups drive the real interface and paint over it, carry a
+  implement only after Ash approves it. The proposal is ALWAYS a DYNAMIC,
+  FORMATTED HTML FILE, never Markdown: annotated figures with hotspots, live
+  demos or charts where they make the case, and a decision form that writes
+  Ash's reply. Layout: `proposals/<date>-<slug>/proposal.src.html`,
+  `figures/`, `prototype/`; then `python3 tools/proposal_bundle.py <folder>`
+  writes the self-contained `PROPOSAL.html` that is sent. The bundler REFUSES
+  a missing or orphan figure, an em dash or double hyphen in prose, and
+  `window.`. Mockups drive the real interface and paint over it, carry a
   visible MOCKUP banner, and draw from prototype output, not hand-typed data.
+  Render the page headless (desktop light and dark, and phone) and look at it
+  before sending.
 
 ## What PSIRENS is
 
@@ -392,6 +399,11 @@ prompt, never an argument (a command line is in the shell history and in `ps`).
 zip. VERIFIED end to end against a local token-gated instance, not just
 self-tested: `--check` reported 1.6.18 and cleared it, a run without the token
 exited 2 with a stated reason, and a two-chunk run added 229 samples.
+
+`tools/proposal_bundle.py` - bundles a change proposal into one self-contained
+dynamic HTML file (figures inlined) and refuses on missing or orphan figures
+and house-style breaches. `--self-test` runs offline. NOT part of the deploy
+zip.
 
 `tools/udl_elset_probe.py` — Script-mode, stdlib-only live probe of `/udl/elset`.
 Checks the four assumptions the native-TLE work rests on (line presence, satNo
@@ -1203,8 +1215,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   and carry the finding.
 - SHIFT BRIEF, PROPOSED 16 November 2026, NOT BUILT. Event detection (E-W and
   N-S manoeuvres, drift stopped, early warning, gone quiet), a Shift Brief rail
-  panel, a timeline strip and a focus mode. Full proposal, figures and the
-  prototype in `proposals/2026-11-16-shift-brief/`. Awaiting Ash's go/no-go.
+  panel, a timeline strip and a focus mode. Proposal is
+  `proposals/2026-11-16-shift-brief/PROPOSAL.html`. Awaiting Ash's go/no-go.
   DEFECT FOUND WHILE PROTOTYPING, real and independent of the decision: the
   72-hour drift fit straddles a manoeuvre and understates the new rate (SHIYAN
   12 02 on the scenario store reads 0.22deg/day W against a true 0.59deg/day

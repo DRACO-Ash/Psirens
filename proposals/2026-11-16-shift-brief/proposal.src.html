@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSIRENS Shift Brief</title>
+<meta name="description" content="Change proposal: event detection, a Shift Brief rail panel, an event timeline and a focus mode for PSIRENS. Proposal only, not built.">
+<style>
+:root{
+  --navy:#162646;--blue1:#385FAF;--blue2:#739BCF;--amber:#C67C00;--green:#27AE60;
+  --bg:#F6F7F9;--surface:#FFFFFF;--surface2:#EEF2F8;--ink:#2C3E50;--ink2:#4A5D73;--muted:#6B7C90;
+  --line:#D9E0EA;--accent:#385FAF;--head:#162646;--warn-bg:#FFF6E6;--warn-line:#E8C27A;
+  --ok-bg:#E9F7EF;--ok-ink:#1E7D46;--sus-ink:#9A5F00;
+  --s1:#385FAF;--s2:#C67C00;--sbelow:#A9B4C2;--grid:#E3E8EF;
+  --shadow:0 1px 2px rgba(22,38,70,.06),0 4px 16px rgba(22,38,70,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1322;--surface:#111C30;--surface2:#16233B;--ink:#DCE5F2;--ink2:#B4C2D6;--muted:#8A9AB2;
+    --line:#24344F;--accent:#7FA4E0;--head:#EAF1FB;--warn-bg:#24190A;--warn-line:#6B4A12;
+    --ok-bg:#0E2A1B;--ok-ink:#5BD08F;--sus-ink:#F0B04A;
+    --s1:#5A86D6;--s2:#B87810;--sbelow:#4A5A72;--grid:#1C2A43;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1322;--surface:#111C30;--surface2:#16233B;--ink:#DCE5F2;--ink2:#B4C2D6;--muted:#8A9AB2;
+  --line:#24344F;--accent:#7FA4E0;--head:#EAF1FB;--warn-bg:#24190A;--warn-line:#6B4A12;
+  --ok-bg:#0E2A1B;--ok-ink:#5BD08F;--sus-ink:#F0B04A;
+  --s1:#5A86D6;--s2:#B87810;--sbelow:#4A5A72;--grid:#1C2A43;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+.mono,code,pre{font-family:"Cascadia Mono",Consolas,ui-monospace,monospace}
+code{font-size:.88em;background:var(--surface2);padding:.1em .35em;border-radius:4px}
+a{color:var(--accent)}
+h1,h2,h3{color:var(--head);line-height:1.25}
+h2{font-size:1.45rem;margin:0 0 .6rem}
+h3{font-size:1.08rem;margin:1.4rem 0 .4rem}
+p{margin:.5rem 0 .9rem}
+ul.dot{list-style:none;padding-left:0;margin:.4rem 0 1rem}
+ul.dot li{position:relative;padding-left:1.35rem;margin:.35rem 0}
+ul.dot li::before{content:"\25CF";position:absolute;left:0;top:.05em;color:var(--blue1);font-size:.8em}
+ul.sq li::before{content:"\25A0"}
+
+.topbar{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.topbar .in{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;align-items:center;gap:16px;min-height:56px}
+.brand{font-weight:700;letter-spacing:.16em;font-size:.78rem;color:#F0B04A;white-space:nowrap}
+.navlinks{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;flex:1}
+.navlinks::-webkit-scrollbar{display:none}
+.navlinks a{color:#C8D6EE;text-decoration:none;font-size:.86rem;padding:6px 10px;border-radius:6px;white-space:nowrap}
+.navlinks a:hover{background:rgba(255,255,255,.08)}
+.navlinks a.on{background:#385FAF;color:#fff}
+.iconbtn{background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font:inherit;font-size:.82rem;white-space:nowrap}
+
+.hero{background:linear-gradient(135deg,#162646 0%,#1F3563 60%,#2A4580 100%);color:#fff}
+.hero .in{max-width:1180px;margin:0 auto;padding:40px 16px 36px}
+.kicker{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:#9FB8E2}
+.hero h1{color:#fff;font-size:clamp(1.8rem,4vw,2.6rem);margin:.3rem 0 .6rem}
+.hero .lede{font-size:1.12rem;max-width:820px;color:#E2EAF7}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.3);color:#E2EAF7}
+.chip.stop{background:#C67C00;border-color:#C67C00;color:#fff;font-weight:600}
+
+main{max-width:1180px;margin:0 auto;padding:8px 16px 64px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px clamp(16px,3vw,36px);margin:22px 0;box-shadow:var(--shadow)}
+.callout{border-left:4px solid var(--amber);background:var(--warn-bg);padding:14px 16px;border-radius:0 8px 8px 0;margin:1rem 0}
+.callout.blue{border-color:var(--blue1);background:var(--surface2)}
+.callout strong{color:var(--head)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--surface)}
+.card h3{margin-top:0}
+.tag{display:inline-block;font:600 .7rem/1 "Cascadia Mono",Consolas,monospace;letter-spacing:.06em;padding:4px 7px;border-radius:4px;vertical-align:middle}
+.tag.conf{background:var(--ok-bg);color:var(--ok-ink);border:1px solid currentColor}
+.tag.sus{color:var(--sus-ink);border:1px dashed currentColor}
+.tag.fact{background:var(--surface2);color:var(--accent)}
+.tag.inf{background:var(--warn-bg);color:var(--sus-ink)}
+
+table{width:100%;border-collapse:collapse;font-size:.93rem;margin:.6rem 0 1rem}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.num{font-family:"Cascadia Mono",Consolas,monospace;white-space:nowrap}
+.glyph{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;border:2px solid currentColor;font-weight:700;font-size:.8rem}
+.tablewrap{overflow-x:auto}
+
+/* figure explorer */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:.4rem 0 12px}
+.tabs button,.seg button{font:inherit;font-size:.9rem;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--ink);cursor:pointer}
+.tabs button[aria-selected="true"],.seg button[aria-pressed="true"]{background:var(--blue1);border-color:var(--blue1);color:#fff}
+.figwrap{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#0B1322}
+.figwrap img{display:block;width:100%;height:auto;cursor:zoom-in}
+.hs{position:absolute;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:#C67C00;color:#fff;font:700 .78rem/1 "Segoe UI",sans-serif;cursor:pointer;box-shadow:0 0 0 4px rgba(198,124,0,.35);display:grid;place-items:center;padding:0}
+.hs[aria-pressed="true"]{background:#fff;color:#162646;box-shadow:0 0 0 6px rgba(255,255,255,.45)}
+.hs:focus-visible{outline:3px solid #F0B04A;outline-offset:2px}
+.figcap{display:flex;gap:14px;align-items:flex-start;margin-top:12px;padding:14px 16px;border-radius:10px;background:var(--surface2);min-height:86px}
+.figcap .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--amber);color:#fff;display:grid;place-items:center;font-weight:700}
+.figcap h4{margin:0 0 .25rem;color:var(--head);font-size:1rem}
+.figcap p{margin:0;color:var(--ink2)}
+.capnav{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap}
+.capnav button{font:inherit;font-size:.85rem;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.small{font-size:.85rem;color:var(--muted)}
+
+/* compare */
+.compare{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);user-select:none;background:#0B1322}
+.compare img{display:block;width:100%;height:auto}
+.compare .top{position:absolute;inset:0;clip-path:inset(0 50% 0 0)}
+.compare .bar{position:absolute;top:0;bottom:0;left:50%;width:3px;background:#F0B04A;transform:translateX(-50%);pointer-events:none}
+.compare .lab{position:absolute;top:10px;font:600 .75rem "Segoe UI",sans-serif;letter-spacing:.08em;padding:4px 8px;border-radius:4px;background:rgba(11,19,34,.85);color:#fff}
+.compare input{width:100%;margin-top:10px;accent-color:#C67C00}
+
+/* charts */
+.chart{width:100%;height:auto;display:block}
+.chartbox{position:relative}
+.tip{position:absolute;pointer-events:none;background:var(--navy);color:#fff;font-size:.82rem;padding:8px 10px;border-radius:6px;box-shadow:var(--shadow);opacity:0;transition:opacity .1s;max-width:240px;z-index:3}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:.85rem;color:var(--ink2);margin:6px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:3px;border-radius:2px;display:inline-block}
+.sw.dash{background:repeating-linear-gradient(90deg,currentColor 0 5px,transparent 5px 8px);height:3px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0 18px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}
+.stat b{display:block;font-size:1.7rem;color:var(--head);font-family:"Cascadia Mono",Consolas,monospace}
+.stat span{font-size:.82rem;color:var(--muted)}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px 22px;margin:10px 0}
+.ctl label{font-size:.85rem;color:var(--ink2);display:block}
+.ctl output{font-family:"Cascadia Mono",Consolas,monospace;color:var(--head);font-weight:600}
+.ctl input[type=range]{width:100%;accent-color:var(--blue1)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0}
+.readout div{border-radius:10px;padding:12px 14px;background:var(--surface2)}
+.readout b{display:block;font:700 1.35rem "Cascadia Mono",Consolas,monospace;color:var(--head)}
+.readout span{font-size:.82rem;color:var(--muted)}
+
+/* decisions */
+fieldset{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 14px}
+legend{font-weight:600;color:var(--head);padding:0 6px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:7px 4px;border-radius:6px;cursor:pointer}
+.opt:hover{background:var(--surface2)}
+.opt input{margin-top:.3em;accent-color:var(--blue1)}
+.opt small{display:block;color:var(--muted)}
+textarea{width:100%;min-height:80px;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+pre.reply{white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:.88rem;margin:10px 0}
+.btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:8px;border:1px solid var(--blue1);background:var(--blue1);color:#fff;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+
+dialog{border:none;padding:0;background:transparent;max-width:96vw;max-height:94vh}
+dialog::backdrop{background:rgba(5,9,18,.88)}
+dialog img{max-width:96vw;max-height:88vh;display:block;border-radius:8px}
+dialog .close{position:absolute;top:8px;right:8px}
+footer{max-width:1180px;margin:0 auto;padding:0 16px 40px;color:var(--muted);font-size:.82rem;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+@media (max-width:640px){.hs{width:24px;height:24px;font-size:.7rem}.topbar .in{gap:10px}}
+@media print{
+  .topbar,.tabs,.capnav,.compare input,.iconbtn,.btn,#decide-out-actions,.seg{display:none!important}
+  section{box-shadow:none;break-inside:avoid-page}
+  body{background:#fff}
+  [data-print-all] [hidden]{display:block!important}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="in">
+    <span class="brand">BLUESTAQ LIMITED</span>
+    <nav class="navlinks" aria-label="Sections">
+      <a href="#decision">Decision</a><a href="#problem">Problem</a><a href="#change">The change</a>
+      <a href="#figures">Walkthrough</a><a href="#defect">Drift defect</a><a href="#evidence">Evidence</a>
+      <a href="#limits">Limits</a><a href="#build">Build plan</a><a href="#decide">Your decisions</a>
+    </nav>
+    <button class="iconbtn" id="theme" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="in">
+    <div class="kicker">PSIRENS change proposal · 16 November 2026 · 1.7.0 candidate</div>
+    <h1>Shift Brief: tell the operator what changed</h1>
+    <p class="lede">PSIRENS shows where every object in the belt is. This proposal makes it say what has changed since you last looked, why it believes that, and where the object is heading, so a watch handover takes one minute rather than a scan of 150 markers.</p>
+    <div class="chips">
+      <span class="chip stop">PROPOSAL · NOT BUILT</span>
+      <span class="chip">Nothing in src/ has changed</span>
+      <span class="chip">Owner decision required</span>
+      <span class="chip">Not Classified</span>
+    </div>
+  </div>
+</div>
+
+<main>
+<section id="decision">
+  <h2>The decision in one line</h2>
+  <p>Detect manoeuvres and silences on the server, list them in a <strong>Shift Brief</strong>, put them on a <strong>timeline</strong>, and give every event a one-key <strong>focus view</strong> carrying the evidence behind it.</p>
+  <div class="grid2">
+    <div class="card"><h3>What you do</h3><p>Open PSIRENS at handover. Read three new events at the top of the rail. Press <code>j</code> and <code>Enter</code> to see each one.</p></div>
+    <div class="card"><h3>What PSIRENS does</h3><p>Fits every object's track either side of every candidate split, every refresh cycle, and only calls it an event when two independent fits disagree beyond physics and noise.</p></div>
+    <div class="card"><h3>What it unlocks</h3><p>A manoeuvre is seen within hours instead of when someone happens to notice a bent trail, and the drift rate on screen stops being wrong after a burn.</p></div>
+  </div>
+</section>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <p>The operator's first question at a handover is <strong>"what changed since I last looked?"</strong> PSIRENS cannot answer it today.</p>
+  <ul class="dot">
+    <li>The default view carries 150 objects at ranks 1 to 3. A manoeuvre shows only as a slightly different arrowhead or a trail that bends, somewhere in that field.</li>
+    <li>The top of the rail spends its space on Priority mix, Fleet health and By-country: stable inventory numbers that rarely prompt an action.</li>
+    <li>Silence is invisible. An object that stops reporting keeps its last position and fades. Nothing says "this one went quiet".</li>
+  </ul>
+  <div class="callout"><strong>A real defect surfaced while building this proposal.</strong> <span class="tag fact">FACT</span> On the scenario store the inspector reports SHIYAN 12 02 drifting at <strong>0.22°/day W</strong>. Its true post-burn rate is <strong>0.59°/day W</strong>. The 72-hour drift fit straddles the burn and understates the new rate by a factor of 2.7. <a href="#defect">Try it below.</a></div>
+  <p>Drag the slider: the current interface on the left, the proposal on the right. All five events are in both pictures. Only one of them shows you.</p>
+  <div class="compare" id="cmp">
+    <img src="figures/A-as-is.jpg" alt="Current PSIRENS interface showing 150 objects with no indication of change" width="2400" height="1500">
+    <img class="top" src="figures/B-brief-overview.jpg" alt="Proposed interface with the Shift Brief rail panel and event timeline" width="2400" height="1500">
+    <div class="bar"></div>
+    <span class="lab" style="left:10px">PROPOSED</span><span class="lab" style="right:10px">AS-IS</span>
+  </div>
+  <input type="range" id="cmp-r" min="0" max="100" value="50" aria-label="Reveal more of the proposed or the current interface" style="width:100%;accent-color:#C67C00;margin-top:10px">
+</section>
+
+<section id="change">
+  <h2>The change: three parts, one idea</h2>
+  <div class="grid2">
+    <div class="card"><h3>1. Shift Brief</h3><p>Replaces the inventory panels at the top of the left rail. Events newest first, split at <em>since you last looked</em>, each with rank, type, age, the numbers that justify it and a confidence tier.</p></div>
+    <div class="card"><h3>2. Event timeline</h3><p>A four-day strip above the plot. One glyph per event, dashed when suspected, the unread period shaded. Clusters across objects show at a glance.</p></div>
+    <div class="card"><h3>3. Focus mode</h3><p>One key frames the object and its neighbours, splits the trail at the burn, projects the drift and opens an evidence chart in the inspector.</p></div>
+  </div>
+  <h3>Event types</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Glyph</th><th>Event</th><th>What triggers it</th></tr></thead>
+    <tbody>
+      <tr><td><span class="glyph" style="color:#C67C00">&#8646;</span></td><td>E-W manoeuvre</td><td>Significant change in fitted drift rate across a split</td></tr>
+      <tr><td><span class="glyph" style="color:#27AE60">&#9632;</span></td><td>Drift stopped</td><td>Drift rate falls to station-keeping level</td></tr>
+      <tr><td><span class="glyph" style="color:#8E6BD8">&#8645;</span></td><td>N-S manoeuvre</td><td>Step change in inclination</td></tr>
+      <tr><td><span class="glyph" style="color:#C67C00;border-style:dashed">?</span></td><td>Leaving its track</td><td>Latest fixes depart from the fitted prediction (early warning)</td></tr>
+      <tr><td><span class="glyph" style="color:#8A9AB2">&#9675;</span></td><td>Gone quiet</td><td>No fix for 12 h. In the build, only while the rest of the belt is current, so a feed outage raises the existing staleness banner instead of 594 separate events. The prototype does not yet have this condition.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Two confidence tiers</h3>
+  <ul class="dot">
+    <li><span class="tag sus">SUSPECTED</span> Early warning only, or evidence that peaks at the edge of the data. Never stated as fact.</li>
+    <li><span class="tag conf">CONFIRMED</span> Two independent 48-hour fits either side of the split disagree beyond a physical floor and six standard errors.</li>
+  </ul>
+  <p>Where a drifter is heading towards another high-interest object the entry says so: "on this drift, reaches SJ-21's longitude in ~4.3 d". That is arithmetic at constant rate, labelled as such, not a statement of intent.</p>
+</section>
+
+<section id="figures">
+  <h2>Walkthrough</h2>
+  <p>Captured from the real 1.6.22 interface with the proposed elements painted over it. The events come from the prototype detector's output, not from hand-typed data. Click a numbered marker, or step through with the buttons. Click the image to see it full size.</p>
+  <div class="tabs" role="tablist" aria-label="Figures">
+    <button role="tab" aria-selected="true" data-fig="0" type="button">A · As-is</button>
+    <button role="tab" aria-selected="false" data-fig="1" type="button">B · Brief and timeline</button>
+    <button role="tab" aria-selected="false" data-fig="2" type="button">C · Event focus</button>
+  </div>
+  <div class="figwrap" id="fig"><img id="fig-img" src="figures/A-as-is.jpg" alt="" width="2400" height="1500"></div>
+  <div class="figcap" aria-live="polite"><div class="n" id="cap-n">1</div><div><h4 id="cap-h"></h4><p id="cap-p"></p></div></div>
+  <div class="capnav"><button type="button" id="cap-prev">&#8592; Previous</button><button type="button" id="cap-next">Next &#8594;</button><span class="small" id="cap-count"></span></div>
+</section>
+
+<section id="defect">
+  <h2>The drift defect, live</h2>
+  <p>Today's drift fit looks back 72 hours. When a burn falls inside that window the fit averages "on station" with "drifting" and reports a rate that is neither. Event detection fixes it by fitting only after the most recent confirmed event. Move the sliders: the readout is computed in this page with the same model the app uses (a line with a sidereal-period libration term).</p>
+  <div class="ctl">
+    <div><label for="d-h">Hours since the burn: <output id="d-h-o">30</output> h</label><input type="range" id="d-h" min="6" max="96" step="1" value="30"></div>
+    <div><label for="d-r">True drift after the burn: <output id="d-r-o">0.60</output>°/day W</label><input type="range" id="d-r" min="0.05" max="1.2" step="0.05" value="0.6"></div>
+  </div>
+  <div class="readout">
+    <div><b id="ro-true">0.60</b><span>true rate, °/day W</span></div>
+    <div><b id="ro-72" style="color:var(--s1)">0.00</b><span>today's 72 h fit</span></div>
+    <div><b id="ro-post" style="color:var(--s2)">0.00</b><span>proposed: fit after the event</span></div>
+    <div><b id="ro-ratio">0.0</b><span id="ro-ratio-l">today's fit understates by</span></div>
+  </div>
+  <div class="legend" aria-hidden="true">
+    <span><i class="sw" style="background:var(--muted);width:8px;height:8px;border-radius:50%"></i>fixes (synthetic, with libration and scatter)</span>
+    <span style="color:var(--s1)"><i class="sw dash"></i>today: 72 h fit</span>
+    <span style="color:var(--s2)"><i class="sw" style="background:var(--s2)"></i>proposed: fit after the event</span>
+  </div>
+  <div class="chartbox"><svg class="chart" id="d-svg" viewBox="0 0 900 340" role="img" aria-label="Longitude against time for one object with the two drift fits"></svg><div class="tip" id="d-tip"></div></div>
+  <p class="small" id="d-note"></p>
+</section>
+
+<section id="evidence">
+  <h2>Evidence the detector works</h2>
+  <p>Prototype built on the shipped <code>psirens.astro.drift_fit</code>, re-run on 16 November 2026 before this page was written. Every number below is from that run.</p>
+  <div class="stats">
+    <div class="stat"><b>0 / 400</b><span>quiet objects with a false E-W event</span></div>
+    <div class="stat"><b>0 / 400</b><span>quiet objects with a false N-S event</span></div>
+    <div class="stat"><b>0 / 14,400</b><span>early-warning checks that false-alarmed (300 objects × 48 hours)</span></div>
+    <div class="stat"><b>5 / 5</b><span>injected events found on the 594-object scenario store, and nothing else</span></div>
+  </div>
+  <div class="seg" role="group" aria-label="Detector">
+    <button type="button" aria-pressed="true" data-set="ew">E-W manoeuvre</button>
+    <button type="button" aria-pressed="false" data-set="ns">N-S manoeuvre</button>
+    <button type="button" aria-pressed="false" data-set="early">Early warning</button>
+    <button type="button" aria-pressed="false" data-set="table">Table view</button>
+  </div>
+  <p class="small" id="ev-sub"></p>
+  <div class="chartbox" id="ev-chartbox"><svg class="chart" id="ev-svg" viewBox="0 0 900 300" role="img" aria-label="Detection rate by manoeuvre size"></svg><div class="tip" id="ev-tip"></div></div>
+  <div class="tablewrap" id="ev-table" hidden></div>
+  <p class="small">Grey bars sit below the detector's physical floor <strong>by design</strong>: changes that small are inside station-keeping noise and are not called.</p>
+  <p><strong>Synthetic belt.</strong> Each object has eccentricity libration at the sidereal period (e from 0.0002 to 0.003), a two-provider longitude bias up to ±0.012°, per-fix scatter of 0.004° to 0.02°, ragged 45 to 90 minute sampling with 30% dropout, and a burn at a random time 36 to 200 hours before the end.</p>
+  <h3>Scenario store: injected against detected</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Injected</th><th>Detected</th></tr></thead>
+    <tbody>
+      <tr><td>SHIYAN 12 02, E-W burn 30 h ago, 0.60°/day W</td><td><span class="tag conf">CONFIRMED</span> burn at 30 h, 0.591°/day W</td></tr>
+      <tr><td>TJS-17, drift 0.25°/day E stopped 40 h ago</td><td><span class="tag conf">CONFIRMED</span> 39 h, 0.23 to -0.02°/day</td></tr>
+      <tr><td>COSMOS 2589, inclination +0.030°, 58 h ago</td><td><span class="tag conf">CONFIRMED</span> +0.030°, <strong>timed 10 h late</strong></td></tr>
+      <tr><td>TIANLIAN-3 01, 1.0°/day E burn 7 h ago</td><td><span class="tag sus">SUSPECTED</span> alarmed 3 h after the burn</td></tr>
+      <tr><td>TJS-24, no fix for 19 h</td><td>Gone quiet, last fix 20 h ago</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout blue"><strong>One defect the prototype caught in itself.</strong> The first version CONFIRMED the TIANLIAN-3 01 burn 17 hours early at 0.31°/day, because the evidence peaked at the last split it could test and the "after" window straddled a burn that came later. The fix is the <strong>edge rule</strong>: evidence that peaks at the data edge is demoted to SUSPECTED and never confirmed. It would be a committed red-case test.</div>
+</section>
+
+<section id="limits">
+  <h2>What this does not prove</h2>
+  <p>Read before deciding.</p>
+  <ul class="dot">
+    <li><span class="tag inf">INFERENCE</span> <strong>The noise model is mine, not UDL's.</strong> The thresholds (E-W floor 0.02°/day, N-S floor 0.008°, six sigma) are tuned against synthetic scatter. Live multi-provider scatter may be wider, and a provider bias that changes with the provider mix could look like a step. Calibration against live data is the first build task: run the detector offline over a copy of the deployed store and count events per day. A real belt should produce a handful, not dozens.</li>
+    <li><strong>N-S timing is coarse.</strong> 10 hours late on the scenario. Medians over 48-hour windows are robust but blunt: adequate for a brief, not for a timeline you would brief a commander from. The evidence block will say so.</li>
+    <li><strong>Drifts under about 0.05°/day are not detected.</strong> That is the station-keeping band and is deliberate, but a slow, patient approach will not appear. The brief must say "no detectable event", never "nothing happened".</li>
+    <li><strong>"Since you last looked" is per browser.</strong> Kept in local storage, as the Operator Guide's progress already is. No server state and no user identity, which matters while the <code>user.email</code> logging question is open.</li>
+    <li><strong>The projection is arithmetic, not intelligence.</strong> Constant rate to a longitude, labelled as such.</li>
+  </ul>
+</section>
+
+<section id="build">
+  <h2>How it would be built</h2>
+  <div class="grid2">
+    <div class="card"><h3>Server</h3><p>A new <code>events.py</code> with the two detectors and the early-warning test. <code>GET /api/events?view=&amp;ranks=</code> returns events with their evidence. Computed once per refresh cycle in the background thread and cached, never per request.</p><p class="small"><span class="tag inf">ESTIMATE</span> about 25 ms per object over ten days, roughly 15 s of background CPU per hourly cycle for 594 objects.</p></div>
+    <div class="card"><h3>Drift row fix</h3><p>The drift fit in the tracks payload uses only samples after the most recent confirmed E-W event, and says so (<code>drift_since_event</code>). Worth doing even if the rest is declined.</p></div>
+    <div class="card"><h3>SPA and guide</h3><p>Brief panel, timeline, plot halos, focus mode, evidence block, keyboard stepping. A new guide section, recaptured figures, two self-check questions and a sandbox drill: "find the object that changed".</p></div>
+  </div>
+  <h3>Guards, each proven by a deliberate revert</h3>
+  <ul class="dot sq">
+    <li>Detector tests: zero events across quiet synthetic objects, detection and timing across the burn bands, and the TIANLIAN edge case as a red case (removing the edge rule must confirm it early and fail).</li>
+    <li>API tests: shape, ETag, rank filter, nothing computed per request.</li>
+    <li>Layout probe: the brief lists events, <code>j</code> and <code>k</code> move the selection, Enter focuses (published on <code>dataset.focus</code>), timeline glyph count matches the brief, Esc restores the full view.</li>
+    <li>The drift row: SHIYAN 12 02's scenario rate must read 0.59 after the fix and 0.22 before it.</li>
+  </ul>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Work</th><th>Effort (estimate)</th></tr></thead>
+    <tbody>
+      <tr><td>Server, detectors and tests</td><td class="num">1 session</td></tr>
+      <tr><td>SPA: brief, timeline, focus, evidence</td><td class="num">2 sessions</td></tr>
+      <tr><td>Guide, layout probe, calibration tooling</td><td class="num">1 session</td></tr>
+      <tr><td>Live calibration run</td><td>Ash's networked workstation</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><strong>Release order.</strong> The Logging standard blocks from 1 December 2026 and comes first. This is 1.7.0 after it, not instead of it.</div>
+</section>
+
+<section id="decide">
+  <h2>Your decisions</h2>
+  <p>Pick an answer for each. The page writes the reply for you to paste back. Nothing is sent anywhere.</p>
+  <form id="decide-form">
+    <fieldset><legend>1. Go or no-go on the Shift Brief</legend>
+      <label class="opt"><input type="radio" name="q1" value="Go as proposed"><span>Go as proposed</span></label>
+      <label class="opt"><input type="radio" name="q1" value="Go, with the changes in my notes"><span>Go, with changes<small>Say what in the notes</small></span></label>
+      <label class="opt"><input type="radio" name="q1" value="Defer until after the Logging standard ships"><span>Defer until after the Logging standard ships</span></label>
+      <label class="opt"><input type="radio" name="q1" value="No-go"><span>No-go</span></label>
+    </fieldset>
+    <fieldset><legend>2. Rail space</legend>
+      <label class="opt"><input type="radio" name="q2" value="Replace Priority mix, Fleet health and By-country at the top"><span>Replace the inventory panels at the top (recommended)<small>They move below the watchlist, collapsed</small></span></label>
+      <label class="opt"><input type="radio" name="q2" value="Add the brief above the existing panels"><span>Add the brief above them<small>Accept a longer rail</small></span></label>
+    </fieldset>
+    <fieldset><legend>3. Detection thresholds</legend>
+      <label class="opt"><input type="radio" name="q3" value="Accept the prototype floors as the starting point, pending live calibration"><span>Accept the prototype floors pending live calibration<small>0.02°/day E-W, 0.008° N-S, gone quiet at 12 h</small></span></label>
+      <label class="opt"><input type="radio" name="q3" value="Use the thresholds in my notes"><span>I will name my own in the notes</span></label>
+    </fieldset>
+    <fieldset><legend>4. The drift row fix</legend>
+      <label class="opt"><input type="radio" name="q4" value="Ship the drift fix on its own first"><span>Ship it on its own first (recommended)<small>It is a wrong number on screen today</small></span></label>
+      <label class="opt"><input type="radio" name="q4" value="Ship the drift fix with the Shift Brief"><span>Ship it with the Shift Brief</span></label>
+    </fieldset>
+    <label for="notes" class="small">Notes</label>
+    <textarea id="notes" placeholder="Anything to change, add or question"></textarea>
+  </form>
+  <pre class="reply" id="decide-out" aria-live="polite"></pre>
+  <div id="decide-out-actions" style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" id="copy">Copy reply</button><button class="btn ghost" type="button" id="clear">Clear answers</button><span class="small" id="copy-msg" style="align-self:center"></span></div>
+</section>
+
+<section id="reproduce">
+  <h2>Reproducing this</h2>
+  <p>The prototype and the mockup driver are in <code>prototype/</code> beside this page. From a scratch directory with the project venv:</p>
+<pre class="reply">python prototype/detect.py                          # synthetic sensitivity and false positives
+python prototype/early.py prototype                 # early-warning latency and false alarms
+python prototype/scenario.py &lt;seed-dir&gt; &lt;out-dir&gt;   # inject the five events into a guide seed
+python prototype/events.py prototype &lt;out-dir&gt;/history.json &lt;seed-dir&gt;/hrr.json events.json
+node prototype/mock.js &lt;app-url&gt; &lt;out-dir&gt; events.json &lt;out-dir&gt;/history.json &lt;seed-dir&gt;/hrr.json</pre>
+  <p class="small">The guide seed comes from <code>tools/guide_seed.py</code>. <code>mock.js</code> drives the real 1.6.22 interface and paints the proposed elements over it; everything under the paint is the shipped application. The mockup banner says "illustrative events on synthetic geometry", and it means it.</p>
+</section>
+</main>
+
+<footer><span>Bluestaq Limited · PSIRENS · Not Classified</span><span>Change proposal, 16 November 2026. Proposal only, not built.</span></footer>
+
+<dialog id="lightbox" aria-label="Full-size figure"><button class="btn close" type="button" id="lb-close">Close</button><img id="lb-img" src="" alt=""></dialog>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage is a convenience */ } }
+};
+
+/* theme */
+(function theme(){
+  const root = document.documentElement, saved = store.get("psi-prop-theme");
+  if (saved) root.dataset.theme = saved;
+  $("theme").addEventListener("click", () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark"; store.set("psi-prop-theme", root.dataset.theme); drawDefect(); drawEvidence();
+  });
+})();
+
+/* scroll-spy */
+(function spy(){
+  const links = [...document.querySelectorAll(".navlinks a")];
+  const byId = Object.fromEntries(links.map(a => [a.hash.slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { links.forEach(a => a.classList.remove("on")); const a = byId[e.target.id]; if (a) { a.classList.add("on"); a.scrollIntoView({block:"nearest",inline:"center"}); } } });
+  }, { rootMargin: "-40% 0px -55% 0px" });
+  document.querySelectorAll("main section[id]").forEach(s => io.observe(s));
+})();
+
+/* compare slider */
+(function compare(){
+  const r = $("cmp-r"), top = document.querySelector("#cmp .top"), bar = document.querySelector("#cmp .bar");
+  const set = v => { top.style.clipPath = `inset(0 ${100 - v}% 0 0)`; bar.style.left = v + "%"; };
+  r.addEventListener("input", () => set(+r.value)); set(50);
+})();
+
+/* figure explorer */
+const FIGS = [
+  { src: "figures/A-as-is.jpg", alt: "Current interface, 150 objects, no indication of change", spots: [
+    [8, 21, "Inventory, not news", "Priority mix, Fleet health and By-country take the top of the rail. They are counts that barely move between shifts."],
+    [88, 3.5, "14 drifting: which ones, and which are new?", "The header counts drifters but cannot say which started since you last looked, which stopped, or which are heading somewhere that matters."],
+    [56.5, 93, "SHIYAN 12 02 manoeuvred here", "Thirty hours ago it left station at 0.59°/day W. Its label is lost in the label pile at zero inclination. Nothing marks it."],
+    [35.8, 75.6, "TJS-24 has been silent for 20 hours", "It looks exactly like every other marker. Silence is invisible today."],
+    [30, 93, "TIANLIAN-3 01 is leaving its track", "A burn seven hours ago. The trail has barely bent, so even a careful scan would miss it."]
+  ]},
+  { src: "figures/B-brief-overview.jpg", alt: "Proposed Shift Brief rail panel and event timeline over the real interface", spots: [
+    [8, 15.2, "Three new since you last looked", "The badge counts events after your last visit. Everything below the line is from before it."],
+    [9, 28, "Suspected, and labelled as such", "TIANLIAN-3 01 is an early warning only: its latest fixes depart from the fitted track. It confirms after 24 hours of fixes or clears itself."],
+    [9, 44, "The headline event, with its consequence", "E-W manoeuvre, now 0.59°/day W, and on that drift it reaches SJ-21's longitude in about 4.3 days."],
+    [9, 61, "Earlier events stay in context", "Drift stopped and N-S manoeuvre from the previous two days, below the line."],
+    [55, 17.5, "The timeline", "Four days, one glyph per event, the period since you last looked shaded. Click a glyph to focus that event."],
+    [35.6, 75.6, "Halos on the plot", "Each event is ringed on the plot with its glyph, so the brief and the belt point at the same objects."],
+    [8, 67, "Keyboard first", "j and k step through events, Enter focuses, Esc returns to the belt."]
+  ]},
+  { src: "figures/C-event-focus.jpg", alt: "Focus mode on SHIYAN 12 02 with split trail, burn marker, projection and evidence chart", spots: [
+    [75.6, 17.8, "The selected event", "The timeline and the brief entry both highlight the focused event."],
+    [73.5, 81, "The burn", "The trail splits at the burn epoch: grey before, amber after, a diamond at the split."],
+    [45.7, 89.6, "Where it is heading", "A dashed projection to SJ-21's longitude at the current rate. Arithmetic, labelled as such."],
+    [23.4, 90.4, "Context, not clutter", "The neighbours that matter are ringed; everything else is veiled."],
+    [87.5, 39.5, "Event evidence", "Longitude against four days with the two fits drawn and the split marked. The operator sees why the system believes it."],
+    [85.5, 66.6, "The defect, left visible on purpose", "Today's Drift row still reads 0.22°/day W against the evidence block's 0.59. In the build, the row fits only after the event and says so."]
+  ]}
+];
+let figI = 0, spotI = 0;
+function renderFig(){
+  const f = FIGS[figI], wrap = $("fig"), img = $("fig-img");
+  if (img.getAttribute("src") !== f.src) img.src = f.src;
+  img.alt = f.alt;
+  wrap.querySelectorAll(".hs").forEach(b => b.remove());
+  f.spots.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "hs"; b.textContent = i + 1;
+    b.style.left = s[0] + "%"; b.style.top = s[1] + "%";
+    b.setAttribute("aria-label", `Point ${i + 1}: ${s[2]}`);
+    b.setAttribute("aria-pressed", String(i === spotI));
+    b.addEventListener("click", ev => { ev.stopPropagation(); spotI = i; renderFig(); });
+    wrap.appendChild(b);
+  });
+  const s = f.spots[spotI];
+  $("cap-n").textContent = spotI + 1; $("cap-h").textContent = s[2]; $("cap-p").textContent = s[3];
+  $("cap-count").textContent = `Point ${spotI + 1} of ${f.spots.length} · figure ${"ABC"[figI]}`;
+  document.querySelectorAll('[role="tab"]').forEach((t, i) => t.setAttribute("aria-selected", String(i === figI)));
+}
+document.querySelectorAll('[role="tab"]').forEach(t => t.addEventListener("click", () => { figI = +t.dataset.fig; spotI = 0; renderFig(); }));
+function step(d){
+  spotI += d;
+  if (spotI >= FIGS[figI].spots.length) { figI = (figI + 1) % FIGS.length; spotI = 0; }
+  else if (spotI < 0) { figI = (figI + FIGS.length - 1) % FIGS.length; spotI = FIGS[figI].spots.length - 1; }
+  renderFig();
+}
+$("cap-next").addEventListener("click", () => step(1));
+$("cap-prev").addEventListener("click", () => step(-1));
+$("fig-img").addEventListener("click", () => { $("lb-img").src = FIGS[figI].src; $("lb-img").alt = FIGS[figI].alt; $("lightbox").showModal(); });
+$("lb-close").addEventListener("click", () => $("lightbox").close());
+$("lightbox").addEventListener("click", e => { if (e.target === $("lightbox")) $("lightbox").close(); });
+renderFig();
+
+/* shared chart helpers */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent){ const e = document.createElementNS(NS, tag); Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v)); if (parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, attrs){ const t = el("text", { x, y, "font-size": 12, fill: css("--muted"), ...attrs }, parent); t.textContent = s; return t; }
+
+/* drift defect demo: deterministic synthetic object, same model as astro.drift_fit */
+const SID = 0.9972695787;
+function lcg(seed){ let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+function gauss(r){ const u = Math.max(r(), 1e-9), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+function series(hours, rate){
+  const r = lcg(20261116), amp = 0.2516, ph = 1.1, out = [], spanD = 5;
+  let t = 0;
+  while (t <= spanD) {
+    if (r() > 0.25) {
+      const tb = spanD - hours / 24;
+      let lon = amp * Math.sin(2 * Math.PI * t / SID + ph) + (r() < 0.5 ? 0 : 0.008) + gauss(r) * 0.006;
+      if (t >= tb) lon -= rate * (t - tb);
+      out.push([t, lon]);
+    }
+    t += (45 + Math.floor(r() * 4) * 15) / 1440;
+  }
+  return { pts: out, end: spanD, burn: spanD - hours / 24 };
+}
+function solve(A, b){
+  const n = b.length, M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c += 1) {
+    let p = c;
+    for (let r = c + 1; r < n; r += 1) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r += 1) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= n; k += 1) M[r][k] -= f * M[c][k];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+function fit(pts){
+  if (pts.length < 8) return null;
+  const row = t => [1, t, Math.sin(2 * Math.PI * t / SID), Math.cos(2 * Math.PI * t / SID)];
+  const A = Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => 0)), b = [0, 0, 0, 0];
+  pts.forEach(([t, y]) => { const x = row(t); for (let i = 0; i < 4; i += 1) { b[i] += x[i] * y; for (let j = 0; j < 4; j += 1) A[i][j] += x[i] * x[j]; } });
+  const c = solve(A, b);
+  return { a: c[0], rate: c[1], t0: pts[0][0], t1: pts[pts.length - 1][0] };
+}
+function drawDefect(){
+  const hours = +$("d-h").value, rate = +$("d-r").value;
+  $("d-h-o").textContent = hours; $("d-r-o").textContent = rate.toFixed(2);
+  const s = series(hours, rate);
+  const win = s.pts.filter(p => p[0] >= s.end - 3);
+  const post = s.pts.filter(p => p[0] >= s.burn);
+  const f72 = fit(win), postOk = post.length >= 8 && (post[post.length - 1][0] - post[0][0]) >= 1;
+  const fpost = postOk ? fit(post) : null;
+  const w72 = f72 ? -f72.rate : NaN, wpost = fpost ? -fpost.rate : NaN;
+  $("ro-true").textContent = rate.toFixed(2);
+  $("ro-72").textContent = w72.toFixed(2);
+  $("ro-post").textContent = fpost ? wpost.toFixed(2) : "SUSPECTED";
+  const ratio = rate / Math.max(Math.abs(w72), 1e-6);
+  if (hours >= 72) { $("ro-ratio").textContent = "agrees"; $("ro-ratio-l").textContent = "burn is outside the 72 h window"; }
+  else { $("ro-ratio").textContent = "×" + ratio.toFixed(1); $("ro-ratio-l").textContent = "today's fit understates by"; }
+  $("d-note").textContent = fpost
+    ? `Synthetic object, eccentricity 0.0022 (libration ±0.25°), two providers, per-fix scatter. ${post.length} fixes after the burn; ${win.length} inside today's 72 h fit.`
+    : `Under 24 h since the burn: too little baseline to confirm a rate. The brief would show this as SUSPECTED, and today's 72 h fit would still be showing ${w72.toFixed(2)}°/day.`;
+
+  const svg = $("d-svg"); svg.replaceChildren();
+  const W = 900, H = 340, L = 58, R = 92, T = 14, B = 40;
+  const ys = s.pts.map(p => p[1]), y0 = Math.min(...ys) - 0.05, y1 = Math.max(...ys) + 0.05;
+  const X = t => L + (t / s.end) * (W - L - R), Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const grid = css("--grid"), muted = css("--muted");
+  for (let d = 0; d <= 5; d += 1) {
+    el("line", { x1: X(d), x2: X(d), y1: T, y2: H - B, stroke: grid }, svg);
+    txt(svg, X(d), H - B + 18, d === 5 ? "now" : `-${5 - d} d`, { "text-anchor": "middle" });
+  }
+  const step = (y1 - y0) > 1.5 ? 0.5 : 0.25;
+  for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) {
+    el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: grid }, svg);
+    txt(svg, L - 8, Y(v) + 4, v.toFixed(2) + "°", { "text-anchor": "end" });
+  }
+  txt(svg, L, H - 6, "relative longitude, °E (negative is westward)", { "font-size": 11 });
+  el("rect", { x: X(s.end - 3), y: T, width: X(s.end) - X(s.end - 3), height: H - T - B, fill: css("--s1"), opacity: 0.07 }, svg);
+  txt(svg, X(s.end - 3) + 6, H - B - 8, "72 h window", { fill: css("--s1"), "font-size": 11 });
+  el("line", { x1: X(s.burn), x2: X(s.burn), y1: T, y2: H - B, stroke: css("--head"), "stroke-dasharray": "4 4" }, svg);
+  txt(svg, X(s.burn) + 6, T + 14, "burn", { fill: css("--head"), "font-weight": 600 });
+  const dots = el("g", {}, svg);
+  s.pts.forEach(p => el("circle", { cx: X(p[0]), cy: Y(p[1]), r: 2.6, fill: muted, opacity: 0.75 }, dots));
+  const labels = [];
+  const trend = (f, c, dash, label) => {
+    if (!f) return;
+    const ya = f.a + f.rate * f.t0, yb = f.a + f.rate * f.t1;
+    el("line", { x1: X(f.t0), y1: Y(ya), x2: X(f.t1), y2: Y(yb), stroke: c, "stroke-width": 2.5, "stroke-linecap": "round", ...(dash ? { "stroke-dasharray": "7 5" } : {}) }, svg);
+    labels.push([Y(yb), label]);
+  };
+  trend(f72, css("--s1"), true, "today");
+  trend(fpost, css("--s2"), false, "proposed");
+  labels.sort((a, b) => a[0] - b[0]);
+  if (labels.length === 2 && labels[1][0] - labels[0][0] < 16) { labels[0][0] -= 8; labels[1][0] += 8; }
+  labels.forEach(([y, l]) => txt(svg, W - R + 8, y + 4, l, { fill: css("--ink"), "font-weight": 600 }));
+  const tip = $("d-tip");
+  svg.onmousemove = e => {
+    const r = svg.getBoundingClientRect(), t = ((e.clientX - r.left) * W / r.width - L) / (W - L - R) * s.end;
+    if (t < 0 || t > s.end) { tip.style.opacity = 0; return; }
+    const p = s.pts.reduce((a, q) => Math.abs(q[0] - t) < Math.abs(a[0] - t) ? q : a);
+    tip.innerHTML = `${((s.end - p[0]) * 24).toFixed(0)} h ago<br>longitude ${p[1].toFixed(3)}°`;
+    tip.style.left = Math.min(e.clientX - r.left + 12, r.width - 150) + "px"; tip.style.top = (e.clientY - r.top + 10) + "px"; tip.style.opacity = 1;
+  };
+  svg.onmouseleave = () => { tip.style.opacity = 0; };
+}
+["d-h", "d-r"].forEach(id => $(id).addEventListener("input", drawDefect));
+drawDefect();
+
+/* evidence chart: single series, one colour, values labelled */
+const EV = {
+  ew: { sub: "60 synthetic objects per band. Timing error is the median gap between the true and the detected burn epoch.", unit: "°/day change",
+        rows: [["0.02", 18, 60, "4.8 h", true], ["0.05", 56, 60, "3.9 h"], ["0.1", 60, 60, "2.2 h"], ["0.3", 60, 60, "1.4 h"]] },
+  ns: { sub: "60 synthetic objects per band. Inclination steps, detected by a median test over 48-hour windows.", unit: "° inclination step",
+        rows: [["0.005", 1, 60, "", true], ["0.01", 59, 60, ""], ["0.03", 60, 60, ""], ["0.1", 60, 60, ""]] },
+  early: { sub: "40 synthetic objects per band. Latency is the median time from the burn to the first alarm. Slow drifters confirm through the main detector after about 24 hours instead.", unit: "°/day burn",
+        rows: [["0.05", 0, 40, "", true], ["0.1", 3, 40, "18 h"], ["0.3", 37, 40, "8 h"], ["1.0", 40, 40, "5 h"]] }
+};
+let evSet = "ew";
+function drawEvidence(){
+  const showTable = evSet === "table", key = showTable ? (drawEvidence.last || "ew") : evSet, d = EV[key];
+  $("ev-chartbox").hidden = showTable; $("ev-table").hidden = !showTable;
+  if (showTable) {
+    $("ev-sub").textContent = "Every band from every detector.";
+    const rows = Object.entries(EV).flatMap(([k, v]) => v.rows.map(r => `<tr><td>${{ ew: "E-W", ns: "N-S", early: "Early warning" }[k]}</td><td class="num">${r[0]} ${v.unit}</td><td class="num">${r[1]} / ${r[2]}</td><td class="num">${r[3] || "n/a"}</td><td>${r[4] ? "below the floor by design" : ""}</td></tr>`)).join("");
+    $("ev-table").innerHTML = `<table><thead><tr><th>Detector</th><th>Size</th><th>Detected</th><th>Timing or latency</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>`;
+    return;
+  }
+  drawEvidence.last = key;
+  $("ev-sub").textContent = d.sub;
+  const svg = $("ev-svg"); svg.replaceChildren();
+  const W = 900, H = 300, L = 54, R = 16, T = 30, B = 46, n = d.rows.length;
+  const bw = (W - L - R) / n, Y = v => T + (1 - v) * (H - T - B);
+  [0, 0.25, 0.5, 0.75, 1].forEach(v => { el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: css("--grid") }, svg); txt(svg, L - 8, Y(v) + 4, (v * 100) + "%", { "text-anchor": "end" }); });
+  const tip = $("ev-tip");
+  d.rows.forEach((r, i) => {
+    const frac = r[1] / r[2], x = L + i * bw + bw * 0.22, w = bw * 0.56, y = Y(frac), h = Math.max(H - B - y, 0);
+    const path = h > 4 ? `M${x},${H - B} V${y + 4} q0,-4 4,-4 h${w - 8} q4,0 4,4 V${H - B} Z` : `M${x},${H - B} h${w} v${-h} h${-w} Z`;
+    el("path", { d: path, fill: r[4] ? css("--sbelow") : css("--s1") }, svg);
+    txt(svg, x + w / 2, y - 8, `${r[1]}/${r[2]}`, { "text-anchor": "middle", fill: css("--ink"), "font-weight": 600, "font-size": 13 });
+    txt(svg, x + w / 2, H - B + 18, `${r[0]}`, { "text-anchor": "middle", fill: css("--ink2"), "font-size": 13 });
+    const hit = el("rect", { x: L + i * bw, y: T, width: bw, height: H - T - B, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", e => {
+      const b = svg.getBoundingClientRect();
+      tip.innerHTML = `<b>${r[0]} ${d.unit}</b><br>detected ${r[1]} of ${r[2]} (${Math.round(frac * 100)}%)${r[3] ? `<br>median ${key === "early" ? "latency" : "timing error"} ${r[3]}` : ""}${r[4] ? "<br>below the physical floor by design" : ""}`;
+      tip.style.left = Math.min(e.clientX - b.left + 12, b.width - 200) + "px"; tip.style.top = (e.clientY - b.top + 10) + "px"; tip.style.opacity = 1;
+    });
+    hit.addEventListener("mouseleave", () => { tip.style.opacity = 0; });
+  });
+  txt(svg, (W + L) / 2, H - 6, d.unit, { "text-anchor": "middle", "font-size": 12 });
+}
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  evSet = b.dataset.set; document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); drawEvidence();
+}));
+drawEvidence();
+
+/* decisions */
+(function decisions(){
+  const form = $("decide-form"), KEY = "psi-prop-shift-brief";
+  const saved = store.get(KEY) || {};
+  Object.entries(saved).forEach(([k, v]) => {
+    if (k === "notes") { $("notes").value = v; return; }
+    const i = form.querySelector(`input[name="${k}"][value="${CSS.escape(v)}"]`); if (i) i.checked = true;
+  });
+  const LABELS = { q1: "Shift Brief", q2: "Rail space", q3: "Thresholds", q4: "Drift row fix" };
+  function render(){
+    const data = {};
+    Object.keys(LABELS).forEach(k => { const c = form.querySelector(`input[name="${k}"]:checked`); if (c) data[k] = c.value; });
+    const notes = $("notes").value.trim(); if (notes) data.notes = notes;
+    store.set(KEY, data);
+    const lines = ["Shift Brief proposal (16 November 2026): decisions", ""];
+    Object.entries(LABELS).forEach(([k, l], i) => lines.push(`${i + 1}. ${l}: ${data[k] || "(not answered)"}`));
+    if (notes) lines.push("", "Notes: " + notes);
+    $("decide-out").textContent = lines.join("\n");
+  }
+  form.addEventListener("input", render);
+  $("copy").addEventListener("click", async () => {
+    const t = $("decide-out").textContent;
+    try { await navigator.clipboard.writeText(t); $("copy-msg").textContent = "Copied. Paste it back into the session."; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($("decide-out")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copy-msg").textContent = "Selected. Press Ctrl+C to copy."; }
+  });
+  $("clear").addEventListener("click", () => { form.reset(); render(); });
+  render();
+})();
+</script>
+</body>
+</html>
