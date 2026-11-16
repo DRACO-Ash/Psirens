@@ -140,6 +140,11 @@ class DriftFit:
     points: int
     span_hours: float
     harmonic: bool
+    # The fitted line itself, so a caller can DRAW it (the event evidence
+    # chart, 1.7.0): longitude = intercept_deg + rate * days since `origin`,
+    # in the unwrapped frame that starts at the first fitted sample.
+    intercept_deg: float = 0.0
+    origin: datetime | None = None
 
 
 def _unwrap(samples: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
@@ -211,10 +216,45 @@ def _basis(x: float, harmonic: bool) -> list[float]:
     return [1.0, x]
 
 
+def unwrap(samples: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
+    """Public name for the seam unwrap, for callers fitting their own series."""
+    return _unwrap(samples)
+
+
+def model_coefficients(xs: list[float], ys: list[float],
+                       harmonic: bool) -> tuple[list[float], float] | None:
+    """The full least-squares coefficients and the RMS residual.
+
+    [intercept, slope] for a line, [intercept, slope, sin, cos] with the
+    sidereal libration. Used by the early-warning test, which predicts forward
+    from the whole model rather than from the slope alone.
+    """
+    return _coeffs(xs, ys, harmonic)
+
+
+def model_value(coeffs: list[float], x: float) -> float:
+    """The model evaluated at `x` days from its origin."""
+    return sum(c * b for c, b in zip(coeffs, _basis(x, len(coeffs) == 4)))
+
+
+def resolves_libration(xs: list[float]) -> bool:
+    """Public name for the sampling test the drift fit applies."""
+    return _resolves_libration(xs)
+
+
 def _fit(xs: list[float], ys: list[float],
-         harmonic: bool) -> tuple[float, float] | None:
-    """Least-squares slope and RMS residual, or None when the system is
-    singular (identical epochs, or a basis the sampling cannot resolve)."""
+         harmonic: bool) -> tuple[float, float, float] | None:
+    """Least-squares intercept, slope and RMS residual, or None when the system
+    is singular (identical epochs, or a basis the sampling cannot resolve)."""
+    fitted = _coeffs(xs, ys, harmonic)
+    if fitted is None:
+        return None
+    beta, rms = fitted
+    return beta[0], beta[1], rms
+
+
+def _coeffs(xs: list[float], ys: list[float],
+            harmonic: bool) -> tuple[list[float], float] | None:
     rows = [_basis(x, harmonic) for x in xs]
     width = len(rows[0])
     ata = [[sum(r[i] * r[j] for r in rows) for j in range(width)]
@@ -224,7 +264,7 @@ def _fit(xs: list[float], ys: list[float],
     if beta is None:
         return None
     err = [y - sum(b * c for b, c in zip(beta, r)) for r, y in zip(rows, ys)]
-    return beta[1], math.sqrt(sum(e * e for e in err) / len(err))
+    return beta, math.sqrt(sum(e * e for e in err) / len(err))
 
 
 def _resolves_libration(xs: list[float]) -> bool:
@@ -308,11 +348,11 @@ def drift_fit(samples: list[tuple[datetime, float]], *,
     ys = [lon for _, lon in points]
     harmonic = _resolves_libration(xs)
     fitted = _fit(xs, ys, harmonic) or _fit(xs, ys, False)
-    if fitted is None or abs(fitted[0]) > _MAX_GEO_DRIFT:
+    if fitted is None or abs(fitted[1]) > _MAX_GEO_DRIFT:
         return None
-    return DriftFit(rate_deg_per_day=fitted[0], residual_deg=fitted[1],
+    return DriftFit(rate_deg_per_day=fitted[1], residual_deg=fitted[2],
                     points=len(points), span_hours=xs[-1] * 24.0,
-                    harmonic=harmonic)
+                    harmonic=harmonic, intercept_deg=fitted[0], origin=start)
 
 
 def drift_deg_per_day(samples: list[tuple[datetime, float]]) -> float | None:

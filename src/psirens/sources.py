@@ -26,7 +26,7 @@ import httpx
 
 from sgp4.api import jday
 
-from .astro import gmst_rad, sub_longitude_deg
+from .astro import SIDEREAL_DAY_DAYS, gmst_rad, sub_longitude_deg
 from .config import Config
 from .models import DataMode, ManualElsetIn
 from .store import resilient_write
@@ -578,6 +578,19 @@ class DemoElsetSource:
             out[oid] = self._track(oid, name, "REAL", "DEMO", None,
                                    self._span(now, 15, lon, inc, rate, raan))
 
+        # 7) Two DENSELY sampled objects for the Shift Brief (1.7.0). Every
+        # other demo object has one fix a day, which no event detector can
+        # read, so without these the offline belt has no events and the probe
+        # guarding the brief, the timeline and focus mode would pass on a page
+        # that had nothing to show. One burns westward towards BEIDOU-3 G1;
+        # the other stops reporting while the rest of the belt carries on.
+        out["90401"] = self._track("90401", "MANOEUVRE-DEMO", "REAL", "DEMO", None,
+                                   self._dense(now, lon0=150.4, inc=0.8, raan=230.0,
+                                               burn_h=40.0, rate=-0.5))
+        out["90402"] = self._track("90402", "SILENT-DEMO", "REAL", "DEMO", None,
+                                   self._dense(now, lon0=-20.0, inc=0.3, raan=80.0,
+                                               stop_h=16.0))
+
         for oid, rec in out.items():  # synthesise a GEO elset so offline works
             head = rec["samples"][-1]
             rec["elset"] = self._demo_elset(
@@ -629,6 +642,31 @@ class DemoElsetSource:
                 "inclination_deg": round(inc, 4),
                 "raan_deg": round((raan - 0.0134 * (n - 1 - k)) % 360.0, 4),
             })
+        return pts
+
+    @staticmethod
+    def _dense(now: datetime, *, lon0: float, inc: float, raan: float,
+               burn_h: float | None = None, rate: float = 0.0,
+               stop_h: float = 0.0) -> list[dict]:
+        """Six days of fixes every two hours, with a small sidereal libration,
+        optionally a burn `burn_h` hours before the newest fix (a constant
+        drift `rate` after it) and optionally no fixes in the last `stop_h`
+        hours. Quantised to the hour, so repeated refreshes dedup cleanly."""
+        base = now.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        pts = []
+        for k in range(72):
+            hours_back = 2.0 * (71 - k)
+            if hours_back < stop_h:
+                continue
+            t = base - timedelta(hours=hours_back)
+            days = (144.0 - hours_back) / 24.0
+            lon = lon0 + 0.08 * math.sin(2.0 * math.pi * days / SIDEREAL_DAY_DAYS)
+            if burn_h is not None and hours_back <= burn_h:
+                lon += rate * (burn_h - hours_back) / 24.0
+            pts.append({"epoch": t.isoformat(),
+                        "sub_lon_deg": round((lon + 180.0) % 360.0 - 180.0, 4),
+                        "inclination_deg": round(inc, 4),
+                        "raan_deg": round(raan, 4)})
         return pts
 
     @staticmethod

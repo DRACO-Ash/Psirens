@@ -374,6 +374,7 @@ function checkBodyFits(m, label) {
     // to switch or clear it.
     // ---------------------------------------------------------------------
     await page.click("#comodal-x");   // it overlays the left rail
+    await page.click("#foldcountry > summary");   // collapsed by default from 1.7.0
     const shown = () => page.evaluate(
       () => Number((document.querySelector("#reads .read .v").textContent || "")
         .trim().split(" ")[0]));
@@ -438,6 +439,111 @@ function checkBodyFits(m, label) {
              `expected ${JSON.stringify(want)}. The policy lists, the ` +
              `/api/hrr payload and the panel are not agreeing.`);
       }
+    }
+
+    // ---------------------------------------------------------------------
+    // The Shift Brief (1.7.0). The offline belt carries two densely sampled
+    // objects for this: MANOEUVRE-DEMO burns westward 40 h before the newest
+    // fix, SILENT-DEMO stops reporting 16 h before it. Every assertion is on
+    // what the page PUBLISHES (dataset) or SHOWS (text), because the timeline,
+    // the halos and focus mode are canvas pixels.
+    // ---------------------------------------------------------------------
+    await page.click("#imodal-x").catch(() => {});
+    const briefN = async () => Number(await page.$eval("#brief", (e) => e.dataset.count));
+    const nBrief = await briefN();
+    const nGlyph = Number(await page.$eval("#tlcv", (e) => e.dataset.glyphs));
+    const briefText = (await page.textContent("#brief")) || "";
+    console.log(`  brief:  ${nBrief} event(s), ${nGlyph} timeline glyph(s)`);
+    if (nBrief < 2) {
+      fail(`the Shift Brief lists ${nBrief} event(s); the demo belt carries a ` +
+           `manoeuvre and a silence, so the detector or /api/events is not ` +
+           `reaching the page.`);
+    }
+    if (nGlyph !== nBrief) {
+      fail(`the timeline draws ${nGlyph} glyph(s) for ${nBrief} brief entr(ies); ` +
+           `the two views of the same events disagree.`);
+    }
+    if (!/MANOEUVRE-DEMO[\s\S]*E-W manoeuvre/.test(briefText) || !/Gone quiet/.test(briefText)) {
+      fail("the brief does not name the demo manoeuvre and the silent object.");
+    }
+    // Keyboard: j moves the selection, k moves it back, Enter focuses.
+    await page.mouse.click(5, 5);
+    const cur = () => page.evaluate(() => {
+      const c = document.querySelector(".bev.cur"); return c ? c.dataset.ev : null; });
+    await page.keyboard.press("j");
+    const first = await cur();
+    await page.keyboard.press("j");
+    const second = await cur();
+    await page.keyboard.press("k");
+    const back = await cur();
+    if (!first || first === second || back !== first) {
+      fail(`j/k did not step through the brief (${first} -> ${second} -> ${back}).`);
+    }
+    const manoeuvre = await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll(".bev"))
+        .find((x) => /MANOEUVRE-DEMO/.test(x.textContent)); return b ? b.dataset.ev : null; });
+    // BOUNDED: with a broken key the selection never moves, and an unbounded
+    // walk hung the probe for ten minutes instead of failing (found by the red
+    // case for this very guard).
+    for (let step = 0; step <= nBrief && manoeuvre && (await cur()) !== manoeuvre; step++) {
+      await page.keyboard.press("j");
+    }
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#evcv", { timeout: 10000 }).catch(() => {});
+    const focus = await page.evaluate(() => ({
+      id: document.getElementById("cv").dataset.focus,
+      span: Number(document.getElementById("cv").dataset.lonspan),
+      bar: document.getElementById("focusbar").classList.contains("show"),
+      series: Number((document.getElementById("evcv") || { dataset: {} }).dataset.series || 0),
+      drift: (() => {
+        const dts = Array.from(document.querySelectorAll(".ins-dl dt"));
+        const get = (k) => { const d = dts.find((x) => x.textContent.trim() === k);
+          return d && d.nextElementSibling ? d.nextElementSibling.textContent.trim() : ""; };
+        return { rate: get("Drift"), fit: get("Drift fit") };
+      })(),
+    }));
+    console.log(`  focus:  ${focus.id} span ${focus.span} deg, evidence ${focus.series} pts, ` +
+                `drift ${JSON.stringify(focus.drift.rate)}`);
+    if (focus.id !== manoeuvre || !focus.bar) {
+      fail(`Enter on the brief did not focus the selected event ` +
+           `(${JSON.stringify(focus.id)}, bar shown ${focus.bar}).`);
+    }
+    if (!(focus.span < 360)) {
+      fail("focus mode did not frame the event: the plot is still at the full belt.");
+    }
+    if (focus.series < 10) {
+      fail(`the inspector's evidence chart drew ${focus.series} point(s).`);
+    }
+    // THE DRIFT FIX, end to end. MANOEUVRE-DEMO drifts at 0.50 deg/day W after
+    // its burn; a 72 h fit straddling the burn reads about half that.
+    const rate = Number((/([\d.]+)/.exec(focus.drift.rate) || [])[1]);
+    if (!(rate > 0.45 && rate < 0.55) || !/after the event/.test(focus.drift.fit)) {
+      fail(`the drift row reads ${JSON.stringify(focus.drift.rate)} / ` +
+           `${JSON.stringify(focus.drift.fit)}: it should be ~0.50 deg/day W, fitted ` +
+           `after the event. A fit across the burn understates it.`);
+    }
+    await page.keyboard.press("Escape");
+    const after = await page.evaluate(() => ({
+      id: document.getElementById("cv").dataset.focus,
+      span: Number(document.getElementById("cv").dataset.lonspan) }));
+    if (after.id !== "" || after.span !== 360) {
+      fail(`Esc did not return to the belt (focus ${JSON.stringify(after.id)}, span ${after.span}).`);
+    }
+    // The timeline is a control too: sweep it with real mouse moves, read the
+    // cursor the page sets, and click the first glyph found.
+    const tl = await page.locator("#tlcv").boundingBox();
+    let hit = null;
+    for (let x = tl.x + 120; x < tl.x + tl.width && hit === null; x += 3) {
+      await page.mouse.move(x, tl.y + 40);
+      if ((await page.$eval("#tlcv", (e) => e.style.cursor)) === "pointer") { hit = x; }
+    }
+    if (hit === null) {
+      fail("sweeping the timeline found no clickable glyph.");
+    } else {
+      await page.mouse.click(hit, tl.y + 40);
+      const viaTl = await page.$eval("#cv", (e) => e.dataset.focus);
+      if (!viaTl) { fail("clicking a timeline glyph did not focus its event."); }
+      await page.keyboard.press("Escape");
     }
 
     // ---------------------------------------------------------------------
@@ -525,9 +631,9 @@ function checkBodyFits(m, label) {
     if (pctBefore === pctAfter) {
       fail(`marking a section as read left the progress ring at ${pctBefore}.`);
     }
-    // The self-check: twelve questions, and answering one must score it.
+    // The self-check: fourteen questions, and answering one must score it.
     const qCount = await guide.locator(".quiz").count();
-    if (qCount < 12) { fail(`the self-check built ${qCount} questions, expected 12.`); }
+    if (qCount < 14) { fail(`the self-check built ${qCount} questions, expected 14.`); }
     await guide.locator(".quiz .opts button").first().click();
     const score = await guide.textContent("#quizscore");
     if (!/1 of 1|0 of 1/.test(score || "")) {

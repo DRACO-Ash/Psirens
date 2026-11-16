@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -80,6 +81,17 @@ class Refresher:
         self.last_ok: datetime | None = None   # last run that added something
         # The stage-by-stage counts (1.6.9). Without them a zero is mute.
         self.last_ingest = IngestResult()
+        # Called after every completed cycle, in the refresh thread (1.7.0):
+        # the event engine warms its cache here so no request pays for it.
+        self.on_cycle: Callable[[], object] | None = None
+
+    def _after_cycle(self) -> None:
+        if self.on_cycle is None:
+            return
+        try:
+            self.on_cycle()
+        except Exception:  # never let a derived product break ingest
+            _log.exception("post-cycle hook failed; ingest result unaffected")
 
     def _maybe_refresh_hrr(self, now: datetime, force: bool) -> None:
         """Refresh the dynamic HRR list on its own slow cadence (or on force).
@@ -193,6 +205,7 @@ class Refresher:
             self.last_ingest = res
             if res.added > 0:
                 self.last_ok = now
+            self._after_cycle()
             return {"status": "ok", "added": res.added, "errors": res.errors,
                     "hrr_count": res.hrr_size, "fetched": res.fetched,
                     "kept": res.kept, "rows": res.rows,

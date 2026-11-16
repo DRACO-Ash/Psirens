@@ -28,6 +28,7 @@ from .config import Config, load_config
 from .models import VIEW_MODES, DataMode, ManualElsetIn
 from .conjunction import conjunctions_for
 from .coplanar import coplanar_for
+from .events import EventEngine, Thresholds, latest_splits
 from .tle import parse_priority
 from .hrr import HrrStore
 from .refresh import Refresher
@@ -68,6 +69,8 @@ _ASSET_MEDIA: dict[str, str] = {
     "guide-coplanar.png": _PNG,
     "guide-country.png": _PNG,
     "guide-stale.png": _PNG,
+    "guide-brief.png": _PNG,   # the Shift Brief card (1.7.0)
+    "guide-focus.png": _PNG,   # focus mode on an E-W manoeuvre (1.7.0)
 }
 _ASSET_PATHS: dict[str, str] = {name: os.path.join(_STATIC, name) for name in _ASSET_MEDIA}
 
@@ -97,20 +100,32 @@ def _rank_of(oid: str, hrr_map: dict) -> int:
     return 5 if rank is None else int(rank)
 
 
-def _drift_block(pairs: list[tuple[datetime, float]]) -> dict:
+def _drift_block(pairs: list[tuple[datetime, float]],
+                 since: datetime | None = None) -> dict:
     """The fitted drift rate with the context needed to read it.
 
     A rate on its own is not interpretable, which is how a 30-minute finite
     difference reading -3.82 deg/day sat on an inspector panel beside a total
     track excursion of 5.9 deg without contradicting itself out loud. The
     residual and the baseline travel with the number.
+
+    NEVER ACROSS A MANOEUVRE (1.7.0). `since` is the newest CONFIRMED E-W
+    event for the object, and only fixes after it are fitted. A trailing 72 h
+    fit that straddles a burn averages "on station" with "drifting" and
+    reports neither: 0.22 deg/day for an object drifting at 0.59 deg/day,
+    measured on the scenario store while prototyping the Shift Brief.
+    `drift_since_event` says when the fit was cut, so the reader knows.
     """
+    if since is not None:
+        pairs = [p for p in pairs if p[0] >= since]
     fit = drift_fit(pairs)
+    stamp = since.isoformat() if since is not None else None
     if fit is None:
         return {"drift_deg_per_day": None, "drift_residual_deg": None,
                 "drift_fit_hours": None, "drift_fit_points": None,
-                "drift_fit_harmonic": None}
+                "drift_fit_harmonic": None, "drift_since_event": stamp}
     return {
+        "drift_since_event": stamp,
         "drift_deg_per_day": fit.rate_deg_per_day,
         "drift_residual_deg": fit.residual_deg,
         "drift_fit_hours": fit.span_hours,
@@ -122,7 +137,8 @@ def _drift_block(pairs: list[tuple[datetime, float]]) -> dict:
 def _tracks_payload(cfg: Config, store: Store, view: str,
                     modes: set[DataMode],
                     ranks: set[int] | None = None,
-                    hrr_map: dict | None = None) -> dict:
+                    hrr_map: dict | None = None,
+                    splits: dict[str, datetime] | None = None) -> dict:
     """Build the tracks payload, optionally limited to a set of priority ranks.
 
     The rank filter exists to keep first paint small: ranks 4 and 5 are the
@@ -142,6 +158,7 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
     """
     data = store.load()
     hrr_map = hrr_map or {}
+    splits = splits or {}
     active_ranks = ranks or None
     tracks, markings = [], []
     for oid, rec in data.get("objects", {}).items():
@@ -169,7 +186,7 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
             "origin": rec.get("origin", ""),
             "target": rec.get("target"),
             "samples": samples,
-            **_drift_block(pairs),
+            **_drift_block(pairs, splits.get(oid)),
             "ra_deg": (rec.get("elset") or {}).get("raan_deg"),
         })
     return {
@@ -312,21 +329,82 @@ def _tracks(request: Request, view: str = "combined", modes: str = "",
         raise HTTPException(status_code=400, detail="unknown view")
     cfg: Config = request.app.state.cfg
     wanted = _parse_modes(view, modes)
+    hrr_map = request.app.state.hrr.map()
+    found = request.app.state.events.current(request.app.state.store, hrr_map)
     payload = _tracks_payload(cfg, request.app.state.store, view, wanted,
-                              _parse_ranks(ranks), request.app.state.hrr.map())
+                              _parse_ranks(ranks), hrr_map,
+                              latest_splits(found["events"]))
     body = json.dumps(payload, separators=(",", ":"))
     # ETag is a CACHE KEY (not security): a non-crypto checksum of the stable
     # content, so an unchanged dataset returns 304 even though generated_at moves.
-    stable = json.dumps(
-        {k: payload[k] for k in ("view", "classification_banner", "bounds",
-                                 "count", "ranks", "stale_after_hours",
-                                 "tracks")},
-        separators=(",", ":"), sort_keys=True,
-    )
-    etag = '"' + format(zlib.crc32(stable.encode()) & 0xFFFFFFFF, "08x") + '"'
+    etag = _etag(payload, ("view", "classification_banner", "bounds", "count",
+                           "ranks", "stale_after_hours", "tracks"))
     if if_none_match == etag:
         return _cors(Response(status_code=304), cfg)
     resp = Response(content=body, media_type="application/json")
+    resp.headers["ETag"] = etag
+    return _cors(resp, cfg)
+
+
+def _etag(payload: dict, keys: tuple[str, ...]) -> str:
+    """A CACHE KEY (not security): a non-crypto checksum of the stable content,
+    so an unchanged dataset returns 304 even though generated_at moves."""
+    stable = json.dumps({k: payload[k] for k in keys},
+                        separators=(",", ":"), sort_keys=True)
+    return '"' + format(zlib.crc32(stable.encode()) & 0xFFFFFFFF, "08x") + '"'
+
+
+def _event_view(ev: dict, names: dict[str, str], hrr_map: dict) -> dict:
+    """One event as served: the HRR name, rank and country joined on, for the
+    1.6.1 reason that the server is the naming authority for every consumer."""
+    oid = ev["object_id"]
+    entry = hrr_map.get(oid) or {}
+    out = {**ev, "name": names.get(oid) or oid, "rank": _rank_of(oid, hrr_map),
+           "country": entry.get("country")}
+    proj = ev.get("projection")
+    if proj:
+        out["projection"] = {**proj, "name": names.get(proj["object_id"]) or proj["object_id"]}
+    return out
+
+
+def _events(request: Request, view: str = "combined", modes: str = "",
+            ranks: str = "",
+            if_none_match: Annotated[str | None, Header()] = None) -> Response:
+    """What changed: manoeuvres, early warnings and silences, newest first
+    (1.7.0). Filtered by view and rank exactly as /api/tracks is, so the Shift
+    Brief never lists an object the plot is not showing."""
+    if view not in VIEW_MODES:
+        raise HTTPException(status_code=400, detail="unknown view")
+    cfg: Config = request.app.state.cfg
+    wanted = _parse_modes(view, modes)
+    rank_set = _parse_ranks(ranks)
+    hrr_map = request.app.state.hrr.map()
+    found = request.app.state.events.current(request.app.state.store, hrr_map)
+    names = _hrr_names(request)
+    events = []
+    for ev in found["events"]:
+        try:
+            mode = DataMode(ev.get("data_mode", "REAL"))
+        except ValueError:
+            mode = DataMode.REAL
+        if mode in wanted and (rank_set is None or _rank_of(ev["object_id"], hrr_map) in rank_set):
+            events.append(_event_view(ev, names, hrr_map))
+    payload = {
+        "view": view, "ranks": sorted(rank_set) if rank_set else None,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "reference_epoch": found["reference_epoch"],
+        "belt_current": found["belt_current"],
+        "lookback_hours": found["lookback_hours"],
+        "thresholds": found["thresholds"],
+        "compute_seconds": found.get("compute_seconds"),
+        "count": len(events), "events": events,
+    }
+    etag = _etag(payload, ("view", "ranks", "reference_epoch", "belt_current",
+                           "thresholds", "count", "events"))
+    if if_none_match == etag:
+        return _cors(Response(status_code=304), cfg)
+    resp = Response(content=json.dumps(payload, separators=(",", ":")),
+                    media_type="application/json")
     resp.headers["ETag"] = etag
     return _cors(resp, cfg)
 
@@ -520,13 +598,24 @@ def create_app(cfg: Config | None = None,
     if sources is None:
         sources = _build_sources(cfg, http_client, manual)
     refresher = Refresher(cfg, store, sources, SingleFlight(), hrr=hrr)
+    engine = EventEngine(Thresholds(ew_floor=cfg.event_ew_floor,
+                                    ns_floor=cfg.event_ns_floor,
+                                    sigma=cfg.event_sigma,
+                                    quiet_hours=cfg.event_quiet_hours),
+                         cfg.stale_after_hours)
 
-    app = FastAPI(title="PSIRENS", version="1.6.22", lifespan=_lifespan)
+    def _warm_events() -> dict:
+        return engine.current(store, hrr.map())
+
+    refresher.on_cycle = _warm_events
+
+    app = FastAPI(title="PSIRENS", version="1.7.0", lifespan=_lifespan)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual
     app.state.refresher = refresher
     app.state.hrr = hrr
+    app.state.events = engine
     app.state.global_rl = RateLimiter(limit=120, window_s=60.0)
     app.state.strict_rl = RateLimiter(limit=6, window_s=60.0)
 
@@ -547,6 +636,9 @@ def create_app(cfg: Config | None = None,
                       dependencies=[Depends(_global_gate)])
     app.add_api_route("/api/coplanar", _coplanar, methods=["GET"],
                       dependencies=[Depends(_global_gate)])
+    app.add_api_route("/api/events", _events, methods=["GET"],
+                      dependencies=[Depends(_global_gate)],
+                      responses={**_err(400, "unknown view, mode or rank"), **_rl})
     app.add_api_route("/api/manual-elset", _add_manual, methods=["POST"],
                       dependencies=[Depends(_require_token)], responses=_rl)
     app.add_api_route("/api/manual-elset/{object_id}", _del_manual, methods=["DELETE"],

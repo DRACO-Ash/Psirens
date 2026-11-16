@@ -284,6 +284,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <ol class="steps">
     <li><b>Check the banner.</b> If an amber bar sits under the title, the picture is older
       than 24 hours and the bar says why. Everything below it is last-known-good, not live.</li>
+    <li><b>Read the Shift Brief.</b> Top of the left rail: what changed since you last looked.
+      Press <kbd>j</kbd> to step through it and <kbd>Enter</kbd> to focus an event.</li>
     <li><b>Read the belt.</b> Objects near the bottom are station-kept. Objects higher up are
       inclined. Objects with an arrowhead are drifting, and the arrow points the way they go.</li>
     <li><b>Open the one that matters.</b> Click its marker, or its row in the R1&ndash;R2
@@ -320,6 +322,73 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     <figcaption>The four readouts follow every filter you apply, so they are the quickest check
     that a filter is still on. <b>In view</b> shows the filtered count against the total held.</figcaption>
   </figure>
+</section>
+
+<section id="brief">
+  <h2 class="sec">The Shift Brief: what changed</h2>
+  <p class="lede">The belt tells you where everything is. The Shift Brief tells you what changed
+  since you last looked, why PSIRENS believes it, and where an object is heading. Read it first,
+  at every handover.</p>
+  <figure>
+    <div class="fig" id="fig-brief" data-fig="brief">
+      <img src="guide-brief.png" alt="The Shift Brief card: four events new since the last visit,
+        one earlier, each with its type, numbers and a Suspected or Confirmed tier.">
+    </div>
+    <div class="figcap" id="cap-brief"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>What each part of an entry tells you.</div></div>
+    <div class="hotlist" id="list-brief"></div>
+    <figcaption>Illustrative events on illustrative geometry; the detector that found them is the
+    one the live service runs.</figcaption>
+  </figure>
+
+  <h3>Five kinds of event</h3>
+  <table>
+    <thead><tr><th>Glyph</th><th>Event</th><th>What triggers it</th></tr></thead>
+    <tbody>
+      <tr><td class="k">&#8646;</td><td>E-W manoeuvre</td><td>The fitted longitude drift rate changes
+        significantly across a moment in time: an object leaves station, or changes how fast it drifts.</td></tr>
+      <tr><td class="k">&#9632;</td><td>Drift stopped</td><td>A drifting object settles to station-keeping.</td></tr>
+      <tr><td class="k">&#8645;</td><td>N-S manoeuvre</td><td>A step change in inclination.</td></tr>
+      <tr><td class="k">?</td><td>Leaving its track</td><td>The newest fixes depart from the track fitted to
+        the ones before them. An early warning, always Suspected.</td></tr>
+      <tr><td class="k">&#9675;</td><td>Gone quiet</td><td>No fix for 12 hours from an object that normally
+        reports often, while the rest of the belt is current.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Suspected and Confirmed</h3>
+  <p><b>Confirmed</b> means two independent 48-hour fits, one either side of the moment, disagree by
+  more than a physical floor and by six standard errors. <b>Suspected</b> means an early warning, or
+  evidence that peaks at the very edge of the data. A burn a few hours old cannot be measured yet:
+  PSIRENS says so rather than guessing a rate, and confirms it, or clears it, once a day of fixes
+  follows.</p>
+  <div class="note"><b>No event is not the same as nothing happened.</b> A drift change under about
+  0.05&deg;/day sits inside station-keeping and is not called. A slow, patient approach will not
+  appear here. The brief says &ldquo;no detectable events&rdquo; for exactly that reason.</div>
+
+  <h3>Since you last looked</h3>
+  <p>The split is your previous visit, kept in this browser. An event counts as new from the moment
+  it <i>became detectable</i>, not from the moment of the burn: a burn just before your last visit,
+  confirmed just after it, is new to you. <b>Mark read</b> moves the split to now.</p>
+
+  <h3>Focus mode</h3>
+  <p>Click an entry, click its glyph on the timeline above the plot, or step to it with
+  <kbd>j</kbd> and <kbd>k</kbd> and press <kbd>Enter</kbd>. <kbd>Esc</kbd> returns to the belt
+  exactly as you left it.</p>
+  <figure>
+    <div class="fig" id="fig-focus" data-fig="focus">
+      <img src="guide-focus.png" alt="Focus mode on an E-W manoeuvre: the plot framed on the object,
+        its trail split at the burn, a projection to the neighbour it is closing on, and the
+        inspector's event evidence chart.">
+    </div>
+    <div class="figcap" id="cap-focus"><div class="n">&middot;</div>
+      <div class="t"><b>Select a hotspot</b>What focus mode draws, and why.</div></div>
+    <div class="hotlist" id="list-focus"></div>
+  </figure>
+  <div class="note good"><b>The drift row now respects the event.</b> Before 1.7.0 the inspector
+  fitted drift over the last three days whatever happened in them, so an object that burned 30 hours
+  ago read about a third of its real rate. Drift is now fitted only after the most recent confirmed
+  E-W event, and Drift fit says so: &ldquo;after the event of 15 Nov 16:09Z&rdquo;.</div>
 </section>
 
 <section id="axes">
@@ -583,6 +652,9 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   panel. A rate of 3&deg;/day with a total excursion of 6&deg; across the whole stored history is a
   contradiction: that rate would cover 6&deg; in two days. Where the two disagree, believe the span
   and read the rms.</div>
+  <p>Where the object has a confirmed E-W manoeuvre, the fit starts at the manoeuvre, never across
+  it, and the Drift fit row ends &ldquo;after the event of&rdquo; with its time. See
+  <a href="#brief">the Shift Brief</a>.</p>
 </section>
 
 <section id="trails">
@@ -631,11 +703,13 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
 
 <section id="rail">
   <h2 class="sec">The left rail</h2>
-  <p class="lede">Four cards, all of them live, all of them scoped to what is currently in view.</p>
+  <p class="lede">The Shift Brief and the R1&ndash;R2 watchlist on top. Priority mix, Fleet health
+  and By country sit below them, folded: click a heading to open one. All of it is live and scoped to
+  what is currently in view, and the rail scrolls when it is longer than the screen.</p>
   <figure>
     <div class="fig" id="fig-rail" data-fig="rail">
-      <img src="guide-rail.png" alt="The left rail: priority mix, fleet health, by country,
-        and the R1 to R2 watchlist.">
+      <img src="guide-rail.png" alt="The left rail: the Shift Brief, then the R1 to R2 watchlist.
+        Priority mix, fleet health and by country follow below, folded.">
     </div>
     <div class="figcap" id="cap-rail"><div class="n">&middot;</div>
       <div class="t"><b>Select a hotspot</b>What each card counts, and what it does when clicked.</div></div>
@@ -643,11 +717,11 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   </figure>
 
   <h3>By country is a filter, not just a readout</h3>
-  <p>Click a country to show only its objects. The plot, the summary readouts, Fleet health and the
-  watchlist all follow. Click it again, or use the clear control, to restore.</p>
+  <p>Open <b>By country</b>, then click a country to show only its objects. The plot, the summary
+  readouts, the Shift Brief, Fleet health and the watchlist all follow. Click it again, or use the clear control, to restore.</p>
   <figure>
-    <div class="fig"><img src="guide-country.png" alt="The left rail with one country selected:
-      the counts stay, the view narrows."></div>
+    <div class="fig"><img src="guide-country.png" alt="The By country card with one country
+      selected: the counts stay, the view narrows."></div>
     <figcaption>With a country selected the panel keeps every row and every count, so you can
     switch country or clear without guessing. The counts deliberately ignore the country filter;
     if they did not, selecting one country would collapse the panel to that country alone and
@@ -835,7 +909,20 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
 
 <section id="playbooks">
   <h2 class="sec">Playbooks</h2>
-  <p class="lede">Four things an operator actually does, start to finish.</p>
+  <p class="lede">Five things an operator actually does, start to finish.</p>
+
+  <h3>Start of shift: what changed?</h3>
+  <ol class="steps">
+    <li>Check for the amber banner first. A stale feed means the brief is stale too.</li>
+    <li>Read the <b>Shift Brief</b>. Everything above <i>Earlier</i> is new since your last visit.</li>
+    <li>Press <kbd>j</kbd> to step to an entry and <kbd>Enter</kbd> to focus it. Read the evidence
+      chart: two fitted lines that disagree, and where.</li>
+    <li>For an E-W manoeuvre, read the projection: which high-interest object it is closing on, and
+      how soon at current rates. Then open <b>Co-Planar view</b> to see whether it shares that
+      object's plane.</li>
+    <li>Treat <b>Suspected</b> as a reason to look again in a few hours, not as a finding.</li>
+    <li><kbd>Esc</kbd> back to the belt, <b>Mark read</b> when you have been through it.</li>
+  </ol>
 
   <h3>Is anything closing on my satellite?</h3>
   <ol class="steps">
@@ -850,8 +937,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
 
   <h3>Which objects of one country are drifting?</h3>
   <ol class="steps">
-    <li>Click the country in <b>By country</b>. Everything narrows to it.</li>
-    <li>Read <b>Drifting</b> in Fleet health: that is the count above 0.3&deg;/day in the current view.</li>
+    <li>Open <b>By country</b> and click the country. Everything narrows to it.</li>
+    <li>Open <b>Fleet health</b> and read <b>Drifting</b>: the count above 0.3&deg;/day in the current view.</li>
     <li>Look for arrowheads on the plot, and open each to confirm from the drift fit rather than
       from the arrow alone.</li>
     <li>Clear the country filter when you are done, or every later reading stays narrowed.</li>
@@ -878,7 +965,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
 
 <section id="check">
   <h2 class="sec">Check yourself</h2>
-  <p class="lede">Twelve questions, drawn in a different order each time. They are the things
+  <p class="lede">Fourteen questions, drawn in a different order each time. They are the things
   that most often get misread on a real panel.</p>
   <div id="quiz"></div>
   <div class="result" id="result" hidden></div>
@@ -889,6 +976,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <table>
     <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
     <tbody>
+      <tr><td class="k">Confirmed, Suspected</td><td>The two tiers of a Shift Brief event. Confirmed: two independent fits disagree beyond the floor and six standard errors. Suspected: an early warning, or evidence at the edge of the data.</td></tr>
       <tr><td class="k">Coplanar angle</td><td>The mutual tilt between two orbital planes. Zero means the same plane.</td></tr>
       <tr><td class="k">Drift</td><td>Rate of change of sub-satellite longitude, degrees per day, fitted over a trailing three-day span of fixes.</td></tr>
       <tr><td class="k">Element set, elset</td><td>The mean orbital elements for one object at one epoch. The input to every number here.</td></tr>
@@ -900,6 +988,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">Libration</td><td>The once-per-sidereal-day east-west swing caused by orbital eccentricity. Not drift.</td></tr>
       <tr><td class="k">RA, RAAN</td><td>Right ascension of the ascending node: which way the orbital plane points.</td></tr>
       <tr><td class="k">RPO</td><td>Rendezvous and proximity operations: deliberate close approach between two objects.</td></tr>
+      <tr><td class="k">Shift Brief</td><td>The list at the top of the rail of what changed in the last four days, split at your previous visit.</td></tr>
       <tr><td class="k">SGP4</td><td>The standard propagator used to turn an element set into a position.</td></tr>
       <tr><td class="k">Sidereal day</td><td>23h 56m 04s, one rotation of the Earth against the stars. The orbital period at GEO.</td></tr>
       <tr><td class="k">Sub-satellite longitude</td><td>The longitude directly beneath the object.</td></tr>
@@ -923,6 +1012,11 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">24h</td><td>Minimum baseline for a drift fit, and the staleness threshold.</td></tr>
       <tr><td class="k">3 days</td><td>Trailing window the drift rate is fitted over.</td></tr>
       <tr><td class="k">6h / 36h / 72h</td><td>Fresh, Stale, and the point the age fade bottoms out.</td></tr>
+      <tr><td class="k">0.02&deg;/day</td><td>Smallest drift-rate change the Shift Brief calls (six standard errors also needed).</td></tr>
+      <tr><td class="k">0.008&deg;</td><td>Smallest inclination step the Shift Brief calls.</td></tr>
+      <tr><td class="k">48h each side</td><td>The two independent fits that confirm an E-W manoeuvre.</td></tr>
+      <tr><td class="k">12h</td><td>No fix for this long, from an object that usually reports often: Gone quiet.</td></tr>
+      <tr><td class="k">4 days</td><td>How far back the Shift Brief and its timeline look.</td></tr>
       <tr><td class="k">&plusmn;10&deg;</td><td>Neighbourhood half-width in the inspector.</td></tr>
       <tr><td class="k">&plusmn;20&deg;</td><td>Half-width of the co-planar neighbourhood.</td></tr>
       <tr><td class="k">0.05&deg; / 0.01&deg;</td><td>Deepest zoom, in longitude and inclination.</td></tr>
@@ -949,7 +1043,8 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 
 /* ---- contents and scroll spy ---------------------------------------- */
 const SECTIONS=[
-  ["start","Start here"],["screen","The screen at a glance"],["axes","Reading the belt"],
+  ["start","Start here"],["screen","The screen at a glance"],["brief","The Shift Brief"],
+  ["axes","Reading the belt"],
   ["marker","Anatomy of a marker"],["priority","Priority: the HRR ranks"],
   ["sandbox","The sandbox"],["drills","Drills"],
   ["affiliation","RA needle and affiliation"],["drift","Drift, and why it is fitted"],
@@ -1003,12 +1098,12 @@ const HOTSPOTS={
     [1,10,22,4,"Window or Range","Choose a trailing window, or switch to Range for an explicit UTC start and stop."],
     [23,10,6,4,"Refresh","A real pull from the feed for this view, over the selected span. Rate limited; a wide span takes time by design."],
     [89,9,11,4.5,"High-interest list","Which list is in force, how many objects it holds, its source and its marking."],
-    [1,14,16,18,"Priority mix","How many of each rank are currently in view."],
-    [1,33,16,17,"Fleet health","Shown, Fresh under 6h, Stale over 36h, and Drifting above 0.3 degrees per day."],
-    [1,51,16,22,"By country","A breakdown that is also a filter. Click a country to narrow everything to it."],
-    [1,75,16,22,"R1-R2 watchlist","The highest-priority objects, with country, longitude and fix age. Click a row to open the inspector."],
-    [17.5,14,77,79,"The belt","Longitude left to right, inclination bottom to top. Scroll to zoom, drag to pan."],
-    [94.5,15,5,12,"Zoom controls","In, out, and reset to the full belt."]],
+    [1,14.6,15,64,"Shift Brief","What changed since you last looked: manoeuvres, early warnings and silences, newest first. Read it first."],
+    [1,79.5,15,19,"R1-R2 watchlist","The highest-priority objects, with country, longitude and fix age. Click a row to open the inspector. Priority mix, Fleet health and By country sit below it, folded."],
+    [16.6,14.6,82.5,8,"Event timeline","The same events across four days, the period since your last visit shaded. Click a glyph to focus that event."],
+    [17.5,24,77,70,"The belt","Longitude left to right, inclination bottom to top. Scroll to zoom, drag to pan."],
+    [36,70,4.5,7,"Event halo","Each object with an event is ringed on the plot, with its event glyph beside it."],
+    [96,24.5,3.5,10,"Zoom controls","In, out, and reset to the full belt."]],
   bar:[
     [0.5,8,17,70,"View tabs","Switch the data mode. The plot, the rail and the readouts all follow."],
     [18,8,52,70,"Priority chips","Each rank toggles independently. Greyed chips are hidden, not absent."],
@@ -1019,10 +1114,26 @@ const HOTSPOTS={
     [29,76,7,22,"Refresh","Pull the selected window from the feed for the current view."],
     [88,2,12,40,"List note","Regime, object count, source and marking of the high-interest list in force."]],
   rail:[
-    [2,1,96,22,"Priority mix","Counts by rank for what is in view, with a bar for proportion."],
-    [2,25,96,24,"Fleet health","Four counts: shown, fresh under 6h, stale over 36h, and drifting."],
-    [2,51,96,24,"By country","Click a country to filter. The counts deliberately ignore the country filter so you can always switch or clear."],
-    [2,77,96,22,"R1-R2 watchlist","The critical and high objects, newest first. Each row opens the inspector."]],
+    [2,1,96,77,"Shift Brief","What changed in the last four days, split at your previous visit. Click an entry to focus it."],
+    [2,80,96,19,"R1-R2 watchlist","The critical and high objects. Each row opens the inspector. Scroll the rail for Priority mix, Fleet health and By country, folded below."]],
+  brief:[
+    [2,1,96,6,"Header","How many events are new since you last looked, and Mark read, which moves the split to now."],
+    [2,8.5,96,5,"Since you last looked","The split. Above it, events that became detectable after your previous visit. Below Earlier, the rest of the four days."],
+    [2,13.8,96,16,"A Suspected entry","Leaving its track: the newest fixes depart from the fitted track. An early warning only, so the tier is dashed and says Suspected."],
+    [2,29.8,96,13.4,"Gone quiet","No fix for 20 hours from an object that usually reports every 2. The rest of the belt is current, so this is the object, not the feed."],
+    [2,43.1,96,18.5,"A manoeuvre, with its consequence","The new rate, and the high-interest object it is closing on at current rates. Arithmetic, not a statement of intent."],
+    [2,61.7,96,13.4,"Drift stopped","Was drifting, now on station, and where."],
+    [2,76.6,96,16,"Earlier","Events detectable before your previous visit. Still in the four-day window, no longer news."],
+    [2,93.5,96,5.5,"Keyboard","j and k step through the entries, Enter focuses, Esc returns to the belt."]],
+  focus:[
+    [1.8,42.3,13,11.6,"The focused entry","Highlighted in the brief, and on the timeline above the plot."],
+    [72.6,16,4,5,"On the timeline","The selected glyph is ringed. Clicking any glyph focuses its event."],
+    [20.6,24.5,26,3.5,"Focus bar","Which event is in focus. Back to belt, or Esc, restores the view you came from."],
+    [64.5,78.5,6,6,"The burn","The trail splits at the event: grey before, amber after, a diamond where it happened."],
+    [33,80,22,6,"The projection","A dashed line to the high-interest object it is closing on, with the time at current rates."],
+    [26,79,5,7,"Context","The neighbour that matters is drawn and ringed; everything else is veiled."],
+    [81.2,29.6,16.9,28,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
+    [81,74.5,17.5,7.5,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
   inspector:[
     [2,0.5,96,5,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
     [2,7,96,7,"Identity","Rank chip, common name, NORAD number and country code."],
@@ -1261,6 +1372,14 @@ function drawDriftDemo(){
 
 /* ---- quiz ------------------------------------------------------------ */
 const QUESTIONS=[
+  {q:"The Shift Brief lists a manoeuvre as SUSPECTED. What does that mean?",
+   a:["An early warning only: confirm or clear it once a day of fixes follows",
+      "It is probably hostile","The object has been lost","The data is stale"],right:0,
+   why:"A burn a few hours old cannot be measured yet. Suspected is a reason to look again, not a finding."},
+  {q:"The brief says no detectable events. What can you conclude?",
+   a:["Nothing in the belt has moved","No drift change above the floor, about 0.05°/day or more, in four days",
+      "The feed is down","Every object is station-kept"],right:1,
+   why:"A slow change inside station-keeping is never called. No event is not the same as nothing happened."},
   {q:"A marker is bright red. What does that tell you?",
    a:["It is rank R1, CRITICAL on the high-interest list","It is hostile",
       "It is drifting west","Its data is stale"],right:0,

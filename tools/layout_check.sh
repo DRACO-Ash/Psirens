@@ -18,12 +18,14 @@ DATA="$(mktemp -d)"
 # unreachable offline. This mirrors the local UI check in CLAUDE.md, and it
 # changes display only: ingest filters on the list solely when UDL is enabled.
 cat > "$DATA/hrr.json" <<'JSON'
-{"marking":"U","source":"PROBE","origin":"LOCAL","regime":"GEO","count":5,
+{"marking":"U","source":"PROBE","origin":"LOCAL","regime":"GEO","count":7,
  "objects":{"41836":{"name":"SES-10","country":"LUX","rank":2},
             "28924":{"name":"EUTELSAT 174A","country":"FRA","rank":3},
             "43683":{"name":"BEIDOU-3 G1","country":"CHN","rank":1},
             "41748":{"name":"USA 270","country":"USA","rank":1},
-            "90210":{"name":"DRIFTER-1","country":"CHN","rank":4}}}
+            "90210":{"name":"DRIFTER-1","country":"CHN","rank":4},
+            "90401":{"name":"MANOEUVRE-DEMO","country":"CHN","rank":3},
+            "90402":{"name":"SILENT-DEMO","country":"FRA","rank":3}}}
 JSON
 # Demo mode: UDL_BASE_URL unset, so the offline synthetic belt populates the
 # store. SCHEDULER_ENABLED=0 keeps the background loop out of the probe.

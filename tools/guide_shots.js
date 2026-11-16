@@ -30,7 +30,12 @@ async function settle(page) {
 
 (async () => {
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: VIEW, deviceScaleFactor: 1.5 });
+  const ctx = await browser.newContext({ viewport: VIEW, deviceScaleFactor: 1.5 });
+  // A previous visit 34 hours ago, so the Shift Brief figure shows both halves:
+  // new since you last looked, and earlier.
+  const lastLook = new Date(Date.now() - 34 * 3600e3).toISOString();
+  await ctx.addInitScript((v) => { try { localStorage.setItem("psirens-last-look", v); } catch (e) { /* figures only */ } }, lastLook);
+  const page = await ctx.newPage();
   page.on("pageerror", (e) => { console.log("  page error: " + e.message); });
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-id]", { timeout: 20000 });
@@ -50,6 +55,50 @@ async function settle(page) {
   await shot(page.locator(".stage"), "guide-plot.png");
   await shot(page.locator(".legend"), "guide-legend.png");
   await shot(page.locator(".top"), "guide-top.png");
+  await shot(page.locator("#briefcard"), "guide-brief.png");
+  console.log("RAILGEOM " + JSON.stringify(await page.evaluate(() => {
+    const rr = document.querySelector(".rail").getBoundingClientRect();
+    const rel = (e) => { const r = e.getBoundingClientRect();
+      return [(r.left - rr.left) / rr.width * 100, (r.top - rr.top) / rr.height * 100,
+              r.width / rr.width * 100, r.height / rr.height * 100].map((v) => +v.toFixed(1)); };
+    const bb = document.getElementById("briefcard").getBoundingClientRect();
+    const relb = (e) => { const r = e.getBoundingClientRect();
+      return [(r.left - bb.left) / bb.width * 100, (r.top - bb.top) / bb.height * 100,
+              r.width / bb.width * 100, r.height / bb.height * 100].map((v) => +v.toFixed(1)); };
+    return { cards: Array.from(document.querySelectorAll(".rail > .card")).map(rel),
+             brief: { head: relb(document.querySelector("#briefcard h2")),
+                      rows: Array.from(document.querySelectorAll(".bev")).map((e) => [e.textContent.slice(0, 30), ...relb(e)]),
+                      secs: Array.from(document.querySelectorAll(".bsec")).map(relb),
+                      keys: relb(document.querySelector(".bkeys")) } };
+  })));
+
+  // Focus mode (1.7.0), reached the way the guide teaches it: step the brief
+  // with j until the E-W manoeuvre is selected, then Enter.
+  await page.mouse.click(5, 5);
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("j");
+    const cur = await page.evaluate(() => {
+      const c = document.querySelector(".bev.cur"); return c ? c.textContent : ""; });
+    if (/E-W manoeuvre/.test(cur)) { break; }
+  }
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("#evcv", { timeout: 10000 }).catch(() => {});
+  await settle(page);
+  if (!(await page.$eval("#cv", (e) => e.dataset.focus))) {
+    console.log("FAIL: focus mode did not engage, the figure would show the belt");
+    process.exitCode = 1;
+  }
+  await shot(page, "guide-focus.png");
+  // Hotspot geometry for the guide, as percentages of each figure, measured
+  // from the live layout rather than guessed from a picture.
+  console.log("GEOMETRY " + JSON.stringify(await page.evaluate(() => {
+    const W = innerWidth, H = innerHeight, pc = (r) => [r.left / W * 100, r.top / H * 100, r.width / W * 100, r.height / H * 100].map((v) => +v.toFixed(1));
+    const q = (s) => { const e = document.querySelector(s); return e ? pc(e.getBoundingClientRect()) : null; };
+    return { brief: q("#briefcard"), tline: q("#tline"), focusbar: q("#focusbar"), imodal: q("#imodal"), evid: q(".evid"), watch: q("#watch"), plot: q("#plot") };
+  })));
+  await page.keyboard.press("Escape");
+  await page.click("#imodal-x");
+  await settle(page);
 
   // The inspector, opened from a watchlist row exactly as an operator would.
   // Only rows that are actually on screen above the footer: with the full
@@ -121,11 +170,13 @@ async function settle(page) {
     await page.click("#imodal-x");
   }
 
-  // The country panel acting as a filter, with a country selected.
+  // The country panel acting as a filter, with a country selected. Collapsed
+  // below the watchlist from 1.7.0, so open it first, as an operator would.
+  await page.click("#foldcountry > summary");
   const first = page.locator('[data-cc]:not([data-cc=""])').first();
   await first.click();
   await settle(page);
-  await shot(page.locator(".rail"), "guide-country.png");
+  await shot(page.locator("#foldcountry"), "guide-country.png");
 
   await browser.close();
   console.log(shots.join("\n"));

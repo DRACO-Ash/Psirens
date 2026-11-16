@@ -95,7 +95,42 @@ def _elset(sat: str, prof: dict, end: datetime, marking: str) -> dict:
     }
 
 
-def build(snapshot: str, end: datetime, age_hours: float) -> dict:
+def _illustrate_events(out: dict[str, dict], head: datetime) -> None:
+    """Five illustrative events for the Shift Brief figures (1.7.0), the same
+    five the change proposal of 16 November 2026 was built on. Applied to the
+    synthesised geometry only; every other object is left exactly as seeded.
+    The detector in src/psirens/events.py finds them, and nothing else."""
+    def days(a: datetime, b: datetime) -> float:
+        return (a - b).total_seconds() / 86400.0
+
+    def at(sat: str):
+        return [(s, datetime.fromisoformat(s["epoch"])) for s in out[sat]["samples"]]
+
+    # SHIYAN 12 02: E-W burn 30 h ago, now drifting 0.60 deg/day west.
+    burn = head - timedelta(hours=30)
+    for s, t in at("50322"):
+        if t >= burn:
+            s["sub_lon_deg"] = round(s["sub_lon_deg"] - 0.60 * days(t, burn), 4)
+    # COSMOS 2589: N-S burn 58 h ago, inclination up 0.030 deg.
+    burn = head - timedelta(hours=58)
+    for s, t in at("64467"):
+        if t >= burn:
+            s["inclination_deg"] = round(s["inclination_deg"] + 0.030, 4)
+    # TJS-17: drifting east at 0.25 deg/day until 40 h ago, then on station.
+    burn = head - timedelta(hours=40)
+    for s, t in at("63524"):
+        if t < burn:
+            s["sub_lon_deg"] = round(s["sub_lon_deg"] - 0.25 * days(burn, t), 4)
+    # TIANLIAN-3 01: a large burn 7 h ago, 1.0 deg/day east: early warning only.
+    burn = head - timedelta(hours=7)
+    for s, t in at("100172"):
+        if t >= burn:
+            s["sub_lon_deg"] = round(s["sub_lon_deg"] + 1.0 * days(t, burn), 4)
+    # TJS-24: no fix for the last 19 h.
+    out["69235"]["samples"] = [s for s, t in at("69235") if t < head - timedelta(hours=19)]
+
+
+def build(snapshot: str, end: datetime, age_hours: float, events: bool = True) -> dict:
     with open(snapshot, encoding="utf-8") as fh:
         objects = json.load(fh).get("objects", {})
     head = end - timedelta(hours=age_hours)
@@ -110,6 +145,8 @@ def build(snapshot: str, end: datetime, age_hours: float) -> dict:
             "samples": _samples(sat, prof, head),
             "elset": _elset(sat, prof, head, marking),
         }
+    if events and all(k in out for k in ("50322", "64467", "63524", "100172", "69235")):
+        _illustrate_events(out, head)
     return {"objects": out}
 
 
@@ -121,11 +158,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="age of the newest fix; above STALE_AFTER_HOURS the "
                          "staleness banner appears, which the guide needs a "
                          "real screenshot of")
+    ap.add_argument("--no-events", action="store_true",
+                    help="leave out the five illustrative Shift Brief events")
     args = ap.parse_args(argv)
 
     os.makedirs(args.data_dir, exist_ok=True)
     end = datetime.now(timezone.utc).replace(microsecond=0)
-    store = build(args.snapshot, end, args.age_hours)
+    store = build(args.snapshot, end, args.age_hours, events=not args.no_events)
     with open(os.path.join(args.data_dir, "history.json"), "w", encoding="utf-8") as fh:
         json.dump(store, fh, separators=(",", ":"))
     with open(args.snapshot, encoding="utf-8") as src:

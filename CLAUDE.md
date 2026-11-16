@@ -51,7 +51,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.6.22; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.7.0; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -73,18 +73,22 @@ Co-Planar chart interactive and gives it history, 1.6.18 makes its labels
 legible in a crowd, 1.6.19 clears five SonarJS findings that a weak linter
 preset had been hiding, 1.6.20 acts on the first Container Scan output
 anyone has ever read, 1.6.21 gives the Co-Planar chart an axis swap and
-zoom, and 1.6.22 dims the legend rows whose object is off screen (see Open
-items).
+zoom, 1.6.22 dims the legend rows whose object is off screen, and **1.7.0 is
+the Shift Brief**: server-side event detection, a brief at the top of the rail,
+an event timeline, focus mode with evidence, and the drift rate fitted after a
+manoeuvre rather than across it (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.6.22: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.7.0: it carries everything. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
-items. 1.6.17 to 1.6.21 exist in the repository and were never uploaded, each
+items. 1.6.17 to 1.6.22 exist in the repository and were never uploaded, each
 superseded before the upload; the platform has never seen any of them.
+1.7.0 does NOT carry the Logging standard, which starts blocking on 1 December
+2026: upload before then, or the Logging check will reject it.
 CORRECTION, 10 November 2026, to a line written earlier the same day: an
 earlier draft of this section said the feed was "dry from 9 October to 9
 November". NOTHING RECORDED SUPPORTS THAT. The only evidence is the live
@@ -98,6 +102,25 @@ Version string lives in TWO places, keep them in step: `src/psirens/main.py`
 (`version="..."`) and `pyproject.toml` (`version = "..."`).
 
 Shipped features:
+- SHIFT BRIEF (1.7.0). What changed since the operator last looked. `events.py`
+  detects E-W manoeuvres (STARTED, STOPPED, EW: two independent 48 h
+  `drift_fit`s either side of every 3 h split, beyond a 0.02 deg/day floor AND
+  six standard errors), N-S manoeuvres (median inclination step beyond 0.008
+  deg), early warnings (LEAVING: newest fixes depart from the track fitted to
+  the 72 h before; always SUSPECTED) and silences (QUIET: no fix for 12 h from
+  an object that usually reports at least every 4 h, only while the belt is
+  current). THE EDGE RULE: evidence peaking at the last testable split is never
+  CONFIRMED. Computed once per store change by `EventEngine` (warmed by the
+  refresh thread via `Refresher.on_cycle`), never per request. The SPA lists the
+  events at the top of the rail split at the previous visit (localStorage,
+  judged on `detectable_from`, not the burn epoch), draws them on a four-day
+  timeline above the plot and as halos on it, and focuses one on click, timeline
+  glyph or `j`/`k`/`Enter` (`Esc` back): framed view, trail split at the burn, a
+  projection to the high-interest object it is closing on, and an Event evidence
+  chart in the inspector. Priority mix, Fleet health and By country now sit
+  below the watchlist, folded. THRESHOLDS ARE STARTING POINTS pending live
+  calibration, overridable by env (`EVENT_EW_FLOOR_DEG_PER_DAY`,
+  `EVENT_NS_FLOOR_DEG`, `EVENT_SIGMA`, `EVENT_QUIET_HOURS`).
 - Dynamic JCO HRR high-interest list pulled from `/udl/notification`; the plot is
   HRR-scoped for REAL data.
 - Three views: Real World, Simulation (SIMULATED only, zero REAL), Combined.
@@ -346,6 +369,9 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   different providers, so a point pairing readings hours apart would be an
   invention. A sample with no RAAN is SKIPPED, never back-filled from the
   current value: a shorter honest trail beats a long invented one.
+- `events.py` — the Shift Brief's detectors (1.7.0), `detect`, `latest_splits`
+  (object -> newest confirmed E-W event, which cuts the drift fit) and
+  `EventEngine` (cache keyed on the store's mtime and size and the HRR ranks).
 - `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native first,
   reconstruction fallback, with provenance). The element set that is served is
   also the one propagated, so the displayed line always produces the shown range.
@@ -367,7 +393,7 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drawHead` (+ `raNeedle`), the inspector modal, view/window/range controls.
 
 Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
-`test_coplanar.py`, `test_drift.py`, `test_hrr.py`, `test_sources.py`,
+`test_coplanar.py`, `test_drift.py`, `test_events.py`, `test_hrr.py`, `test_sources.py`,
 `test_store.py`, `test_tle.py`.
 Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
 by the exporter, never hand-typed, so every "valid" line genuinely checksums.
@@ -422,6 +448,15 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `drift_deg_per_day, drift_residual_deg, drift_fit_hours, drift_fit_points,
   drift_fit_harmonic`. All five are null together when there is no usable
   baseline; a rate without its residual and span is not interpretable.
+  From 1.7.0 `drift_since_event` too: the epoch of the newest CONFIRMED E-W
+  event, after which alone the rate is fitted, or null.
+- `GET /api/events?view=&modes=&ranks=` (1.7.0) — events newest first, filtered
+  exactly as `/api/tracks` is; each carries `id, object_id, type, tier, epoch,
+  detectable_from, data_mode, name, rank, country`, the type's numbers
+  (`rate_before/rate_after`, `delta_inc_deg`, `age_hours`), an optional
+  `projection` and an `evidence` block (series, split, the two fitted lines,
+  method). Payload also carries `reference_epoch`, `belt_current`,
+  `lookback_hours`, `thresholds`, `compute_seconds`. ETag/304.
 - `GET /api/hrr` — the HRR object map. Each entry carries `affiliation`
   (`RED`/`BLUE`/`OTHER`/`UNKNOWN`), resolved server-side from the env policy
   lists, plus `affiliation_lists` naming the two lists in force.
@@ -1213,15 +1248,45 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
-- SHIFT BRIEF, PROPOSED 16 November 2026, NOT BUILT. Event detection (E-W and
-  N-S manoeuvres, drift stopped, early warning, gone quiet), a Shift Brief rail
-  panel, a timeline strip and a focus mode. Proposal is
-  `proposals/2026-11-16-shift-brief/PROPOSAL.html`. Awaiting Ash's go/no-go.
-  DEFECT FOUND WHILE PROTOTYPING, real and independent of the decision: the
-  72-hour drift fit straddles a manoeuvre and understates the new rate (SHIYAN
-  12 02 on the scenario store reads 0.22deg/day W against a true 0.59deg/day
-  W). Recommended fix whatever the decision: fit only after the most recent
-  confirmed E-W event. Sequenced AFTER the Logging standard.
+- SHIFT BRIEF: BUILT in 1.7.0. Proposed 16 November 2026
+  (`proposals/2026-11-16-shift-brief/PROPOSAL.html`), approved by Ash the same
+  day ("make it happen with the drift fix too"), so built ahead of the Logging
+  standard at the owner's call. Decisions taken as the proposal recommended:
+  the brief replaces the inventory panels at the top (they fold below the
+  watchlist), prototype thresholds as the starting point, drift fix shipped in
+  the same build.
+  THE DRIFT FIX, measured live in the app: SHIYAN 12 02 on the scenario store
+  read 0.22 deg/day W in 1.6.22 and reads 0.59 deg/day W in 1.7.0, with the
+  Drift fit row naming the event it was cut at.
+  EVIDENCE, re-measured on the production module: the five scenario events and
+  nothing else, timings as the prototype; 594 objects at realistic density with
+  14 planted burns: 14 found, 0 false, 5.0 s of background compute per cycle.
+  GUARDS, each PROVEN by a deliberate revert: removing the edge rule fails
+  `test_the_edge_rule_never_confirms_a_burn_at_the_data_edge`; fitting across
+  the event fails two tests AND the probe ("the drift row reads -0.29 deg/day W
+  ... should be ~0.50"); disabling the cache fails two engine tests; breaking
+  `j` fails the probe with four messages.
+  PROBE LESSON, found by that last red case: the probe's first walk to the
+  manoeuvre entry was an unbounded loop, so a broken key HUNG the loop for ten
+  minutes instead of failing. Bounded now. A red case is the only way to learn
+  that a guard cannot fail cleanly.
+  OFFLINE BELT WIDENED once more, for the usual reason: every demo object had
+  one fix a day, which no detector can read, so `DemoElsetSource` gained two
+  objects sampled every 2 h (MANOEUVRE-DEMO burns, SILENT-DEMO goes quiet) and
+  the probe seeds them at rank 3, outside the R1-R2 watchlist the co-planar
+  checks walk.
+  RAIL OVERFLOW, PRE-EXISTING, fixed in passing: `.wrap` had an auto grid row,
+  which grew to fit the rail, so the rail ran on underneath the footer instead
+  of scrolling and pushed the plot legend off the bottom of the screen. It is
+  visible in the 1.6.22 capture in the proposal. `grid-template-rows:
+  minmax(0,1fr)`.
+  STILL OPEN: (1) calibrate the thresholds against the live store: run
+  `events.detect` over a copy of the deployed history and count events per day;
+  a real belt should give a handful, not dozens. Needs Ash's workstation. (2)
+  The proposal's sandbox drill ("find the object that changed") was NOT built;
+  the guide gained the section, two figures, two self-check questions, a
+  playbook, glossary and reference rows. (3) N-S timing is coarse, of the order
+  of ten hours, and the evidence block says so.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a

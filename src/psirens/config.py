@@ -152,6 +152,13 @@ class Config:
     coplanar_half_width_deg: float = 20.0  # +/- longitude window for the coplanar view
     coplanar_max_points: int = 60          # trail points per track, newest kept
     coplanar_pair_hours: float = 6.0       # how near in time two samples must be to pair
+    # Event detection (1.7.0). STARTING POINTS from the prototype, pending
+    # calibration against the live store; overridable so calibration needs an
+    # environment variable rather than a rebuild.
+    event_ew_floor: float = 0.02     # deg/day: a smaller rate change is station-keeping
+    event_ns_floor: float = 0.008    # deg: a smaller inclination step is noise
+    event_sigma: float = 6.0         # standard errors required on top of the floor
+    event_quiet_hours: float = 12.0  # no fix for this long while the belt is current
     scheduler_enabled: bool = True  # background refresh loop; off in tests
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
@@ -205,4 +212,8 @@ def load_config() -> Config:
         coplanar_half_width_deg=_env_float("COPLANAR_HALF_WIDTH_DEG", 20),
         coplanar_max_points=_env_int("COPLANAR_MAX_POINTS", 60),
         coplanar_pair_hours=_env_float("COPLANAR_PAIR_HOURS", 6),
+        event_ew_floor=_env_float("EVENT_EW_FLOOR_DEG_PER_DAY", 0.02),
+        event_ns_floor=_env_float("EVENT_NS_FLOOR_DEG", 0.008),
+        event_sigma=_env_float("EVENT_SIGMA", 6),
+        event_quiet_hours=_env_float("EVENT_QUIET_HOURS", 12),
     )
