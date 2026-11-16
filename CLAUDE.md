@@ -26,6 +26,12 @@ Universal rules, non-negotiable:
 - State assumptions inline and proceed; stop only for genuine blockers.
 - Credentials are never hardcoded, printed, or echoed.
 - UK English, no em-dashes, lead with the point, no filler.
+- PROPOSAL BEFORE BUILD. Owner rule, 16 November 2026: for any new feature or
+  bold change, ship Ash a change proposal WITH IMAGES first, every time, and
+  implement only after Ash approves it. Proposals live under `proposals/`
+  (dated folder, `PROPOSAL.md`, figures, and the prototype that produced the
+  evidence). Mockups drive the real interface and paint over it, carry a
+  visible MOCKUP banner, and draw from prototype output, not hand-typed data.
 
 ## What PSIRENS is
 
@@ -1195,6 +1201,15 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- SHIFT BRIEF, PROPOSED 16 November 2026, NOT BUILT. Event detection (E-W and
+  N-S manoeuvres, drift stopped, early warning, gone quiet), a Shift Brief rail
+  panel, a timeline strip and a focus mode. Full proposal, figures and the
+  prototype in `proposals/2026-11-16-shift-brief/`. Awaiting Ash's go/no-go.
+  DEFECT FOUND WHILE PROTOTYPING, real and independent of the decision: the
+  72-hour drift fit straddles a manoeuvre and understates the new rate (SHIYAN
+  12 02 on the scenario store reads 0.22deg/day W against a true 0.59deg/day
+  W). Recommended fix whatever the decision: fit only after the most recent
+  confirmed E-W event. Sequenced AFTER the Logging standard.
 - Copy-out gate breadth (open question for Ash). The gate fails closed on ANY
   caveat, not only `PR`. A record marked `U//DS-...` is therefore displayed but
   not copyable. If DS-caveated records should be copyable, say so and it is a
