@@ -422,6 +422,10 @@ A8). Each is now a `sniff_check.py` rule:
 ● `WEB-CANVAS-ROLE` (`Web:S6843`): any `role` on a `<canvas>`, which counts as an
   interactive element. Describe a canvas with fallback text between its tags.
 ● `WEB-IMG-ROLE` (`Web:S6819`): `role="img"` anywhere. Use `<img>` or `<svg>`.
+● `PY-FLOAT-EQ` (`python:S1244`, a BUG, added after 1.7.1): `==` or `!=` against
+  a float literal in source code. Use a tolerance, or restructure so the
+  equality is not needed. Calibrated the same way: 1.7.1 gives the one line the
+  platform raised, 1.6.12 gives nothing, and test code is left alone.
 
 **HOW TO CALIBRATE A NEW RULE, the transferable part.** A duplicate-literal rule
 written naively fires dozens of times on any real codebase, and a rule that

@@ -183,6 +183,10 @@ def _check_python(path: str, text: str) -> list[Finding]:
                                "SystemExit; name the exceptions you handle"))
         if isinstance(node, ast.Compare):
             out.extend(_check_none_compare(path, node))
+            # Source only: the 1.6.12 suite compares floats exactly in five
+            # files and passed, so the profile does not hold tests to S1244.
+            if not _is_test_file(path):
+                out.extend(_check_float_eq(path, node))
         if isinstance(node, (ast.For, ast.AsyncFor)):
             out.extend(_check_loop_lambda(path, node))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -325,6 +329,24 @@ def _check_loop_lambda(path: str, node: ast.AST) -> list[Finding]:
                 f"lambda captures loop variable {name!r}, whose value changes "
                 f"on the next iteration; bind it ({name}={name}) or pass it to "
                 f"an extracted function"))
+    return out
+
+
+def _check_float_eq(path: str, node: ast.Compare) -> list[Finding]:
+    """python:S1244: `==` or `!=` against a float literal. Raised by Code
+    Quality on 1.7.1 (`gap == 0.0` in events.py). The analyser also flags
+    float-typed expressions it can infer; this cheap rule covers the literal
+    form, which is the one that fired. Compare with a tolerance, or restructure
+    so the equality is not needed."""
+    operands = [node.left, *node.comparators]
+    out: list[Finding] = []
+    for i, op in enumerate(node.ops):
+        pair = (operands[i], operands[i + 1])
+        is_float = any(isinstance(o, ast.Constant) and isinstance(o.value, float) for o in pair)
+        if is_float and isinstance(op, (ast.Eq, ast.NotEq)):
+            out.append(Finding(path, node.lineno, "PY-FLOAT-EQ",
+                               "equality check against a float literal (python:S1244); "
+                               "compare with a tolerance or restructure"))
     return out
 
 
@@ -560,6 +582,9 @@ _CASES = [
     ("PY-DUP-LITERAL",
      'A = {"a": "application/json"}\nB = "application/json"\nC = "application/json"\n',
      'JSON = "application/json"\nA = {"a": JSON}\nB = JSON\nC = JSON\n', ".py"),
+    ("PY-FLOAT-EQ",
+     "def f(gap, closing):\n    return gap == 0.0 or gap * closing <= 0.0\n",
+     "def g(gap, closing):\n    return gap * closing <= 0.0\n", ".py"),
     ("PY-REPLACE-RETURN",
      "from dataclasses import replace\ndef f(s) -> int:\n    return replace(s, a=1)\n",
      "def g(s) -> int:\n    return type(s)(a=1)\n", ".py"),
@@ -635,7 +660,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'WEB-CONTRAST':22} declared text contrast below WCAG AA")
         for rule in ("PY-COMPLEXITY", "PY-PARAMS", "PY-MUTABLE-DEFAULT",
                      "PY-BARE-EXCEPT", "PY-NONE-COMPARE", "PY-LOOP-LAMBDA",
-                     "PY-DUP-LITERAL", "PY-REPLACE-RETURN"):
+                     "PY-DUP-LITERAL", "PY-REPLACE-RETURN", "PY-FLOAT-EQ"):
             print(f"{rule:22} see SNIFFS.md")
         return 0
     if not args.paths:

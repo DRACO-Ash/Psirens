@@ -434,7 +434,10 @@ def projection(oid: str, lon: float, rate: float, heads: list[_Head],
             continue
         gap = _wrap(h.lon - lon)
         closing = rate - h.rate
-        if gap == 0.0 or abs(gap) > PROJECTION_HALF_WIDTH or gap * closing <= 0.0:
+        # No `gap == 0` test: an object at exactly the same longitude gives a
+        # product of zero and is skipped by the closing test anyway, and a float
+        # equality check is python:S1244, raised by Code Quality on 1.7.1.
+        if abs(gap) > PROJECTION_HALF_WIDTH or gap * closing <= 0.0:
             continue
         days = gap / closing
         if days <= PROJECTION_MAX_DAYS and (best is None or days < best["days"]):

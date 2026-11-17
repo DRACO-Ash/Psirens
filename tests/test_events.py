@@ -189,6 +189,14 @@ def test_projection_names_the_nearest_object_ahead_at_current_rates():
     assert projection("me", 10.0, -0.5, [_Head("x", 8.0, -0.6)], 0.02) is None  # pulling away
 
 
+def test_projection_skips_an_object_at_the_same_longitude():
+    """The float-equality guard was removed in 1.7.2 (python:S1244); a
+    co-located object must still never be offered as the one being closed on."""
+    assert projection("me", 10.0, -0.5, [_Head("same", 10.0, 0.0)], 0.02) is None
+    near = projection("me", 10.0, -0.5, [_Head("same", 10.0, 0.0), _Head("t", 9.0, 0.0)], 0.02)
+    assert near is not None and near["object_id"] == "t"
+
+
 def test_projection_crosses_the_seam():
     p = projection("me", -179.0, -0.5, [_Head("t", 179.0, 0.0)], 0.02)
     assert p is not None and p["gap_deg"] == pytest.approx(2.0)

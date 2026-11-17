@@ -51,7 +51,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.1; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.7.2; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -77,16 +77,27 @@ zoom, 1.6.22 dims the legend rows whose object is off screen, and **1.7.0 is
 the Shift Brief**: server-side event detection, a brief at the top of the rail,
 an event timeline, focus mode with evidence, and the drift rate fitted after a
 manoeuvre rather than across it, and **1.7.1 clears the four Code Quality
-findings 1.7.0 drew and builds the platform Logging standard** (see Open items).
+findings 1.7.0 drew and builds the platform Logging standard**, and 1.7.2
+clears the one bug 1.7.1 drew, `python:S1244` (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.7.1: it carries everything. 1.7.0 was uploaded on 16 to 17 November
-2026 and FAILED Code Quality on four findings (QUALITY-LEDGER A5 to A8); 1.7.1
-fixes them. It also carries a fix 1.6.16 needed and
+Upload 1.7.2: it carries everything. 1.7.0 FAILED Code Quality on four smells
+(QUALITY-LEDGER A5 to A8) and, almost certainly, on the bug 1.7.1 then failed
+on; 1.7.1 FAILED on that bug alone, `python:S1244` at `events.py:437` (A9).
+FACT, 17 November 2026: the gate now reads "New issues: N (max allowed: 0)" and
+the failing job uploads `sonar-issues.json`, `sonar-quality-gate.json` AND
+`sonar-hotspots.json`. Uploads arrive as GitLab MERGE REQUESTS (the job log
+checked out `refs/merge-requests/22/head`).
+VERSION SHOWN BY THE APP STORE, TBC: a note Ash pasted on 17 November says the
+App Store takes the version from `chart/Chart.yaml`. UNVERIFIED (its source is
+not recorded), and this repo has NO `chart/` directory, so if it is right the
+chart lives only in the GitLab project and our zip never touches it. Do NOT
+add a `chart/Chart.yaml` to the zip blind: a partial chart could break the
+platform's own Helm templating. First read the GitLab project's `chart/`. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
 items. 1.6.17 to 1.6.22 exist in the repository and were never uploaded, each
 superseded before the upload; the platform has never seen any of them.
@@ -1374,6 +1385,14 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   Fixed in 1.7.1 and GATED by four new `sniff_check.py` rules, CALIBRATED
   against git: on the 1.7.0 tree they report exactly the platform's four at the
   same lines, on the 1.6.12 tree (passed) nothing. See SNIFFS.md 3.18.
+- CODE QUALITY on 1.7.1, 17 November 2026: one BUG, `python:S1244`,
+  `gap == 0.0` in `events.projection`. Redundant as well as flagged: a zero gap
+  is already skipped by the closing test. Removed in 1.7.2 with a regression
+  test, GATED by `PY-FLOAT-EQ` (1.7.1 from git: this line only; 1.6.12:
+  nothing). LESSON (QUALITY-LEDGER D11): the 1.7.0 paste ended on the heading
+  "Bugs" with nothing under it; that was a truncated report, and this bug was
+  very probably in it. When a report ends on a heading, ask for the section or
+  read `sonar-issues.json`.
 - `README.md` predates several features (RA needles, Simulation view, timescale/
   range pull, conjunctions, deep zoom). Refresh when convenient.
 

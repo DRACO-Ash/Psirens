@@ -4,7 +4,7 @@ Every code-quality issue raised against this application during development,
 what caused it, how it was fixed, and what now stops it recurring.
 
 Classification: Not Classified. Owner: Ash Higgins, Bluestaq Limited.
-Covers builds 1.4.14 to 1.7.1, 23 August to 17 November 2026, 41 issues.
+Covers builds 1.4.14 to 1.7.2, 23 August to 17 November 2026, 43 issues.
 
 ---
 
@@ -151,6 +151,25 @@ written that week, and every one a rule the local gates did not carry.
   nothing. `PY-DUP-LITERAL` skips identifier-like strings and test files,
   because the 1.6.12 tree repeats both freely and passed, and `tests/` is
   declared `sonar.tests`.
+● **Cost:** one upload cycle.
+
+### A9. Equality against a float literal (`python:S1244`, 1.7.1)
+● **Raised:** `events.py:437`, "Do not perform equality checks with floating
+  point values", as a BUG, on 17 November 2026. The gate now reads "New issues:
+  1 (max allowed: 0)".
+● **Symptom:** `if gap == 0.0 or ... or gap * closing <= 0.0` in `projection`.
+● **Not a defect in that instance, and redundant besides:** a gap of exactly
+  zero makes the product zero, which the third test already skips. Removed,
+  with a regression test that a co-located object is still never offered.
+● **Guard:** `PY-FLOAT-EQ`, `==`/`!=` against a float literal in source files.
+  CALIBRATED: 1.7.1 from git gives exactly this line; 1.6.12 gives nothing.
+  Test files excluded, because the 1.6.12 suite compares floats exactly in five
+  files and passed.
+● **The process lesson, and it is mine:** this line was written in 1.7.0 and was
+  almost certainly already reported on that upload. The 1.7.0 paste ended with
+  the heading "Bugs" and nothing under it. A section heading with no content is
+  a truncated report, not an empty one; it cost a second upload cycle not to ask
+  for the rest. See D11.
 ● **Cost:** one upload cycle.
 
 ---
@@ -413,6 +432,13 @@ in an unbounded loop. The red case that broke `j` made it run for ten minutes
 instead of failing. Bounded to the number of entries. A guard that cannot fail
 cleanly is found only by making it fail.
 
+### D11. A truncated report read as a complete one (1.7.0 to 1.7.1)
+The 1.7.0 Code Quality paste listed four code smells and ended with the heading
+"Bugs". All four smells were fixed and gated; the bug under that heading was not
+seen and shipped again in 1.7.1. **When a pasted report ends on a heading, ask
+for the section, or read `sonar-issues.json`, which the job uploads on every
+failure.** A fix for a partial report is a partial fix.
+
 ### D6. A false positive in our own checker
 The zero-fraction pattern `\d+\.0` matched `127.0.0.1`. Found by running the
 checker over our own tree before publishing it. Fixed with a trailing negative
@@ -474,8 +500,8 @@ Ordered by return on effort, from this project's evidence.
 ```json
 {
   "project": "PSIRENS",
-  "covers": {"from": "1.4.14", "to": "1.7.1",
-             "dates": "2026-08-23/2026-11-17", "issues": 41},
+  "covers": {"from": "1.4.14", "to": "1.7.2",
+             "dates": "2026-08-23/2026-11-17", "issues": 43},
   "categories": {
     "A": "rejected by the platform quality gate",
     "B": "caught by local gates before upload",
@@ -506,6 +532,8 @@ Ordered by return on effort, from this project's evidence.
      "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "WEB-CANVAS-ROLE"},
     {"id": "A8", "rule": "Web:S6819", "title": "role=img instead of img or svg",
      "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "WEB-IMG-ROLE"},
+    {"id": "A9", "rule": "python:S1244", "title": "equality against a float literal",
+     "fixed_in": "1.7.2", "cost": "upload cycle", "guard": "PY-FLOAT-EQ, calibrated on 1.6.12 and 1.7.1"},
 
     {"id": "B1", "rule": "python:S3776", "title": "cognitive complexity 18 in load_config",
      "fixed_in": "1.6.6", "cost": "none", "guard": "tools/ast_gates.py"},
@@ -583,6 +611,9 @@ Ordered by return on effort, from this project's evidence.
     {"id": "D9", "title": "a red case masked by the test's own fixture",
      "fixed_in": "1.7.1", "cost": "a guard that claimed to bite and did not",
      "guard": "every red case is run, never asserted"},
+    {"id": "D11", "title": "a truncated quality report read as a complete one",
+     "fixed_in": "1.7.2", "cost": "a second upload cycle",
+     "guard": "a report ending on a heading is incomplete: ask, or read sonar-issues.json"},
     {"id": "D10", "title": "probe walked an unbounded loop and hung on failure",
      "fixed_in": "1.7.0", "cost": "ten minutes and no verdict", "guard": "bounded walk"},
     {"id": "D8", "title": "linter preset silently weaker than the scanner profile",
