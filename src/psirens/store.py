@@ -4,7 +4,10 @@ Contracts held here:
   * atomic writes (temp file then rename on the same filesystem);
   * anti-shrink merge (a refresh never deletes an object or its history that
     the new pull happened not to include);
-  * dedup by (object_id, epoch) so overlapping pulls do not double-count;
+  * dedup by (object_id, provider, epoch) so overlapping pulls do not
+    double-count, and two providers' fixes at one instant stay two (1.7.4);
+  * provenance per sample: every sample points into its object's
+    `provenance` table (provider, data mode, marking), never inferred;
   * age prune to the retention window and a per-object sample cap (newest kept);
   * a schema version stamp for forward migration.
 """
@@ -13,6 +16,7 @@ from __future__ import annotations
 
 import errno
 import json
+import math
 import logging
 import os
 import tempfile
@@ -83,6 +87,22 @@ def _copy_meta(existing: dict, rec: dict) -> None:
             existing[key] = val
 
 
+def _drop_demo_parts(rec: dict) -> int:
+    """Strip DEMO-tagged samples and element sets from one real object."""
+    keep = [s for s in rec.get("samples") or []
+            if (sample_provenance(rec, s) or {}).get("source") != "DEMO"]
+    removed = len(rec.get("samples") or []) - len(keep)
+    rec["samples"] = keep
+    cands = rec.get("elset_candidates") or {}
+    for key in [k for k, el in cands.items() if (el or {}).get("source") == "DEMO"]:
+        del cands[key]
+        removed += 1
+    if (rec.get("elset") or {}).get("source") == "DEMO":
+        rec.pop("elset")
+        removed += 1
+    return removed
+
+
 def _retain_elset(existing: dict, rec: dict) -> None:
     """Keep the newest full element set (by epoch) so conjunctions and TLE
     export always use the freshest mean elements."""
@@ -115,6 +135,10 @@ def _retain_candidates(existing: dict, rec: dict) -> None:
 def _enrich_sample(held: dict, incoming: dict) -> None:
     """Fill fields a stored sample is MISSING; never overwrite one it has.
 
+    Only ever called for the SAME provider at the same epoch (1.7.4). Before
+    that it was keyed on epoch alone, so where two providers shared an
+    instant one provider's sample could be completed from the other's.
+
     The store's anti-shrink rule, applied at sample level. A re-pull at an
     epoch already held used to be discarded whole, so a sample written before
     a field existed stayed without it for the entire retention window. That is
@@ -129,6 +153,95 @@ def _enrich_sample(held: dict, incoming: dict) -> None:
     for key, value in incoming.items():
         if value is not None and held.get(key) is None:
             held[key] = value
+
+
+_TAGS = ("source", "data_mode", "classification_marking")
+_SAME_VALUE_DEG = 5e-5   # samples are stored to 4 decimal places
+
+
+def _split_tags(sample: dict) -> tuple[dict, dict | None]:
+    """The sample without its inline provenance, and that provenance (None
+    for an untagged sample, as written by a caller before 1.7.4)."""
+    tags = {k: sample.get(k) for k in _TAGS}
+    clean = {k: v for k, v in sample.items() if k not in _TAGS}
+    return clean, (tags if all(tags.values()) else None)
+
+
+def _prov_index(existing: dict, tags: dict) -> int:
+    """Index of these tags in the object's provenance table, added if new.
+    A table rather than three strings on every sample: the store is read
+    whole on every request, and a marking such as U//PR-NORTHSTAR-ELSET
+    repeated on 2000 samples per object would nearly double it."""
+    table = existing.setdefault("provenance", [])
+    for i, row in enumerate(table):
+        if row == tags:
+            return i
+    table.append(dict(tags))
+    return len(table) - 1
+
+
+def sample_provenance(obj: dict, sample: dict) -> dict | None:
+    """The provider, data mode and marking of the record a stored sample was
+    calculated from, or None for a sample stored before 1.7.4 that no re-pull
+    has yet matched."""
+    idx = sample.get("p")
+    table = obj.get("provenance") or []
+    if isinstance(idx, int) and 0 <= idx < len(table):
+        return table[idx]
+    return None
+
+
+def _stored_key(obj: dict, sample: dict) -> tuple[str, str]:
+    prov = sample_provenance(obj, sample)
+    return ((prov or {}).get("source") or "", sample["epoch"])
+
+
+def _same_values(a: dict, b: dict) -> bool:
+    """Whether two samples carry the same position. Used ONLY to recognise a
+    re-pull of the very record an untagged sample was made from: two
+    different providers do not agree to four decimal places in both longitude
+    and inclination at the same instant."""
+    try:
+        return all(math.isclose(float(a[k]), float(b[k]), abs_tol=_SAME_VALUE_DEG)
+                   for k in ("sub_lon_deg", "inclination_deg"))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _adopt_legacy(by_key: dict, clean: dict, source: str) -> bool:
+    """Give an untagged (pre-1.7.4) sample its provenance when a re-pull
+    reproduces it exactly. Anything short of an exact match is treated as a
+    different record: provenance is attached on evidence, never assumed."""
+    legacy_key = ("", clean["epoch"])
+    legacy = by_key.get(legacy_key)
+    if legacy is None or not _same_values(legacy, clean):
+        return False
+    _enrich_sample(legacy, clean)
+    del by_key[legacy_key]
+    by_key[(source, clean["epoch"])] = legacy
+    return True
+
+
+def _merge_object(existing: dict, rec: dict) -> int:
+    """Merge one incoming record's samples into a stored object. Returns the
+    number of NEW samples (an adopted or enriched sample is not new)."""
+    by_key = {_stored_key(existing, s): s for s in existing["samples"]}
+    added = 0
+    for s in rec.get("samples", []):
+        clean, tags = _split_tags(s)
+        source = ""
+        if tags is not None:
+            clean["p"] = _prov_index(existing, tags)
+            source = tags["source"]
+        key = (source, clean["epoch"])
+        held = by_key.get(key)
+        if held is not None:
+            _enrich_sample(held, clean)   # same provider, same epoch only
+        elif not (source and _adopt_legacy(by_key, clean, source)):
+            by_key[key] = clean
+            added += 1
+    existing["samples"] = list(by_key.values())
+    return added
 
 
 class Store:
@@ -222,6 +335,31 @@ class Store:
             self._write_atomic(data)
             return len(drop)
 
+    def purge_synthetic(self) -> int:
+        """Remove every trace of the offline demo belt. Called when the app
+        starts against live UDL, so a store that was ever run offline on the
+        same volume cannot carry synthetic objects into the live picture.
+        This is the one deletion the archive rule allows: the data was never
+        observed. Returns the number of samples and objects removed."""
+        removed = 0
+        with _LOCK:
+            data = self.load()
+            objects = data.setdefault("objects", {})
+            for oid in list(objects):
+                rec = objects[oid]
+                if rec.get("origin") == "DEMO" or oid.startswith("DEMO-"):
+                    removed += 1 + len(rec.get("samples") or [])
+                    del objects[oid]
+                    continue
+                removed += _drop_demo_parts(rec)
+                if not rec.get("samples"):
+                    del objects[oid]
+            if removed:
+                self._write_atomic(data)
+        if removed:
+            _log.warning("purged %d synthetic (DEMO) item(s) from the live store", removed)
+        return removed
+
     # -- merge ------------------------------------------------------------
     def merge_samples(
         self,
@@ -252,16 +390,9 @@ class Store:
                 _copy_meta(existing, rec)  # display fields; latest non-blank wins
                 _retain_elset(existing, rec)  # newest full element set
                 _retain_candidates(existing, rec)  # newest per provider
-                by_epoch = {s["epoch"]: s for s in existing["samples"]}
-                for s in rec.get("samples", []):
-                    held = by_epoch.get(s["epoch"])
-                    if held is None:
-                        by_epoch[s["epoch"]] = s
-                        added += 1
-                        continue
-                    _enrich_sample(held, s)
+                added += _merge_object(existing, rec)
                 merged = [
-                    s for s in by_epoch.values()
+                    s for s in existing["samples"]
                     if _parse(s["epoch"]) >= cutoff
                 ]
                 merged.sort(key=lambda s: s["epoch"])

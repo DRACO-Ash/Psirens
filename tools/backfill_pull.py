@@ -22,9 +22,12 @@ already-held sample lacks on a re-pull without overwriting anything it has. A
 sample written before 1.6.17 carries no `raan_deg`, and the co-planar trail
 needs one per sample, so re-pulling the retention window is what turns the
 trails on across the existing history instead of growing them from nothing.
-THAT ONLY WORKS AGAINST A BUILD OF 1.6.17 OR LATER. Run `--check` first: it
-reads `/api/meta` and refuses to start against an older deployment, because the
-pull would otherwise have to be run twice.
+THREE JOBS from 1.7.4: a re-pull also TAGS each stored position with the
+provider, data mode and marking of the record it came from, wherever the
+re-pulled record reproduces the stored values exactly (`store._adopt_legacy`).
+Before 1.7.4 the same re-pull enriched samples across providers, so the
+minimum is now 1.7.4, not 1.6.17. Run `--check` first: it reads `/api/meta` and
+refuses to start against an older deployment.
 
 Nothing here is destructive. `/api/pull` merges; the store is anti-shrink and
 never deletes a sample a pull happened not to include.
@@ -71,7 +74,7 @@ DEFAULT_CHUNK_H = 144
 MIN_GAP_S = 11.0
 # The first build that retains raan_deg per sample and enriches a held sample
 # on re-pull. Below this a backfill cannot fill the co-planar trail history.
-MIN_ENRICH_VERSION = (1, 6, 17)
+MIN_ENRICH_VERSION = (1, 7, 4)   # provenance tagging on re-pull (1.7.4)
 
 
 # --------------------------------------------------------------------------
@@ -245,10 +248,10 @@ def self_test() -> int:
     check("version parse", parse_version("1.6.18"), (1, 6, 18))
     check("version parse rejects text", parse_version("1.6.18-rc"), None)
     check("version parse rejects empty", parse_version(""), None)
-    check("1.6.18 enriches", enriches_samples("1.6.18"), True)
-    check("1.6.17 enriches", enriches_samples("1.6.17"), True)
-    check("1.6.12 does not", enriches_samples("1.6.12"), False)
-    check("1.7.0 enriches", enriches_samples("1.7.0"), True)
+    check("1.7.4 tags", enriches_samples("1.7.4"), True)
+    check("1.8.0 tags", enriches_samples("1.8.0"), True)
+    check("1.7.3 does not (cross-provider enrichment)", enriches_samples("1.7.3"), False)
+    check("1.6.17 does not", enriches_samples("1.6.17"), False)
     check("unreported version does not", enriches_samples(""), False)
 
     base = datetime(2026, 11, 1, tzinfo=timezone.utc)

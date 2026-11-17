@@ -1,7 +1,8 @@
 """Native UDL TLE capture, validation, selection and release gating.
 
-The line fixtures here are real: they are produced by `sgp4.exporter` (the
-same exporter the fallback path uses) or built by mutating one of those and
+The line fixtures here are real: they are produced by `sgp4.exporter` (in the
+test-only `fixture_tle`; the application builds no line since 1.7.4) or built
+by mutating one of those and
 recomputing the checksum, so every "valid" line in this file genuinely
 checksums and every "invalid" one genuinely does not. Nothing is hand-typed.
 """
@@ -9,31 +10,35 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from psirens.conjunction import tle_for, tle_lines
+from fixture_tle import export_lines
+
+from psirens.conjunction import NO_NATIVE_LINE, tle_for
 from psirens.sources import _elset_dict
 from psirens.tle import (CLASS_COMMERCIAL, CLASS_GOVERNMENT, CLASS_UNKNOWN,
                          DEFAULT_PRIORITY, ElsetProvenance, age_hours,
                          candidates_of, classify_source, copy_denied_reason,
-                         is_copyable, is_propagatable, parse_priority,
+                         ephem_type_of, is_copyable, is_propagatable,
+                         parse_priority, propagation_refusal, provenance_of,
                          satnum_of, select_elset, validate_native)
 
 EP = datetime(2026, 8, 6, tzinfo=timezone.utc)
 
 
 def _el(oid="41836", *, epoch=EP, source="LeoLabs", marking="U",
-        line1="", line2="", rev_no=None):
+        line1="", line2="", rev_no=None, ephem_type=0, mode="REAL"):
     return _elset_dict(
         sat_no=oid, epoch=epoch, inclination_deg=0.05, eccentricity=0.0002,
         raan_deg=80.0, argp_deg=90.0, mean_anomaly_deg=100.0,
         mean_motion_rev_per_day=1.0027379, bstar=1e-5,
         classification=marking,
         provenance=ElsetProvenance(source=source, line1=line1, line2=line2,
-                                   rev_no=rev_no))
+                                   rev_no=rev_no, ephem_type=ephem_type,
+                                   data_mode=mode))
 
 
 def _real_lines(oid="41836"):
     """A genuine exporter-produced, checksum-correct line pair."""
-    lines = tle_lines(_el(oid))
+    lines = export_lines(_el(oid))
     assert lines is not None
     return lines
 
@@ -106,7 +111,7 @@ def test_mutated_line_with_recomputed_checksum_still_validates():
 
 # -- source classification ----------------------------------------------
 def test_known_providers_classify_correctly():
-    for name in ("LeoLabs", "EXO", "Cloudstone", "NorthStar", "KBR", "KRTL"):
+    for name in ("LeoLabs", "EXO", "Cloudstone", "NorthStar", "KBR", "KRTL", "SAFRAN"):
         assert classify_source(name) == CLASS_COMMERCIAL
     for name in ("18 SPCS", "18th SPCS", "USSF", "JCO"):
         assert classify_source(name) == CLASS_GOVERNMENT
@@ -224,12 +229,14 @@ def test_native_line_is_served_verbatim_and_labelled_native():
     assert el["source"] == "LeoLabs"
 
 
-def test_missing_native_line_falls_back_to_reconstruction():
+def test_missing_native_line_shows_no_tle_and_says_why():
+    """1.7.4: no line is ever rebuilt. Until then this returned a TLE with
+    element number, rev number, ephemeris type and drag terms written in."""
     obj = {"elset_candidates": {"LeoLabs": _el(source="LeoLabs")}}
     _, lines, prov = tle_for(obj, DEFAULT_PRIORITY)
-    assert lines is not None
+    assert lines is None
     assert prov["native"] is False
-    assert prov["rev_no"] is None     # reconstruction cannot recover it
+    assert prov["tle_withheld_reason"] == NO_NATIVE_LINE
 
 
 def test_invalid_stored_native_line_falls_back_rather_than_serving():
@@ -239,7 +246,7 @@ def test_invalid_stored_native_line_falls_back_rather_than_serving():
     obj = {"elset_candidates": {"EXO": _el(
         "41836", source="EXO", line1=l1, line2=l2)}}
     _, lines, prov = tle_for(obj, DEFAULT_PRIORITY)
-    assert lines != [l1, l2]
+    assert lines is None
     assert prov["native"] is False
 
 
@@ -281,6 +288,44 @@ def test_is_propagatable_rejects_what_build_satrec_cannot_use():
     assert is_propagatable(_bad(inclination_deg="abc")) is False
     missing = {k: v for k, v in _el().items() if k != "raan_deg"}
     assert is_propagatable(missing) is False
+
+
+def test_nothing_is_assumed_to_make_an_element_set_propagatable():
+    """1.7.4: B* is never defaulted, and the theory must be stated as SGP4."""
+    assert "B*" in propagation_refusal(_bad(bstar=None))
+    assert propagation_refusal(_el(ephem_type=None)) == "ephemeris type not stated by the provider"
+    assert "not SGP4" in propagation_refusal(_el(ephem_type=4))
+    assert propagation_refusal(_el(ephem_type=0)) is None
+
+
+def test_the_ephemeris_type_is_read_from_the_records_own_line():
+    l1, l2 = _real_lines("41836")
+    el = _el(ephem_type=None, line1=l1, line2=l2)
+    assert l1[62] == "0"
+    assert ephem_type_of(el) == 0
+    assert ephem_type_of(_el(ephem_type=None)) is None
+
+
+def test_an_unmarked_element_set_is_never_called_unclassified():
+    """F7 of the provenance audit: until 1.7.4 an unmarked record was served
+    as "U" and offered for copy, so this refusal was unreachable."""
+    prov = provenance_of(_el(marking=""), native=True)
+    assert prov["classification_marking"] is None
+    assert prov["copyable"] is False
+    assert prov["copy_denied_reason"] == "no classification marking on the record"
+
+
+def test_an_unmarked_candidate_is_withheld_from_selection():
+    obj = {"elset_candidates": {"EXO": _el(source="EXO", marking=""),
+                                "LeoLabs": _el(source="LeoLabs", epoch=EP - timedelta(hours=1))}}
+    assert select_elset(obj, DEFAULT_PRIORITY)["source"] == "LeoLabs"
+
+
+def test_a_real_element_set_beats_a_newer_exercise_one():
+    obj = {"elset_candidates": {
+        "EXO": _el(source="EXO", epoch=EP - timedelta(hours=3)),
+        "EXO|EXERCISE": _el(source="EXO", epoch=EP, mode="EXERCISE")}}
+    assert select_elset(obj, DEFAULT_PRIORITY)["data_mode"] == "REAL"
 
 
 def test_a_broken_candidate_never_costs_an_object_its_legacy_fix():

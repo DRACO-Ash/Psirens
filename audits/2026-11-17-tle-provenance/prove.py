@@ -8,6 +8,10 @@ line at its own mean motion (two-body, no invention beyond that), sampled every
 2 h, as a UDL /udl/elset response would carry it. Nothing below re-implements
 PSIRENS: every number comes from the shipped modules.
 
+Each finding prints REPRODUCES or FIXED against the code it runs on. Against
+1.7.3 every offline finding reproduced; 1.7.4 (Ash's three rules) closes F2,
+F7, F8, F9, F10, F11 and F13 and leaves the rest for the next change.
+
 Usage: PYTHONPATH=src python audits/2026-11-17-tle-provenance/prove.py
 
 F4 (a CONFIRMED E-W event from the blend) is a FACT of the live system, read
@@ -23,13 +27,13 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from psirens.config import Config
-from psirens.conjunction import build_satrec, tle_for
+from psirens.conjunction import tle_for
 from psirens.events import Thresholds, detect
-from psirens.main import _drift_block, _tracks_payload
+from psirens.main import _build_sources, _drift_block, _tracks_payload
 from psirens.models import DataMode
-from psirens.sources import UDLElsetSource
-from psirens.store import Store
-from psirens.tle import provenance_of
+from psirens.sources import ManualElsetSource, UDLElsetSource
+from psirens.store import Store, sample_provenance
+from psirens.tle import propagation_refusal, provenance_of
 
 SAT = "64467"
 GOOD = ("SAFRAN", "1 64467U 25131A   26321.41066406 -.00000076 +00000-0 -63064-4 0  0001",
@@ -41,8 +45,9 @@ RESULTS: list[tuple[str, bool, str]] = []
 
 
 def check(name: str, ok: bool, detail: str) -> None:
+    """`ok` means the defect STILL reproduces on the code under test."""
     RESULTS.append((name, ok, detail))
-    print(("PROVEN   " if ok else "NOT SHOWN") + f"  {name}: {detail}")
+    print(("REPRODUCES" if ok else "FIXED     ") + f"  {name}: {detail}")
 
 
 def _epoch_of(l1: str) -> datetime:
@@ -98,9 +103,10 @@ def main() -> int:
     check("F1 two providers are merged into ONE track",
           min(lons) < 70 and max(lons) > 120,
           f"{len(obj['samples'])} samples under {SAT}, longitudes from {min(lons)} to {max(lons)} deg")
+    untagged = [s for s in obj["samples"] if sample_provenance(obj, s) is None]
     check("F2 samples carry no provider",
-          all("source" not in s for s in obj["samples"]),
-          f"sample keys: {sorted(obj['samples'][0])}")
+          len(untagged) == len(obj["samples"]),
+          f"{len(untagged)} of {len(obj['samples'])} samples carry no provider, mode or marking")
     pairs = [(datetime.fromisoformat(s["epoch"]), s["sub_lon_deg"]) for s in obj["samples"]]
     blk = _drift_block(pairs, None)
     shown = (f"{blk['drift_deg_per_day']:+.2f} deg/day at {blk['drift_residual_deg']:.1f} deg rms"
@@ -131,17 +137,19 @@ def main() -> int:
     # F7: an element set with NO marking is labelled U and offered for copy.
     d2 = tempfile.mkdtemp(prefix="psirens-audit-")
     s2 = ingest(rows_for(*GOOD, REF - timedelta(hours=6), REF, marking=None), d2)
-    o2 = s2.load()["objects"][SAT]
-    _, _, p2 = tle_for(o2)
+    o2 = s2.load()["objects"].get(SAT)
+    p2 = tle_for(o2)[2] if o2 else None
     check("F7 a record with NO classification marking is served as U and copyable",
-          o2["classification_marking"] == "U" and p2["copyable"] is True,
-          f"track marking {o2['classification_marking']!r}, TLE marking "
-          f"{p2['classification_marking']!r}, copyable {p2['copyable']}")
+          bool(p2) and p2["classification_marking"] == "U" and p2["copyable"] is True,
+          f"TLE marking {p2['classification_marking']!r}, copyable {p2['copyable']}"
+          if p2 else "the unmarked record was rejected at ingest, so nothing is shown as U")
     # F8: no native line -> a reconstructed TLE with invented fields.
-    _, rl, rp = tle_for(o2)
+    d8 = tempfile.mkdtemp(prefix="psirens-audit-")
+    o8 = ingest(rows_for(*GOOD, REF - timedelta(hours=6), REF), d8).load()["objects"][SAT]
+    _, rl, rp = tle_for(o8)
     check("F8 with no native line a TLE is RECONSTRUCTED, with invented fields",
           rp["native"] is False and rl is not None,
-          f"line1 {rl[0] if rl else None!r}")
+          f"line1 {rl[0]!r}" if rl else f"no line shown: {rp.get('tle_withheld_reason')}")
     # F9: missing elements are filled with 0.0 and still plotted.
     row = rows_for(*GOOD, REF, REF)[0]
     for k in ("meanAnomaly", "argOfPerigee", "raan", "eccentricity"):
@@ -156,16 +164,24 @@ def main() -> int:
     d4 = tempfile.mkdtemp(prefix="psirens-audit-")
     mix = rows_for(*GOOD, REF - timedelta(hours=6), REF - timedelta(hours=2))
     mix += rows_for("EXERCISE-CELL", GOOD[1], GOOD[2], REF, REF, mode="EXERCISE")
-    o4 = ingest(mix, d4).load()["objects"][SAT]
-    check("F10 data modes are merged per catalogue number, last pull labels the lot",
-          len(o4["samples"]) == len(mix),
-          f"{len(o4['samples'])} samples (REAL and EXERCISE) under one object labelled {o4['data_mode']}")
+    st4 = ingest(mix, d4)
+    real4 = _tracks_payload(_cfg(d4), st4, "real", {DataMode.REAL})["tracks"][0]
+    check("F10 an EXERCISE record joins the REAL track",
+          len(real4["samples"]) == len(mix),
+          f"the Real World track serves {len(real4['samples'])} of {len(mix)} samples, "
+          f"providers {real4.get('providers')}, labelled {real4['data_mode']}")
     # F11: the screen ignores the provider's ephemeris type and drag terms.
-    el11 = dict(obj["elset_candidates"]["SAFRAN"], ephem_type=4, mean_motion_dot=1e-6)
-    sat = build_satrec(el11)
-    check("F11 the conjunction screen ignores ephemType and n-dot",
-          sat.ephtype == 0 and sat.ndot == 0.0,
-          f"record says ephemType 4, propagated as {sat.ephtype}; n-dot {sat.ndot}")
+    el11 = dict(obj["elset_candidates"]["SAFRAN"], ephem_type=4, bstar=-6.3e-5)
+    refusal = propagation_refusal(el11)
+    check("F11 an element set of another theory is propagated as SGP4",
+          refusal is None,
+          f"ephemType 4 refused: {refusal}" if refusal else "ephemType 4 propagated as SGP4")
+    # F13: the synthetic demo belt is built beside live UDL when DEMO_MODE is set.
+    d13 = tempfile.mkdtemp(prefix="psirens-audit-")
+    srcs = _build_sources(_cfg13(d13), None, ManualElsetSource(d13))
+    demo = [type(x).__name__ for x in srcs if type(x).__name__ == "DemoElsetSource"]
+    check("F13 the demo belt is built beside live UDL when DEMO_MODE is on",
+          bool(demo), f"sources: {[type(x).__name__ for x in srcs]}")
     # F12: a provider's newest fix is retained for ever and outranks fresher data.
     d5 = tempfile.mkdtemp(prefix="psirens-audit-")
     old = rows_for("NorthStar", GOOD[1], GOOD[2], REF - timedelta(days=60), REF - timedelta(days=60))
@@ -178,9 +194,16 @@ def main() -> int:
     check("F12 a 60-day-old commercial fix outranks a fresh government one",
           p5["source"] == "NorthStar",
           f"served {p5['source']} epoch {p5['epoch'][:10]} over 18 SDS epoch {REF:%Y-%m-%d}")
-    bad = [r for r in RESULTS if not r[1]]
-    print(f"\n{len(RESULTS) - len(bad)} of {len(RESULTS)} findings reproduced through the shipped code")
-    return 0 if not bad else 1
+    still = [r[0].split()[0] for r in RESULTS if r[1]]
+    fixed = [r[0].split()[0] for r in RESULTS if not r[1]]
+    print(f"\nstill reproduce: {', '.join(still) or 'none'}")
+    print(f"fixed:           {', '.join(fixed) or 'none'}")
+    return 0
+
+
+def _cfg13(d: str) -> Config:
+    return Config(**{**_cfg(d).__dict__, "demo_mode": True, "udl_enabled": True,
+                     "udl_base_url": "https://udl.invalid"})
 
 
 def _cfg(d: str) -> Config:

@@ -735,9 +735,10 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   plot exactly as it was.</p>
   <figure>
     <div class="fig" id="fig-inspector" data-fig="inspector">
-      <img src="guide-inspector.png" alt="The inspector panel showing identity, priority, data
-        mode, classification, longitude, inclination, affiliation, drift, drift fit, track span,
-        data age, the co-planar button, the element set with provenance, and the neighbourhood list.">
+      <img src="guide-inspector.png" alt="The inspector panel showing event evidence, identity,
+        priority, data mode, classification, the providers of its positions and of its head,
+        longitude, inclination, affiliation, drift, drift fit, track span, data age, the co-planar
+        button, the element set with its provenance, and the neighbourhood list.">
     </div>
     <div class="figcap" id="cap-inspector"><div class="n">&middot;</div>
       <div class="t"><b>Select a hotspot</b>Every field on the panel, explained.</div></div>
@@ -750,7 +751,9 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     <tbody>
       <tr><td class="k">Priority</td><td>The HRR rank in words. Matches the marker colour.</td></tr>
       <tr><td class="k">Data mode</td><td>REAL, SIMULATED, EXERCISE or TEST. Anything but REAL draws hollow.</td></tr>
-      <tr><td class="k">Classification</td><td>The marking carried by this object's own record, not a page-level default.</td></tr>
+      <tr><td class="k">Classification</td><td>The markings carried by the records behind the positions shown, every distinct one listed. A record with no marking is never shown as Unclassified: it is not stored at all.</td></tr>
+      <tr><td class="k">Providers</td><td>Who supplied the positions on this track, with a count each. Every position names the provider whose element set produced it; positions stored before that tagging existed are counted as untagged rather than credited to anyone.</td></tr>
+      <tr><td class="k">Head from</td><td>The provider of the newest position, which is where the marker is drawn. If it differs from the others listed, compare before you trust the marker.</td></tr>
       <tr><td class="k">Longitude</td><td>Sub-satellite longitude at the newest fix.</td></tr>
       <tr><td class="k">Inclination</td><td>Orbital inclination at the newest fix.</td></tr>
       <tr><td class="k">Affiliation</td><td>Red, Blue, Other or Unknown. The same value that colours the needle.</td></tr>
@@ -768,10 +771,12 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     <li><b>NATIVE</b> means the provider's own two lines, stored verbatim and validated on arrival:
       correct shape, both checksums, and the catalogue number inside the line matched against the
       record's own. Nothing between the provider and you reformatted it.</li>
-    <li><b>RECONSTRUCTED</b> means no usable native pair existed, so the lines were rebuilt from
-      the stored mean elements. Labelled, never silent.</li>
+    <li><b>NO TLE ISSUED</b> means the provider supplied elements but no two lines. PSIRENS does
+      not build a line on their behalf, so none is shown, and the reason is given instead.</li>
     <li>The element set shown is the one actually propagated for the closest-approach figures, so
-      the line you copy produces the range you were shown.</li>
+      the line you copy produces the range you were shown. It is propagated only when its record
+      states an SGP4 ephemeris type and carries its own B*; otherwise it is shown but not
+      screened, and the reason is given. Nothing is assumed to make a screen possible.</li>
     <li>The copy control appears only for a plain unclassified, caveat-free marking. A proprietary
       commercial line is displayed with the control withheld and the reason given. That gate fails
       closed on any caveat.</li>
@@ -1135,21 +1140,24 @@ const HOTSPOTS={
     [81.2,29.6,16.9,28,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
     [81,74.5,17.5,7.5,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
   inspector:[
-    [2,0.5,96,5,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
-    [2,7,96,7,"Identity","Rank chip, common name, NORAD number and country code."],
-    [2,14,96,17,"State","Priority, data mode and classification marking carried by this object's own record."],
-    [2,21,96,10,"Position","Sub-satellite longitude and inclination at the newest fix."],
-    [2,26.5,96,4,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
-    [2,29.5,96,4,"Drift","The fitted longitude rate with direction, or “on station”, or “no usable baseline”."],
-    [2,32,96,8,"Drift fit","Scatter about the fitted line, the baseline, the number of fixes, and whether the once-a-day libration was modelled."],
-    [2,39,96,4,"Track span","Total longitude excursion across every stored fix. Use it to sanity-check Drift."],
-    [2,41.5,96,4,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
-    [2,45,30,5,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
-    [2,51,96,7,"Element set","The two lines actually propagated for the ranges shown below."],
-    [2,57,96,6,"Provenance","NATIVE means the provider's own validated lines. RECONSTRUCTED means rebuilt from stored elements, and says so."],
-    [2,63,96,5,"Copy control","Offered only for a plain unclassified, caveat-free marking. Withheld with a reason otherwise."],
-    [2,68,96,5,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days."],
-    [2,73,96,25,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
+    // Positions MEASURED by tools/guide_shots.js from the capture (1.7.4),
+    // not estimated: the earlier table pointed at rows the scrolled capture
+    // did not even show.
+    [2,0.3,96,4,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
+    [3,5.7,94,24.1,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track and the split, so you can see why the event was raised."],
+    [3,30.8,94,3.2,"Identity","Rank chip, common name, NORAD number and country code."],
+    [3,35,94,5.4,"State","Priority, data mode, and every distinct classification marking among the records behind the positions shown."],
+    [3,40.7,94,3.6,"Providers and head","Who supplied the positions on this track, with a count each, and who supplied the newest one, where the marker is drawn. Untagged positions predate provider tagging and are counted as such."],
+    [3,44.5,94,3.6,"Position","Sub-satellite longitude and inclination at the newest fix."],
+    [3,48.3,94,1.9,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
+    [3,50.2,94,1.9,"Drift","The fitted longitude rate with direction, or “on station”, or “no usable baseline”."],
+    [3,52.1,94,4.6,"Drift fit","Scatter about the fitted line, the baseline, the number of fixes, and whether the once-a-day libration was modelled."],
+    [3,56.9,94,1.9,"Track span","Total longitude excursion across every stored fix. Use it to sanity-check Drift."],
+    [3,58.8,94,1.9,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
+    [3,61.4,38,3,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
+    [3,65.4,94,6.9,"Element set","The provider's own two lines, labelled NATIVE, with the copy control only for a plain unclassified, caveat-free marking. Where the provider issued no lines it reads NO TLE ISSUED: PSIRENS never builds one. This illustrative store has none."],
+    [3,73.5,94,2.3,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days. Objects whose element set cannot be propagated as issued are counted, not screened."],
+    [3,76.3,94,15.7,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
   coplanar:[
     [2,1,96,5,"Title bar","The primary object and how many objects are in its neighbourhood. Drag to move, drag the corner to resize."],
     [10,12,82,70,"The field","Each point is one nearby object. Both axes are logarithmic."],
@@ -1390,7 +1398,7 @@ const QUESTIONS=[
    why:"3.8°/day would cover 5.9° in under two days, but the span covers the whole stored history."},
   {q:"A needle is drawn in white. What does that mean?",
    a:["The object is neutral in a conflict","No country was supplied by the feed",
-      "The country is known and on neither policy list","The element set is reconstructed"],right:2,
+      "The country is known and on neither policy list","The element set has no native line"],right:2,
    why:"White is Other: a known country on neither list. Grey is Unknown, which means no country at all."},
   {q:"The amber banner says the data is 16 days old. What is the first thing you do?",
    a:["Restart the service","Read the stated cause in the banner","Switch to Simulation",
@@ -1401,7 +1409,7 @@ const QUESTIONS=[
    why:"Bottom left is small coplanar angle and small longitude separation: same plane, same place."},
   {q:"An object sits at 6° inclination. The most likely explanation is:",
    a:["It is accelerating","Its inclination is no longer being corrected",
-      "It is a simulated object","Its element set is reconstructed"],right:1,
+      "It is a simulated object","Its element set has no native line"],right:1,
    why:"Inclination builds at roughly 0.8° a year once station-keeping stops. High up the plot often means retired in place."},
   {q:"The inspector reads “no usable baseline” under Drift. That means:",
    a:["The object is not moving","Under 24 hours of fixes, so no rate is claimed",
@@ -1416,7 +1424,7 @@ const QUESTIONS=[
    why:"Hollow is the data-mode cue. Simulation view is guaranteed to carry zero real objects."},
   {q:"The copy control is missing from an element set. Why?",
    a:["The object is classified above your level","The marking carries a caveat, so the gate fails closed",
-      "The lines are reconstructed","The feed is stale"],right:1,
+      "The object is rank 4 or 5","The feed is stale"],right:1,
    why:"The control is offered only for a plain unclassified, caveat-free marking, and the reason is stated beside it."},
   {q:"R4 and R5 chips read “tap to load”. That is because:",
    a:["Those objects are not in the feed","They are three quarters of the list, fetched on demand",

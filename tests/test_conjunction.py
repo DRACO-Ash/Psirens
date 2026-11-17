@@ -5,11 +5,11 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 
-from sgp4.api import Satrec
+from fixture_tle import export_lines
 
-from psirens.conjunction import (build_satrec, closest_approach,
-                                 conjunctions_for, tle_lines, _jday)
+from psirens.conjunction import build_satrec, closest_approach, conjunctions_for
 from psirens.sources import _elset_dict
+from psirens.tle import ElsetProvenance
 from psirens.store import Store
 
 EP = datetime(2026, 8, 6, tzinfo=timezone.utc)
@@ -17,11 +17,22 @@ GEO_R = 42164.0
 
 
 def _el(oid, mean_anom, inc=0.05):
+    """A provider-shaped element set WITH its own native lines, as UDL serves
+    it: the app builds no line, so a fixture without one would show none."""
+    el = _bare_el(oid, mean_anom, inc)
+    lines = export_lines(el)
+    if lines is not None and oid.isdigit():
+        el["line1"], el["line2"] = lines
+    return el
+
+
+def _bare_el(oid, mean_anom, inc=0.05):
     return _elset_dict(
         sat_no=oid, epoch=EP, inclination_deg=inc, eccentricity=0.0002,
         raan_deg=80.0, argp_deg=90.0, mean_anomaly_deg=mean_anom,
         mean_motion_rev_per_day=1.0027379, bstar=1e-5,
-        classification="U//DS-JCO-NOTIF")
+        classification="U//DS-JCO-NOTIF",
+        provenance=ElsetProvenance(source="18 SDS", ephem_type=0))
 
 
 def _obj(oid, lon, mean_anom):
@@ -29,28 +40,6 @@ def _obj(oid, lon, mean_anom):
             "samples": [{"epoch": EP.isoformat(), "sub_lon_deg": lon,
                          "inclination_deg": 0.05}],
             "elset": _el(oid, mean_anom)}
-
-
-def test_tle_export_roundtrips_to_metre():
-    lines = tle_lines(_el("100172", 100.0))
-    assert lines is not None
-    l1, l2 = lines
-    assert l1.startswith("1 ") and l2.startswith("2 ")
-    a = build_satrec(_el("100172", 100.0))
-    b = Satrec.twoline2rv(l1, l2)
-    jd, fr = _jday(EP + timedelta(hours=6))
-    _, ra, _ = a.sgp4(jd, fr)
-    _, rb, _ = b.sgp4(jd, fr)
-    assert math.dist(ra, rb) < 1e-3   # < 1 metre round-trip
-
-
-def test_tle_alpha5_for_six_digit_satno():
-    l1, _ = tle_lines(_el("100172", 100.0))
-    assert l1.split()[1].startswith("A")   # 100172 -> Alpha-5 "A0172"
-
-
-def test_tle_lines_bad_elset_returns_none():
-    assert tle_lines({"epoch": "not-a-date"}) is None
 
 
 def test_closest_approach_one_degree_chord():
@@ -81,7 +70,7 @@ def test_conjunctions_for_target_without_elset():
         {"epoch": EP.isoformat(), "sub_lon_deg": 0.0, "inclination_deg": 0.0}]}}}
     res = conjunctions_for(store, "x", now=EP)
     assert res["target"] is None
-    assert "no element set" in res["detail"]
+    assert "no marked element set" in res["detail"]
 
 
 def test_conjunctions_for_unknown_target():
@@ -124,12 +113,18 @@ def test_malformed_target_elset_returns_a_reason_not_an_exception():
         "unparseable epoch": {**_el("29349", 100.0), "epoch": "not-a-date"},
         "null mean motion": {**_el("29349", 100.0),
                              "mean_motion_rev_per_day": None},
+        "no B*": {**_el("29349", 100.0), "bstar": None},
+        "XP theory": {**_el("29349", 100.0), "ephem_type": 4},
     }
     for label, el in broken.items():
         payload = conjunctions_for(_target_with(el), "29349", now=EP)
-        assert payload["target"] is None, label
         assert payload["neighbours"] == [], label
         assert payload["detail"], f"{label}: no reason given"
+    # A marked element set that cannot be propagated still shows the
+    # provider's own line; only the screen is refused, and it says why.
+    xp = conjunctions_for(_target_with({**_el("29349", 100.0), "ephem_type": 4}), "29349", now=EP)
+    assert xp["target"]["tle"] is not None
+    assert xp["detail"].startswith("not screened: ephemeris type 4")
 
 
 def test_a_healthy_target_is_unaffected_by_the_guard():

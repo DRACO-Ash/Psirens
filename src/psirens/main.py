@@ -35,7 +35,7 @@ from .hrr import HrrStore
 from .refresh import Refresher
 from .security import RateLimiter, SingleFlight, token_ok
 from .sources import DemoElsetSource, ManualElsetSource, UDLElsetSource
-from .store import Store
+from .store import Store, sample_provenance
 
 # The platform logging standard (1.7.1): one JSON object per line on stdout.
 # basicConfig used to install a plain-text handler on STDERR, which is what the
@@ -139,6 +139,79 @@ def _drift_block(pairs: list[tuple[datetime, float]],
     }
 
 
+def _record_mode(rec: dict) -> DataMode | None:
+    """The record-level mode, used only for samples stored before 1.7.4. An
+    absent or unknown mode is None, never REAL."""
+    try:
+        return DataMode(rec.get("data_mode"))
+    except ValueError:
+        return None
+
+
+def _served(rec: dict, modes: set[DataMode]) -> list[tuple[dict, dict | None]]:
+    """The samples this view may show, each with its own provenance.
+
+    The filter is PER SAMPLE (1.7.4). Until then one record held every mode
+    for its catalogue number and the newest row labelled the lot, so an
+    EXERCISE fix could sit on a REAL track or turn it into an EXERCISE one.
+    """
+    legacy = _record_mode(rec)
+    out = []
+    for s in rec.get("samples", []):
+        prov = sample_provenance(rec, s)
+        try:
+            mode = DataMode(prov["data_mode"]) if prov else legacy
+        except ValueError:
+            mode = None
+        if mode is not None and mode in modes:
+            out.append((s, prov))
+    return out
+
+
+def _joined(values: list[str]) -> str:
+    """One value verbatim, or several verbatim, never a merged invention."""
+    return " | ".join(values)
+
+
+def _track_entry(oid: str, rec: dict, modes: set[DataMode],
+                 since: datetime | None) -> dict | None:
+    """One track, built only from samples whose own tags admit them. Its mode,
+    marking and providers are READ from those samples, every distinct value
+    listed verbatim; nothing is summarised into a value no record carried."""
+    served = _served(rec, modes)
+    if not served:
+        return None
+    samples = [s for s, _ in served]
+    legacy_mark = rec.get("classification_marking")
+    providers: dict[str, int] = {}
+    marks, mode_set = set(), set()
+    for s, prov in served:
+        key = prov["source"] if prov else "untagged"
+        providers[key] = providers.get(key, 0) + 1
+        mark = prov["classification_marking"] if prov else legacy_mark
+        if mark:
+            marks.add(mark)
+        mode_set.add(prov["data_mode"] if prov else rec.get("data_mode"))
+    head = max(served, key=lambda sp: sp[0]["epoch"])
+    pairs = [(datetime.fromisoformat(s["epoch"]), s["sub_lon_deg"]) for s in samples]
+    return {
+        "object_id": oid,
+        "name": rec.get("name", oid),
+        "data_mode": _joined(sorted(mode_set)),
+        "classification_marking": _joined(sorted(marks)) if marks else None,
+        "classification_markings": sorted(marks),
+        "source": _joined(sorted(providers)),
+        "providers": providers,
+        "head_source": head[1]["source"] if head[1] else None,
+        "provenance": rec.get("provenance") or [],
+        "origin": rec.get("origin", ""),
+        "target": rec.get("target"),
+        "samples": samples,
+        **_drift_block(pairs, since),
+        "ra_deg": (rec.get("elset") or {}).get("raan_deg"),
+    }
+
+
 def _tracks_payload(cfg: Config, store: Store, view: str,
                     modes: set[DataMode],
                     ranks: set[int] | None = None,
@@ -167,33 +240,12 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
     active_ranks = ranks or None
     tracks, markings = [], []
     for oid, rec in data.get("objects", {}).items():
-        try:
-            mode = DataMode(rec.get("data_mode", "REAL"))
-        except ValueError:
-            mode = DataMode.REAL
-        if mode not in modes:
-            continue
         if active_ranks is not None and _rank_of(oid, hrr_map) not in active_ranks:
             continue
-        samples = rec.get("samples", [])
-        if not samples:
-            continue
-        pairs = [
-            (datetime.fromisoformat(s["epoch"]), s["sub_lon_deg"]) for s in samples
-        ]
-        markings.append(rec.get("classification_marking", "U"))
-        tracks.append({
-            "object_id": oid,
-            "name": rec.get("name", oid),
-            "data_mode": mode.value,
-            "classification_marking": rec.get("classification_marking", "U"),
-            "source": rec.get("source", ""),
-            "origin": rec.get("origin", ""),
-            "target": rec.get("target"),
-            "samples": samples,
-            **_drift_block(pairs, splits.get(oid)),
-            "ra_deg": (rec.get("elset") or {}).get("raan_deg"),
-        })
+        track = _track_entry(oid, rec, modes, splits.get(oid))
+        if track is not None:
+            tracks.append(track)
+            markings.extend(track["classification_markings"])
     return {
         "view": view,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -579,8 +631,14 @@ def _build_sources(cfg: Config, http_client: httpx.Client | None,
     if cfg.udl_enabled:
         sources.append(UDLElsetSource(cfg, client=http_client))
     sources.append(manual)
-    if cfg.demo_mode or not cfg.udl_enabled:
+    # NEVER beside live UDL (1.7.4). Until then DEMO_MODE=true added the
+    # synthetic belt alongside UDL, and four of its objects carried real
+    # high-interest catalogue numbers labelled REAL.
+    if not cfg.udl_enabled:
         sources.append(DemoElsetSource())
+    elif cfg.demo_mode:
+        _log.warning("DEMO_MODE is set but UDL is enabled: the synthetic demo "
+                     "belt is NOT loaded against a live feed")
     return sources
 
 
@@ -597,6 +655,8 @@ def create_app(cfg: Config | None = None,
         )
 
     store = Store(cfg.storage_dir())
+    if cfg.udl_enabled:
+        store.purge_synthetic()   # nothing synthetic survives into a live store
     manual = ManualElsetSource(cfg.storage_dir())
     hrr = HrrStore(cfg, http_client=http_client,
                    static_fallback=_ASSET_PATHS["hrr-geo.json"])
@@ -614,7 +674,7 @@ def create_app(cfg: Config | None = None,
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="1.7.3", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.7.4", lifespan=_lifespan)
     # Request context for every log line, and one standard request line. The
     # X-Auth-Request-Email header becomes user.email, as the standard requires;
     # LOG_USER_EMAIL=false switches that off (see config.py).

@@ -19,13 +19,13 @@ DATA="$(mktemp -d)"
 # changes display only: ingest filters on the list solely when UDL is enabled.
 cat > "$DATA/hrr.json" <<'JSON'
 {"marking":"U","source":"PROBE","origin":"LOCAL","regime":"GEO","count":7,
- "objects":{"41836":{"name":"SES-10","country":"LUX","rank":2},
-            "28924":{"name":"EUTELSAT 174A","country":"FRA","rank":3},
-            "43683":{"name":"BEIDOU-3 G1","country":"CHN","rank":1},
-            "41748":{"name":"USA 270","country":"USA","rank":1},
-            "90210":{"name":"DRIFTER-1","country":"CHN","rank":4},
-            "90401":{"name":"MANOEUVRE-DEMO","country":"CHN","rank":3},
-            "90402":{"name":"SILENT-DEMO","country":"FRA","rank":3}}}
+ "objects":{"DEMO-A1":{"name":"ANCHOR-W67","country":"LUX","rank":2},
+            "DEMO-A2":{"name":"ANCHOR-E174","country":"FRA","rank":3},
+            "DEMO-A3":{"name":"ANCHOR-E140","country":"CHN","rank":1},
+            "DEMO-A4":{"name":"ANCHOR-E105","country":"USA","rank":1},
+            "DEMO-D1":{"name":"DRIFTER-1","country":"CHN","rank":4},
+            "DEMO-M1":{"name":"MANOEUVRE-DEMO","country":"CHN","rank":3},
+            "DEMO-Q1":{"name":"SILENT-DEMO","country":"FRA","rank":3}}}
 JSON
 # Demo mode: UDL_BASE_URL unset, so the offline synthetic belt populates the
 # store. SCHEDULER_ENABLED=0 keeps the background loop out of the probe.

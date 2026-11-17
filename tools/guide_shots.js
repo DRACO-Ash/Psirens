@@ -134,7 +134,53 @@ async function settle(page) {
     // and the TLE block an operator actually reads, not just a collapsed row.
     await page.locator("#nb .nb2 summary").first().click();
     await settle(page);
-    await shot(page.locator("#imodal"), "guide-inspector.png");
+    // A TALL viewport for this one figure, so the whole panel fits unscrolled.
+    // Until 1.7.4 it was captured at 920 px, which scrolled the panel past its
+    // identity and state rows while the guide's hotspots still pointed at
+    // them. The hotspot positions are now MEASURED here and printed, so the
+    // guide's table is copied from the capture rather than estimated.
+    await page.setViewportSize({ width: VIEW.width, height: 1900 });
+    await settle(page);
+    await page.evaluate(() => { const m = document.getElementById("imodal"); m.scrollTop = 0;
+      m.querySelectorAll("*").forEach((e) => { e.scrollTop = 0; }); });
+    await page.waitForFunction(
+      () => !(document.getElementById("nb").textContent || "").includes("computing"),
+      null, { timeout: 30000 }).catch(() => {});
+    // The resize re-renders the neighbourhood, which collapses the row opened
+    // above; open it again so the figure carries a neighbour's TLE block.
+    const firstNb = page.locator("#nb .nb2").first();
+    if (!(await firstNb.evaluate((d) => d.open))) { await firstNb.locator("summary").click(); }
+    await settle(page);
+    // Clip below the third neighbour: the full list of twenty adds nothing.
+    const box = await page.evaluate(() => {
+      const m = document.getElementById("imodal").getBoundingClientRect();
+      const rows = document.querySelectorAll("#nb .nb2");
+      const last = rows[Math.min(2, rows.length - 1)].getBoundingClientRect();
+      return { x: m.left, y: m.top, width: m.width, height: last.bottom + 10 - m.top };
+    });
+    await shot(page, "guide-inspector.png", { clip: box });
+    const spots = await page.evaluate((clip) => {
+      const pct = (r) => [((r.left - clip.x) / clip.width) * 100, ((r.top - clip.y) / clip.height) * 100,
+        (r.width / clip.width) * 100, (r.height / clip.height) * 100].map((v) => +v.toFixed(1));
+      const out = {};
+      const add = (k, el) => { if (el) { out[k] = pct(el.getBoundingClientRect()); } };
+      add("evidence", document.querySelector("#imodal .evbox, #imodal [class*=evid]"));
+      add("identity", document.querySelector("#imodal .ins-h"));
+      document.querySelectorAll("#imodal .ins-dl dt").forEach((dt) => {
+        const dd = dt.nextElementSibling; const a = dt.getBoundingClientRect(), b = dd.getBoundingClientRect();
+        out[dt.textContent.trim()] = pct({ left: a.left, top: Math.min(a.top, b.top), width: b.right - a.left,
+          height: Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top) });
+      });
+      add("cobtn", document.getElementById("cobtn"));
+      add("tgttle", document.getElementById("tgttle"));
+      add("nbhead", document.querySelector("#imodal .ins-nb-h"));
+      add("neighbour", document.querySelector("#nb .nb2"));
+      add("nbtle", document.querySelector("#nb .nb2 .nb2bd"));
+      return out;
+    }, box);
+    console.log("INSPECTOR HOTSPOTS " + JSON.stringify(spots));
+    await page.setViewportSize(VIEW);
+    await settle(page);
     await page.click("#cobtn");
     await page.waitForFunction(
       () => document.getElementById("comodal").classList.contains("show")

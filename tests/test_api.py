@@ -75,8 +75,8 @@ def test_tracks_rejects_bad_view_and_mode(client):
 def test_tracks_drift_and_target_present(client):
     body = client.get("/api/tracks?view=combined").json()
     by = {t["object_id"]: t for t in body["tracks"]}
-    assert by["90210"]["drift_deg_per_day"] > 0        # eastward drifter
-    assert by["77777"]["target"] == "43683"            # exercise inspector target
+    assert by["DEMO-D1"]["drift_deg_per_day"] > 0        # eastward drifter
+    assert by["DEMO-X1"]["target"] == "DEMO-A3"            # exercise inspector target
 
 
 def test_manual_elset_roundtrip_no_token(client):
@@ -93,13 +93,32 @@ def test_manual_elset_roundtrip_no_token(client):
         "inclination_deg": 2.0, "eccentricity": 0.0, "raan_deg": 10.0,
         "argp_deg": 0.0, "mean_anomaly_deg": 0.0,
         "mean_motion_rev_per_day": 1.0027, "data_mode": "SIMULATED",
-        "target": "43683", "ttl_hours": 2.0,
+        "bstar": 0.0, "classification_marking": "U", "source": "operator notes",
+        "target": "DEMO-A3", "ttl_hours": 2.0,
     }
     assert client.post("/api/manual-elset", json=payload).status_code == 200
     combined = client.get("/api/tracks?view=combined").json()
-    assert any(t["object_id"] == "MZ1" for t in combined["tracks"])
+    mz1 = next(t for t in combined["tracks"] if t["object_id"] == "MZ1")
+    # The operator is the provider, whatever they typed as the source.
+    assert mz1["providers"] == {"MANUAL": 1}
     assert client.delete("/api/manual-elset/MZ1").status_code == 200
     assert client.delete("/api/manual-elset/MZ1").status_code == 404
+
+
+def test_manual_elset_without_a_marking_or_mode_is_refused(client):
+    """1.7.4: nothing defaulted. Until then a missing marking became "U"."""
+    base = {"object_id": "MZ2", "name": "n", "inclination_deg": 1.0,
+            "epoch": datetime.now(timezone.utc).isoformat(),
+            "eccentricity": 0.0, "raan_deg": 0.0, "argp_deg": 0.0,
+            "mean_anomaly_deg": 0.0, "mean_motion_rev_per_day": 1.0027,
+            "bstar": 0.0, "data_mode": "SIMULATED", "classification_marking": "U"}
+    for drop in ("classification_marking", "data_mode", "bstar"):
+        body = {k: v for k, v in base.items() if k != drop}
+        assert client.post("/api/manual-elset", json=body).status_code == 422, drop
+    assert client.post("/api/manual-elset",
+                       json={**base, "classification_marking": "  "}).status_code == 422
+    naive = {**base, "epoch": "2026-11-17T09:00:00"}
+    assert client.post("/api/manual-elset", json=naive).status_code == 422
 
 
 def test_manual_elset_rejects_invalid_body(client):
@@ -165,26 +184,27 @@ def test_conjunctions_requires_target(client):
     assert "target" in r.json()["detail"]
 
 
-def test_conjunctions_endpoint_returns_target_tle(client):
-    # demo anchors carry a synthesised elset, so the target exports a TLE even
-    # though these anchors are too far apart to have neighbours within +/-10deg.
-    r = client.get("/api/conjunctions?target=41836")
+def test_conjunctions_endpoint_never_rebuilds_a_tle(client):
+    """Demo anchors carry elements but no provider line. Until 1.7.4 the
+    route rebuilt one; now it shows none and says why."""
+    r = client.get("/api/conjunctions?target=DEMO-A1")
     assert r.status_code == 200
     j = r.json()
     assert j["target"] is not None
-    assert j["target"]["tle"] is not None and len(j["target"]["tle"]) == 2
-    assert "neighbours" in j and "window_hours" in j
+    assert j["target"]["tle"] is None
+    assert j["target"]["tle_provenance"]["tle_withheld_reason"]
+    assert "neighbours" in j and "window_hours" in j and "not_screened" in j
 
 
 def test_conjunctions_payload_carries_tle_provenance(client):
     """Every served line states where it came from and whether it is the
     provider's own fix or a reconstruction."""
-    j = client.get("/api/conjunctions?target=41836").json()
+    j = client.get("/api/conjunctions?target=DEMO-A1").json()
     prov = j["target"]["tle_provenance"]
     assert prov is not None
-    # The demo belt synthesises elements, so these are reconstructions and
-    # must be labelled as such rather than presented as a provider fix.
+    # The demo belt synthesises elements and issues no line.
     assert prov["native"] is False
+    assert prov["propagation_refused"] is None
     assert prov["source"] == "DEMO"
     assert prov["source_class"] == "unknown"
     assert prov["epoch"]
@@ -196,7 +216,7 @@ def test_conjunctions_payload_carries_tle_provenance(client):
 def test_conjunctions_copy_gate_follows_the_marking(client):
     """Demo elsets are plain unclassified, so copy-out is permitted; the gate
     itself is exercised exhaustively in test_tle.py."""
-    j = client.get("/api/conjunctions?target=41836").json()
+    j = client.get("/api/conjunctions?target=DEMO-A1").json()
     prov = j["target"]["tle_provenance"]
     assert prov["classification_marking"] == "U"
     assert prov["copyable"] is True
@@ -211,7 +231,7 @@ def test_conjunctions_respect_the_configured_source_policy(tmp_path):
                      sources=[DemoElsetSource(), ManualElsetSource(str(tmp_path))])
     app.state.refresher.run_once()
     with TestClient(app) as c:
-        assert c.get("/api/conjunctions?target=41836").status_code == 200
+        assert c.get("/api/conjunctions?target=DEMO-A1").status_code == 200
     obj = {"elset_candidates": {
         "18SDS": {"sat_no": "1", "epoch": "2026-08-01T00:00:00+00:00",
                   "source": "18SDS", "classification": "U",
@@ -361,7 +381,7 @@ def test_coplanar_requires_target(client):
 
 
 def test_coplanar_endpoint_returns_primary_and_tracks(client):
-    r = client.get("/api/coplanar?target=41836")  # a demo anchor with an elset
+    r = client.get("/api/coplanar?target=DEMO-A1")  # a demo anchor with an elset
     assert r.status_code == 200
     j = r.json()
     assert "primary" in j and "tracks" in j and "half_width_deg" in j
@@ -374,10 +394,10 @@ def test_coplanar_endpoint_returns_primary_and_tracks(client):
 
 def _seed_ranked(client, monkeypatch):
     """Give the app an HRR map with a known rank per demo object."""
-    ranked = {"41836": {"name": "SES-10", "rank": 1},
-              "28924": {"name": "EUTELSAT 174A", "rank": 3},
-              "43683": {"name": "BEIDOU-3 G1", "rank": 4},
-              "41748": {"name": "USA 270", "rank": 5}}
+    ranked = {"DEMO-A1": {"name": "SES-10", "rank": 1},
+              "DEMO-A2": {"name": "EUTELSAT 174A", "rank": 3},
+              "DEMO-A3": {"name": "BEIDOU-3 G1", "rank": 4},
+              "DEMO-A4": {"name": "USA 270", "rank": 5}}
     monkeypatch.setattr(client.app.state.hrr, "map", lambda: ranked)
     return ranked
 
@@ -392,7 +412,7 @@ def test_tracks_limited_to_the_requested_ranks(client, monkeypatch):
     _seed_ranked(client, monkeypatch)
     body = client.get("/api/tracks?view=combined&ranks=1,3").json()
     ids = {t["object_id"] for t in body["tracks"]}
-    assert ids == {"41836", "28924"}
+    assert ids == {"DEMO-A1", "DEMO-A2"}
     assert body["ranks"] == [1, 3]
     assert body["count"] == 2
 
@@ -403,9 +423,9 @@ def test_unranked_objects_are_background(client, monkeypatch):
     _seed_ranked(client, monkeypatch)
     body = client.get("/api/tracks?view=combined&ranks=1,2,3").json()
     ids = {t["object_id"] for t in body["tracks"]}
-    assert "90210" not in ids, "an unlisted demo object must count as R5"
+    assert "DEMO-D1" not in ids, "an unlisted demo object must count as R5"
     body5 = client.get("/api/tracks?view=combined&ranks=5").json()
-    assert "90210" in {t["object_id"] for t in body5["tracks"]}
+    assert "DEMO-D1" in {t["object_id"] for t in body5["tracks"]}
 
 
 def test_the_default_three_ranks_are_a_real_saving(client, monkeypatch):

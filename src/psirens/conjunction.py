@@ -5,17 +5,17 @@ the 3D TEME range between two states propagated by the same validated Vallado
 SGP4 (`sgp4`) already used for sub-satellite longitude. Nothing here is a
 hand-rolled propagator.
 
-TLE lines are served NATIVE where the provider pushed one: UDL carries
+TLE lines are served ONLY as the provider issued them: UDL carries
 `line1`/`line2` on its elset records, and those are the provider's own fix.
-Reconstruction via `sgp4.exporter.export_tle` remains as the fallback for
-records without a usable native line, and is labelled as such in the
-provenance so a reconstruction is never mistaken for a provider fix. Which
-provider's element set is chosen, when several hold a fix for one object, is
-decided by the selection policy in `tle.py`.
+Until 1.7.4 a record without a usable native pair got a TLE rebuilt by
+`sgp4.exporter`, with element number, rev number, ephemeris type, n-dot and
+n-double-dot written in by this module. That was a TLE no provider issued, and
+under the owner's rule of 17 November 2026 it is gone: no line is shown, and
+the provenance says why.
 
-Inputs are the stored element sets (see `tle.candidates_of`). An object
-without one is simply skipped: it cannot be propagated, and this module never
-invents elements.
+Propagation is refused, with the reason, when the record does not state an
+SGP4 ephemeris type or does not carry its own B* (`tle.propagation_refusal`).
+Nothing is defaulted to make an element set screenable.
 """
 
 from __future__ import annotations
@@ -25,11 +25,11 @@ import math
 from datetime import datetime, timedelta, timezone
 
 from sgp4.api import WGS72, Satrec, jday
-from sgp4.exporter import export_tle
 
 from .astro import _days_since_1949
 from .models import display_name
-from .tle import DEFAULT_PRIORITY, provenance_of, select_elset, validate_native
+from .tle import (DEFAULT_PRIORITY, propagation_refusal, provenance_of, select_elset,
+                  validate_native)
 
 _log = logging.getLogger("psirens.conjunction")
 
@@ -49,71 +49,49 @@ def _satnum(sat_no) -> int:
         return 0  # non-numeric ids export with a zero catalogue number
 
 
-def _classification(marking: str) -> str:
-    first = (str(marking or "U").strip() or "U")[0].upper()
-    return first if first in ("U", "C", "S", "T") else "U"
+NO_NATIVE_LINE = "no TLE line was issued by the provider for this element set"
 
 
 def build_satrec(el: dict) -> Satrec:
-    """Build an SGP4 Satrec from stored mean elements. Angles in the elset are
-    degrees; sgp4init wants radians and mean motion in rad/min."""
+    """Build an SGP4 Satrec from the record's own mean elements. Angles in the
+    elset are degrees; sgp4init wants radians and mean motion in rad/min.
+
+    Callers check `tle.propagation_refusal` first. B* is read from the record
+    and never defaulted; n-dot and n-double-dot are passed as zero because
+    SGP4 does not use them in propagation (they exist only in the TLE text).
+    """
     epoch = _parse_epoch(el["epoch"])
     no_kozai = float(el["mean_motion_rev_per_day"]) * _TWO_PI / 1440.0
     s = Satrec()
     s.sgp4init(
         WGS72, "i", _satnum(el.get("sat_no")), _days_since_1949(epoch),
-        float(el.get("bstar", 0.0)), 0.0, 0.0,
+        float(el["bstar"]), 0.0, 0.0,
         float(el["eccentricity"]), math.radians(float(el["argp_deg"])),
         math.radians(float(el["inclination_deg"])),
         math.radians(float(el["mean_anomaly_deg"])), no_kozai,
         math.radians(float(el["raan_deg"])),
     )
-    # attributes export_tle needs beyond the orbital init
-    s.classification = _classification(el.get("classification", "U"))
-    s.intldesg = str(el.get("intl_desig", "") or "")[:8]
-    s.elnum = 1
-    s.revnum = 0
-    s.ephtype = 0
     return s
-
-
-def tle_lines(el: dict) -> tuple[str, str] | None:
-    """Export a classic two-line element set for one object, or None on failure.
-
-    This is now the FALLBACK path, used only where the provider pushed no
-    usable native line. Note the loss it implies: the international designator
-    and rev number are not carried by the UDL elset and export blank/zero. The
-    orbital fields and checksums are exact.
-    """
-    try:
-        return export_tle(build_satrec(el))
-    except (ValueError, OverflowError, KeyError, TypeError) as exc:
-        _log.warning("TLE export failed for %s: %s", el.get("sat_no"), exc)
-        return None
 
 
 def tle_for(obj: dict,
             priority: tuple[str, ...] = DEFAULT_PRIORITY) -> tuple[dict | None, list[str] | None, dict | None]:
-    """Choose an element set for an object and produce its two-line set.
+    """Choose an element set for an object and return the provider's own lines.
 
-    Returns `(elset, lines, provenance)`. The native provider line wins where
-    one survives revalidation; otherwise the lines are reconstructed and the
-    provenance says so, so the interface never presents a reconstruction as a
-    provider fix.
-
-    The returned element set is also what the caller propagates. Serving one
-    provider's line while screening from another's would put a range on screen
-    that the displayed elements do not produce, which is worse than either
-    choice made consistently.
+    Returns `(elset, lines, provenance)`. `lines` is the native pair, or None
+    when the provider issued none; the provenance then says so. The returned
+    element set is also what the caller propagates, when it may be propagated
+    at all (`provenance["propagation_refused"]` is None).
     """
     el = select_elset(obj, priority)
     if el is None:
         return None, None, None
     native = validate_native(el.get("line1"), el.get("line2"), el.get("sat_no"))
-    if native is not None:
-        return el, list(native), provenance_of(el, native=True)
-    lines = tle_lines(el)
-    return el, (list(lines) if lines else None), provenance_of(el, native=False)
+    prov = provenance_of(el, native=native is not None)
+    if native is None:
+        prov["tle_withheld_reason"] = NO_NATIVE_LINE
+        return el, None, prov
+    return el, list(native), prov
 
 
 def _jday(dt: datetime) -> tuple[float, float]:
@@ -173,12 +151,16 @@ def _sep_deg(a: float, b: float) -> float:
     return abs((a - b + 180.0) % 360.0 - 180.0)
 
 
+def _within(lon: float | None, ref: float | None, half_width_deg: float) -> bool:
+    return lon is not None and ref is not None and _sep_deg(lon, ref) <= half_width_deg
+
+
 def _neighbour_entry(target_sat: Satrec, oid: str, obj: dict, start: datetime,
                      window_hours: int,
                      priority: tuple[str, ...] = DEFAULT_PRIORITY,
                      names: dict | None = None) -> dict | None:
     el, lines, prov = tle_for(obj, priority)
-    if not el:
+    if not el or prov is None or prov["propagation_refused"] is not None:
         return None
     try:
         sat = build_satrec(el)
@@ -222,9 +204,17 @@ def conjunctions_for(store_data: dict, target_id: str, *,
     objects = store_data.get("objects", {})
     target = objects.get(target_id)
     t_el, t_tle, t_prov = tle_for(target or {}, priority)
-    if target is None or t_el is None:
+    if target is None or t_el is None or t_prov is None:
         return _no_target(now, window_hours,
-                          "target has no element set that can be propagated")
+                          "target has no marked element set from a provider")
+    refused = t_prov["propagation_refused"]
+    if refused is not None:
+        # The provider's own line is still shown; only the screen is refused.
+        out = _no_target(now, window_hours, f"not screened: {refused}")
+        out["target"] = {"id": target_id,
+                         "name": display_name(target_id, target.get("name"), names),
+                         "tle": t_tle, "tle_provenance": t_prov}
+        return out
     try:
         target_sat = build_satrec(t_el)
     except (ValueError, OverflowError, KeyError, TypeError) as exc:
@@ -234,17 +224,16 @@ def conjunctions_for(store_data: dict, target_id: str, *,
         # report as "service unavailable".
         _log.warning("target %s has an unusable element set: %s", target_id, exc)
         return _no_target(now, window_hours, "target element set is unusable")
-    t_lon = _sub_lon(target)
+    near = {oid: obj for oid, obj in objects.items()
+            if oid != target_id and _within(_sub_lon(obj), _sub_lon(target), half_width_deg)}
     neighbours: list[dict] = []
-    for oid, obj in objects.items():
-        if oid == target_id:
-            continue
-        lon = _sub_lon(obj)
-        if lon is None or t_lon is None or _sep_deg(lon, t_lon) > half_width_deg:
-            continue
+    not_screened = 0
+    for oid, obj in near.items():
         entry = _neighbour_entry(target_sat, oid, obj, now, window_hours,
                                  priority, names)
-        if entry is not None:
+        if entry is None:
+            not_screened += 1
+        else:
             neighbours.append(entry)
     neighbours.sort(key=lambda e: (e["range_now_km"] is None, e["range_now_km"] or 0.0))
     return {
@@ -252,6 +241,10 @@ def conjunctions_for(store_data: dict, target_id: str, *,
                    "name": display_name(target_id, target.get("name"), names),
                    "tle": t_tle, "tle_provenance": t_prov},
         "neighbours": neighbours[:cap],
+        # Nearby objects whose element set could not be propagated without an
+        # assumption (no stated SGP4 type, no B*, or none at all). Counted and
+        # said, so an empty neighbourhood is never mistaken for an empty belt.
+        "not_screened": not_screened,
         "window_hours": window_hours,
         "computed_at": now.isoformat(),
     }

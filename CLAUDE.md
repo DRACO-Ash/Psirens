@@ -51,7 +51,16 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.3; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.7.4; DEPLOYED 1.7.3, Active)
+
+FACT, Ash, 17 November 2026: the deployed build is 1.7.3, it STAYS (no rollback),
+and the provenance fixes ship as 1.7.4. DEMO_MODE is NOT set in the deployed
+configuration. SAFRAN is commercial. 1.7.4 is Ash's three rules from the
+element-set provenance audit: every position tagged with its provider, data
+mode and marking; nothing filled in (incomplete or unmarked records rejected
+and counted, no reconstructed TLE, no assumed ephemeris type or B*); synthetic
+data never near a live store. See the 1.7.4 entry in Open items. The paragraph
+below is the 5 October history and is kept as a record.
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -149,8 +158,9 @@ Shipped features:
 - NATIVE UDL TLEs (1.5.0). `line1`/`line2` are captured at ingest, validated
   (shape, both checksums, and the embedded catalogue number against the record's
   own `satNo`) and served verbatim with source provenance, epoch, rev number and
-  per-record classification marking. Reconstruction via `sgp4.exporter` is now
-  the labelled FALLBACK, used only where no usable native line exists.
+  per-record classification marking. From 1.7.4 there is NO reconstruction:
+  where the provider issued no line, none is shown and the provenance says why
+  (`NO TLE ISSUED`). Owner rule: nothing is invented from any TLE.
 - Source selection policy (1.5.0). `TLE_SOURCE_PRIORITY`, default
   `commercial,government,unknown`: the first class holding a fix wins, newest
   epoch within it. `any` collapses to plain newest-fix-wins. Owner decision,
@@ -345,14 +355,26 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drift_deg_per_day` remains as the rate-only wrapper.
 - `config.py` — env-only config (UDL base/path, epoch param, retention, HRR
   cadence, conjunction window, memory-independent tunables).
-- `store.py` — atomic JSON store; anti-shrink `merge_samples` (and
+- `store.py` — atomic JSON store. PROVENANCE (1.7.4): each object holds a
+  `provenance` table (provider, data mode, marking) and each sample a `p`
+  index into it (`sample_provenance`); samples are keyed on (provider, epoch);
+  an untagged pre-1.7.4 sample takes a provider's tags only when a re-pull
+  reproduces its longitude and inclination exactly (`_adopt_legacy`);
+  `purge_synthetic` removes every DEMO trace when the app starts against live
+  UDL. Anti-shrink `merge_samples` (and
   `_enrich_sample`, which FILLS a field a stored sample is missing on a re-pull
   but never overwrites one it holds, and is deliberately NOT counted in
   `last_ingest_added`); `retain_only`
   (prunes only REAL objects not on the HRR list; keeps non-REAL); elset retention
   (`_retain_elset` newest overall, `_retain_candidates` newest per provider,
   anti-shrink so a pull missing one provider never erases it).
-- `sources.py` — `UDLElsetSource`, `ManualElsetSource`, `DemoElsetSource`
+- `sources.py` — STRICT BOUNDARY (1.7.4): `parse_row` rejects a row missing any
+  element, its `source`, its marking or a recognised `dataMode`, counted by
+  reason in `FetchStats.rejected` and surfaced as `last_ingest_rejected` on
+  `/api/meta`; every sample carries its row's provider, mode and marking.
+  Manual sets are always provider MANUAL (the operator's text is
+  `stated_source`). Demo ids are `DEMO-*` and the demo belt is NEVER built when
+  UDL is enabled. `UDLElsetSource`, `ManualElsetSource`, `DemoElsetSource`
   (whose synthetic belt carries per-object RAAN and real multi-day trails, so
   the offline demo exercises the co-planar trail path the layout probe guards);
   `_sample_from_elements` retains `raan_deg` PER SAMPLE from 1.6.17, which is
@@ -362,7 +384,11 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   (trailing-Z epoch form); `_record_elset` (files each fix under `elset`, newest
   overall, and `elset_candidates`, newest per provider).
 - `tle.py` — native line validation (checksum and satNo cross-check), source
-  classification, the selection policy, and the copy-out gate.
+  classification (SAFRAN commercial from 1.7.4), the selection policy (REAL
+  element sets before any other mode, 1.7.4), the copy-out gate (an unmarked
+  record is never "U" and never copyable, 1.7.4), and `propagation_refusal`:
+  an element set is propagated only when its record states an SGP4 ephemeris
+  type (`ephemType`, else column 63 of its own line 1) and carries its own B*.
 - `hrr.py` — dynamic JCO HRR list pull and store. THE NAMING AUTHORITY: a UDL
   record's stored name comes from `origObjectId`, which this tenant leaves
   empty, so it collapses to the catalogue number. `names()` returns satNo ->
@@ -386,9 +412,12 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
 - `events.py` — the Shift Brief's detectors (1.7.0), `detect`, `latest_splits`
   (object -> newest confirmed E-W event, which cuts the drift fit) and
   `EventEngine` (cache keyed on the store's mtime and size and the HRR ranks).
-- `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native first,
-  reconstruction fallback, with provenance). The element set that is served is
-  also the one propagated, so the displayed line always produces the shown range.
+- `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native lines or
+  none, with provenance; no reconstruction from 1.7.4). The element set that is
+  served is also the one propagated, so the displayed line always produces the
+  shown range. A target or neighbour whose element set cannot be propagated
+  without an assumption is shown but not screened; neighbours are counted in
+  `not_screened`.
 - `refresh.py` — background scheduler; `run_once`; `pull_window` (mode + absolute
   or relative window).
 - `security.py` — token gate and rate limiting.
@@ -476,6 +505,11 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `drift_deg_per_day, drift_residual_deg, drift_fit_hours, drift_fit_points,
   drift_fit_harmonic`. All five are null together when there is no usable
   baseline; a rate without its residual and span is not interpretable.
+  From 1.7.4 each track also carries `providers` (provider -> count, with
+  `untagged` for pre-1.7.4 samples), `head_source`, `provenance` (the table
+  every sample's `p` indexes), `classification_markings` (every distinct
+  marking verbatim; `classification_marking` is them joined with " | ", or
+  null) and serves ONLY samples whose own tagged mode is in the view.
   From 1.7.0 `drift_since_event` too: the epoch of the newest CONFIRMED E-W
   event, after which alone the rate is fitted, or null.
 - `GET /api/events?view=&modes=&ranks=` (1.7.0) — events newest first, filtered
@@ -489,7 +523,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   (`RED`/`BLUE`/`OTHER`/`UNKNOWN`), resolved server-side from the env policy
   lists, plus `affiliation_lists` naming the two lists in force.
 - `GET /api/conjunctions?target=<satNo>` — target TLE plus per-neighbour closest
-  approach and TLEs.
+  approach and TLEs. A TLE is null when the provider issued none, with
+  `tle_withheld_reason`; provenance carries `propagation_refused` and
+  `data_mode`; the payload carries `not_screened`.
 - `GET /api/coplanar?target=<satNo>` — the primary's plane plus, for each object
   within the half-width, a `points` list of {coplanar_deg, lon_diff_deg, epoch}
   running oldest to newest. The LAST point is the elset-derived head; the ones
@@ -1297,6 +1333,38 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- PROVENANCE RULES: BUILT in 1.7.4, 17 November 2026, at Ash's instruction
+  ("build these") from the audit's three floor rules. (1) Every position is
+  tagged with its provider, data mode and marking, de-duplicated on (provider,
+  epoch), with no enrichment across providers; tracks serve only samples whose
+  own mode is in the view and read their markings and providers from them;
+  the inspector shows Providers and Head from. (2) Nothing is filled in: rows
+  missing an element, provider, marking or recognised mode are rejected and
+  counted (`last_ingest_rejected` and reasons on `/api/meta`, named in the
+  diagnosis when everything is rejected); no reconstructed TLE; no default
+  marking; no default B*; no assumed ephemeris type; manual sets must state
+  marking, mode, B* and a time-zoned epoch, and are always provider MANUAL.
+  (3) Demo never beside UDL, `DEMO-*` ids, purge of DEMO data on a live start.
+  Also: SAFRAN commercial; REAL element sets selected before any other mode;
+  element-set candidates kept per provider AND mode. PROVEN: `tests/
+  test_provenance.py` (23 tests) and `audits/2026-11-17-tle-provenance/
+  redcases_1_7_4.py`, which reinstates the 1.7.3 behaviour one rule at a time:
+  10 of 10 guards go red. The layout probe asserts the Providers and Head from
+  rows (red case: a broken `providersText` fails it) and now FAILS rather than
+  skips a missing affiliation id (QUALITY-LEDGER D13). Two negative tests had
+  gone vacuous when fields became required and are now pinned with `match`
+  (D12). The guide's inspector figure was recaptured unscrolled with hotspots
+  MEASURED by `guide_shots.js` (they had pointed at rows the old capture did
+  not show). `prove.py` on 1.7.4: F2, F7, F8, F9, F10, F11, F13 FIXED; F1, F3,
+  F5, F6, F12 still reproduce and need the next change (per-provider tracks,
+  agreement check, residual ceiling, no projection, candidate age-out), which
+  goes to Ash as a proposal. BACKFILL: `tools/backfill_pull.py` now requires
+  1.7.4, because a re-pull is what tags history (exact-match adoption) and
+  before 1.7.4 the same re-pull enriched ACROSS providers.
+  LEGACY DATA, stated not hidden: samples stored before 1.7.4 have no
+  provenance until a re-pull matches them, and their record-level marking may
+  be an invented "U" from an unmarked row; which ones is unknowable. They show
+  as `untagged` and age out of the 90-day window if never matched.
 - ELEMENT-SET PROVENANCE AUDIT, 17 November 2026: `audits/2026-11-17-tle-provenance/
   AUDIT.md`, with `prove.py` (11 of 11 offline findings reproduced through the
   shipped modules; F4 observed live). OWNER RULE it measures against, verbatim:
@@ -1347,10 +1415,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   deg/day (`astro.py:342`), never the residual, so a 19 deg rms fit shipped
   as a rate; (3) the E-W detector fitted across the two bands and CONFIRMED a
   burn that is a provider arriving. Fix plan put to Ash, NOT BUILT.
-- DEPLOYED BUILD IS 1.7.0 OR LATER (FACT, 17 November 2026): the live app
-  answers `/api/events`, which exists only from 1.7.0. Which exactly is TBC:
-  read `version` on `/api/meta`. The Current-state header above still says
-  1.6.12 and is stale on this point.
+- DEPLOYED BUILD IS 1.7.3 (FACT, Ash, 17 November 2026), first inferred from
+  the live app answering `/api/events`. Not rolled back.
 - LIVE EVENT CALIBRATION, from Ash's `/api/events` export (ranks 1-5, 17 Nov):
   151 events in 4 days (NS 67, QUIET 46, STARTED 15, LEAVING 14, EW 8,
   STOPPED 1); 52 in the default ranks 1-3 view. FACTS: 11 of 15 STARTED have

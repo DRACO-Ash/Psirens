@@ -397,8 +397,9 @@ function transform(tracks){
     if(h===null&&nonReal===false){return;}  // REAL must be HRR-listed; sim always shows
     const meta=h||{};
     const ss=(t.samples||[]).slice().sort((a,b)=>Date.parse(a.epoch)-Date.parse(b.epoch));
-    const head=ss.length?ss[ss.length-1]:{sub_lon_deg:0,inclination_deg:0,epoch:null};
-    const ageH=head.epoch?Math.max(0,(now-Date.parse(head.epoch))/3600000):999;
+    if(!ss.length){return;}  // no position, no marker: nothing is placed at 0,0
+    const head=ss[ss.length-1];
+    const ageH=Math.max(0,(now-Date.parse(head.epoch))/3600000);
     out.push({id:t.object_id,name:meta.name||t.name||t.object_id,cc:meta.country||"",
       aff:meta.affiliation||"UNKNOWN",
       rank:meta.rank==null?5:meta.rank,lon:head.sub_lon_deg,inc:head.inclination_deg,
@@ -408,7 +409,8 @@ function transform(tracks){
       dharm:t.drift_fit_harmonic===true,dsince:t.drift_since_event||null,
       tr:ss.map(s=>[s.sub_lon_deg,s.inclination_deg,Date.parse(s.epoch)]),
       ra:(t.ra_deg==null?null:t.ra_deg),
-      mode:t.data_mode,mark:t.classification_marking,origin:t.origin,source:t.source,target:t.target});
+      mode:t.data_mode,mark:t.classification_marking,origin:t.origin,source:t.source,target:t.target,
+      provs:t.providers||{},headSrc:t.head_source||null});
   });
   return out;
 }
@@ -617,6 +619,14 @@ function driftFitText(o){
   const cut=o.dsince?` \u00b7 after the event of ${fmtZ(o.dsince)}`:"";
   return `\u00b1${o.dres.toFixed(3)}\u00b0 rms \u00b7 ${o.dh.toFixed(0)}h \u00b7 ${o.dn} fixes \u00b7 ${model}${cut}`;
 }
+// Every position names the provider whose element set produced it (1.7.4).
+// Untagged positions were stored before tagging existed and are counted as such,
+// never attributed to a provider by guesswork.
+function providersText(o){
+  const rows=Object.entries(o.provs||{}).sort((a,b)=>b[1]-a[1]);
+  if(!rows.length){return "none recorded";}
+  return rows.map(([k,n])=>`${esc(k)} ${n}`).join(" \u00b7 ");
+}
 function inspectHTML(o){if(!o)return"";
   const dr=driftText(o);
   const lons=o.tr&&o.tr.length?o.tr.map(p=>p[0]):[o.lon];
@@ -625,7 +635,9 @@ function inspectHTML(o){if(!o)return"";
   const pr=`<dt>Priority</dt><dd style="color:${rankCol(o.rank)}">${RANKS[o.rank].n}</dd>`;
   return `${evidenceHTML(o)}<div class="ins-h">${rkChip}<div><div class="ins-nm">${esc(o.name)}</div><div class="ins-id">${esc(o.id)}${o.cc?" \u00b7 "+esc(o.cc):""}</div></div></div>
     <dl class="ins-dl">${pr}<dt>Data mode</dt><dd>${esc(o.mode||"—")}</dd>
-    <dt>Classification</dt><dd>${esc(o.mark||"U")}</dd>
+    <dt>Classification</dt><dd>${esc(o.mark||"not marked")}</dd>
+    <dt>Providers</dt><dd id="insprov">${providersText(o)}</dd>
+    <dt>Head from</dt><dd>${esc(o.headSrc||"untagged (stored before 1.7.4)")}</dd>
     <dt>Longitude</dt><dd>${o.lon.toFixed(2)}\u00b0E</dd><dt>Inclination</dt><dd>${o.inc.toFixed(2)}\u00b0</dd>
     <dt>Affiliation</dt><dd style="color:${affil(o).c}">${affil(o).n}</dd>
     <dt>Drift</dt><dd>${dr}</dd><dt>Drift fit</dt><dd>${driftFitText(o)}</dd>
@@ -640,23 +652,31 @@ function relClose(iso){if(!iso){return "";}const d=Date.parse(iso)-Date.now();if
   const h=Math.floor(d/3600000),m=Math.floor(d%3600000/60000);
   return h>=24?(Math.floor(h/24)+"d "+(h%24)+"h"):(h+"h "+m+"m");}
 function provLine(p){if(p==null){return "";}
-  const badge=p.native?`<span class="tlebadge native">NATIVE</span>`:`<span class="tlebadge recon">RECONSTRUCTED</span>`;
+  const badge=p.native?`<span class="tlebadge native">NATIVE</span>`:`<span class="tlebadge recon">NO TLE ISSUED</span>`;
   const src=p.source?esc(p.source):"unattributed";
   const ep=String(p.epoch||"").slice(0,16).replace("T"," ");
   const rev=p.rev_no==null?"":` \u00b7 rev ${esc(String(p.rev_no))}`;
-  return `<div class="tleprov">${badge}<b>${src}</b><span class="muted">${esc(String(p.source_class||"unknown"))}</span><span>epoch ${esc(ep)}Z${rev}</span><span>${esc(String(p.classification_marking||"U"))}</span></div>`;}
+  const refused=p.propagation_refused?`<span class="muted">not screened: ${esc(p.propagation_refused)}</span>`:"";
+  return `<div class="tleprov">${badge}<b>${src}</b><span class="muted">${esc(String(p.source_class||"unknown"))}</span><span>epoch ${esc(ep)}Z${rev}</span><span>${esc(String(p.classification_marking||"not marked"))}</span>${refused}</div>`;}
 function copyCtl(t,p,label){
   if(p&&p.copyable){return `<button class="copybtn" type="button" data-l1="${esc(t[0])}" data-l2="${esc(t[1])}">${label}</button>`;}
   const why=p&&p.copy_denied_reason?p.copy_denied_reason:"copy-out withheld";
   return `<div class="nocopy">\u{1F512} ${esc(why)}</div>`;}
 function tleBlock(t,p,label){
-  if(t==null){return `<div class="muted">no element set for TLE</div>`;}
+  // No line is ever rebuilt here or on the server: where the provider issued
+  // none, the reason is shown with the provenance and nothing else.
+  if(t==null){return p?`<div class="muted">${esc(p.tle_withheld_reason||"no TLE line issued")}</div>${provLine(p)}`
+    :`<div class="muted">no marked element set from a provider</div>`;}
   return `<pre class="tle">${esc(t[0])}\n${esc(t[1])}</pre>${provLine(p)}${copyCtl(t,p,label)}`;}
 function nbRow(n){const hh=state.hrr[n.id]||{};const rank=hh.rank==null?5:hh.rank;
   const closest=n.min_km==null?"no close-approach solution in window"
     :`closest ${esc(fmtKm(n.min_km))} \u00b7 in ${esc(relClose(n.tca))} \u00b7 ${esc((n.tca||"").slice(0,16).replace("T"," "))}Z`;
   const tle=tleBlock(n.tle,n.tle_provenance,"Copy TLE");
   return `<details class="nb2"><summary><span class="nbdot" style="background:${rankCol(rank)}"></span><b>${esc(n.name)}</b> <i>${esc(n.id)}</i><span class="nbsep">\u0394 ${esc(fmtKm(n.range_now_km))}</span></summary><div class="nb2bd"><div class="nb2cl">${closest}</div>${tle}</div></details>`;}
+function nbSkipped(n){
+  if(!n){return "";}
+  const noun=n===1?"object":"objects";
+  return `<div class="muted">${n} nearby ${noun} not screened: element set not propagatable as issued.</div>`;}
 function loadConjunctions(id){const nb=document.getElementById("nb");if(nb===null){return;}
   fetch("/api/conjunctions?target="+encodeURIComponent(id)).then(r=>{
     if(r.ok){return r.json();}
@@ -666,12 +686,12 @@ function loadConjunctions(id){const nb=document.getElementById("nb");if(nb===nul
   }).then(j=>{
     if(state.sel!==id){return;}
     const tgt=document.getElementById("tgttle");
-    if(tgt&&j.target&&j.target.tle){tgt.innerHTML=tleBlock(j.target.tle,j.target.tle_provenance,"Copy this object\u2019s TLE");}
+    if(tgt&&j.target){tgt.innerHTML=tleBlock(j.target.tle,j.target.tle_provenance,"Copy this object\u2019s TLE");}
     const el=document.getElementById("nb"),list=j.neighbours||[];
     // A stated reason from the server beats a bare empty state: "target
     // element set is unusable" and "nothing nearby" look identical otherwise.
     const empty=j.detail?esc(j.detail):"Nothing within \u00b110\u00b0.";
-    el.innerHTML=list.length?list.map(nbRow).join(""):`<div class="muted">${empty}</div>`;
+    el.innerHTML=(list.length?list.map(nbRow).join(""):`<div class="muted">${empty}</div>`)+nbSkipped(j.not_screened);
   }).catch(err=>{const el=document.getElementById("nb");
     if(el){el.innerHTML=`<div class="muted">Conjunction service unavailable: ${esc(String(err&&err.message?err.message:err))}.</div>`;}});}
 

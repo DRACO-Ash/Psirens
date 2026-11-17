@@ -23,11 +23,14 @@ from .store import Store
 _log = logging.getLogger("psirens.refresh")
 
 
-def _mode_of(rec: dict) -> DataMode:
-    try:
-        return DataMode(rec.get("data_mode", "REAL"))
-    except ValueError:
-        return DataMode.REAL
+def _with_modes(rec: dict, modes: set[DataMode]) -> dict | None:
+    """The record keeping only samples whose OWN tagged mode is in `modes`
+    (1.7.4: one catalogue number can carry REAL and EXERCISE rows at once,
+    and filtering on the record's first row let the other mode through)."""
+    keep = [s for s in rec.get("samples", []) if s.get("data_mode") in {m.value for m in modes}]
+    if not keep:
+        return None
+    return {**rec, "samples": keep}
 
 
 def _filtered(incoming: dict[str, dict], modes: set[DataMode] | None,
@@ -35,7 +38,8 @@ def _filtered(incoming: dict[str, dict], modes: set[DataMode] | None,
     """Apply the data-mode and high-interest filters, in that order."""
     out = incoming
     if modes is not None:
-        out = {k: v for k, v in out.items() if _mode_of(v) in modes}
+        out = {k: r for k, r in ((k, _with_modes(v, modes)) for k, v in out.items())
+               if r is not None}
     if hrr_set is not None:
         out = {k: v for k, v in out.items() if k in hrr_set}
     return out
@@ -61,6 +65,9 @@ class IngestResult:
     fetched: int = 0            # distinct objects offered, before any filter
     kept: int = 0               # ...surviving the mode and high-interest filters
     hrr_size: int | None = None
+    # Rows refused at the boundary by reason (1.7.4): incomplete elements, no
+    # provider, no marking, no recognised data mode. Never filled in.
+    rejected: dict[str, int] = field(default_factory=dict)
 
 
 class Refresher:
@@ -144,6 +151,8 @@ class Refresher:
         res.requests += stats.requests
         res.request_failures += stats.failures
         res.rows += stats.rows
+        for reason, n in (getattr(stats, "rejected", None) or {}).items():
+            res.rejected[reason] = res.rejected.get(reason, 0) + n
         if stats.failures:
             res.errors.append(f"{type(src).__name__}: {stats.summary()}")
 
@@ -313,6 +322,8 @@ class Refresher:
             "last_ingest_rows": res.rows,
             "last_ingest_fetched": res.fetched,
             "last_ingest_kept": res.kept,
+            "last_ingest_rejected": sum(res.rejected.values()),
+            "last_ingest_rejected_reasons": dict(res.rejected),
             "hrr_list_size": res.hrr_size,
             "newest_sample_epoch": self.store.newest_epoch(),
             "data_age_hours": None if age is None else round(age, 2),
@@ -334,6 +345,9 @@ class Refresher:
                     (res.errors[0] if res.errors else "reason not recorded"))
         if res.requests == 0 and res.fetched == 0:
             return "no upstream pull has completed since start-up"
+        if res.fetched == 0 and res.rejected:
+            return ("every record returned was rejected at the boundary: " +
+                    "; ".join(f"{n} {why}" for why, n in sorted(res.rejected.items())))
         if res.fetched == 0:
             return "the upstream answered but returned no records for the window"
         if res.kept == 0:

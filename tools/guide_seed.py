@@ -92,6 +92,7 @@ def _elset(sat: str, prof: dict, end: datetime, marking: str) -> dict:
         "bstar": 0.0, "classification": marking, "intl_desig": sat,
         "source": "ILLUSTRATIVE", "line1": "", "line2": "", "rev_no": None,
         "mean_motion_dot": 0.0, "mean_motion_ddot": 0.0, "ephem_type": 0,
+        "data_mode": "REAL",
     }
 
 
@@ -147,6 +148,11 @@ def build(snapshot: str, end: datetime, age_hours: float, events: bool = True) -
         }
     if events and all(k in out for k in ("50322", "64467", "63524", "100172", "69235")):
         _illustrate_events(out, head)
+    for rec in out.values():   # provenance as 1.7.4 stores it: a table and an index
+        rec["provenance"] = [{"source": "ILLUSTRATIVE", "data_mode": "REAL",
+                              "classification_marking": rec["classification_marking"]}]
+        for s in rec["samples"]:
+            s["p"] = 0
     return {"objects": out}
 
 

@@ -25,6 +25,13 @@ Release. Commercial elsets carry proprietary caveats (`U//PR-...`). Whatever
 is displayed, only a line whose classification marking is plain unclassified
 and caveat-free is offered for copy-out; everything else is shown with the
 copy control withheld and the reason stated.
+
+NOTHING IS FILLED IN (1.7.4, owner rule of 17 November 2026: "It should not
+INVENT anything from ANY TLE"). A record with no marking is NOT "U": it has no
+marking, and it is withheld. No TLE is reconstructed: where the provider issued
+no line, none is shown. An element set is propagated only when its own record
+says which theory it belongs to and that theory is SGP4, and it carries its own
+B*; anything else is refused with the reason, never approximated.
 """
 
 from __future__ import annotations
@@ -53,6 +60,7 @@ class ElsetProvenance(NamedTuple):
     mean_motion_dot: float | None = None
     mean_motion_ddot: float | None = None
     ephem_type: int | None = None
+    data_mode: str = ""
 
 
 # Standard TLE line length. Providers sometimes pad or trim trailing spaces,
@@ -80,6 +88,10 @@ _GOVERNMENT_MARKERS = (
 _COMMERCIAL_MARKERS = (
     "CLOUDSTONE", "NORTHSTAR", "NORTH STAR", "EXO", "KBR", "KRTL",
     "LEOLABS", "LEO LABS",
+    # Owner decision, 17 November 2026: SAFRAN is commercial. It was on neither
+    # list, so it ranked "unknown", below every other provider, which is how
+    # the COSMOS 2589 comparison's newest agreeing fix lost to NorthStar's.
+    "SAFRAN",
 )
 
 DEFAULT_PRIORITY = (CLASS_COMMERCIAL, CLASS_GOVERNMENT, CLASS_UNKNOWN)
@@ -247,23 +259,38 @@ def _epoch_key(el: dict) -> str:
     return str(el.get("epoch") or "")
 
 
-# Every field `conjunction.build_satrec` reads without a default. An element
-# set missing any of them cannot be propagated at all.
+# Every element `conjunction.build_satrec` needs. An element set missing any
+# of them cannot be propagated, and none of them is ever defaulted.
 _REQUIRED_ELSET_KEYS = (
     "epoch", "mean_motion_rev_per_day", "eccentricity", "argp_deg",
-    "inclination_deg", "mean_anomaly_deg", "raan_deg",
+    "inclination_deg", "mean_anomaly_deg", "raan_deg", "bstar",
 )
 
+# Ephemeris type 0 (and 2, its older spelling) is the SGP4 theory this
+# application propagates with. Anything else, SGP4-XP's type 4 among them,
+# needs a different propagator, and approximating it with SGP4 would put an
+# orbit on screen that the provider never issued.
+_SGP4_TYPES = (0, 2)
+_EPHEM_COL = 62   # TLE line 1, column 63 (1-based)
 
-def is_propagatable(el: object) -> bool:
-    """Whether an element set can actually be turned into a Satrec.
 
-    Checked before selection rather than at propagation time so a malformed
-    record is skipped in favour of a usable one from another provider,
-    instead of being chosen and then failing the whole request.
-    """
-    if not isinstance(el, dict):
-        return False
+def ephem_type_of(el: dict) -> int | None:
+    """The ephemeris type the RECORD states: its own field first, then column
+    63 of its own validated native line 1. None when neither states one; the
+    absence is reported, never filled in."""
+    raw = el.get("ephem_type")
+    if raw is not None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+    line1 = str(el.get("line1") or "")
+    if len(line1) > _EPHEM_COL and line1[_EPHEM_COL].isdigit():
+        return int(line1[_EPHEM_COL])
+    return None
+
+
+def _elements_present(el: dict) -> bool:
     try:
         for key in _REQUIRED_ELSET_KEYS[1:]:
             float(el[key])  # raises on absent, None, or non-numeric
@@ -273,37 +300,67 @@ def is_propagatable(el: object) -> bool:
     return True
 
 
+def propagation_refusal(el: object) -> str | None:
+    """None when this element set may be propagated, else the reason it may
+    not. Every reason is a fact about the record, stated for the operator."""
+    if not isinstance(el, dict) or not _elements_present(el):
+        return "element set incomplete: an element or B* was not supplied"
+    etype = ephem_type_of(el)
+    if etype is None:
+        return "ephemeris type not stated by the provider"
+    if etype not in _SGP4_TYPES:
+        return f"ephemeris type {etype} is not SGP4 and is not propagated here"
+    return None
+
+
+def is_propagatable(el: object) -> bool:
+    """Whether an element set can be turned into a Satrec without anything
+    being assumed about it."""
+    return propagation_refusal(el) is None
+
+
+def _is_usable(el: object) -> bool:
+    """A candidate worth considering for display: it has an epoch and the
+    provider's own classification marking. An unmarked record is withheld."""
+    return (isinstance(el, dict) and bool(el.get("epoch"))
+            and bool(str(el.get("classification") or "").strip()))
+
+
 def candidates_of(obj: dict) -> list[dict]:
     """Every usable retained element set for an object, newest first.
 
     Falls back to the single legacy `elset` for records written before
-    per-source retention existed, so an existing store keeps working
-    unchanged rather than losing its TLEs on upgrade. The legacy set is also
-    considered when none of the per-source candidates is usable, so a bad
-    candidate never costs an object the fix it already had.
-
-    Element sets that cannot be propagated are dropped here. A record that
-    reaches selection is one that can be both served and screened.
+    per-source retention existed. Propagation is decided separately
+    (`propagation_refusal`), so an element set that cannot be screened can
+    still have its provider's own line displayed, with the reason stated.
     """
     by_source = obj.get("elset_candidates")
     items: list[dict] = []
     if isinstance(by_source, dict):
-        items = [el for el in by_source.values() if is_propagatable(el)]
-    if not items and is_propagatable(obj.get("elset")):
+        items = [el for el in by_source.values() if _is_usable(el)]
+    if not items and _is_usable(obj.get("elset")):
         items = [obj["elset"]]
     return sorted(items, key=_epoch_key, reverse=True)
+
+
+def _is_real(el: dict) -> bool:
+    return (el.get("data_mode") or "REAL") == "REAL"
 
 
 def select_elset(obj: dict, priority: tuple[str, ...] = DEFAULT_PRIORITY) -> dict | None:
     """Pick the element set to publish for this object.
 
-    First class in `priority` that holds any candidate wins; newest epoch
-    within it. An empty priority means no class ranking, so the newest
-    candidate wins outright.
+    REAL element sets first, whenever the object holds any (1.7.4): an
+    EXERCISE or SIMULATED set filed under a real catalogue number must not
+    become that object's TLE. Then the first class in `priority` that holds
+    any candidate wins, newest epoch within it. An empty priority means no
+    class ranking, so the newest candidate wins outright.
     """
     ranked = candidates_of(obj)
     if not ranked:
         return None
+    real = [el for el in ranked if _is_real(el)]
+    ranked = real or ranked
     for cls in priority:
         for el in ranked:
             if classify_source(el.get("source")) == cls:
@@ -315,9 +372,11 @@ def provenance_of(el: dict, *, native: bool) -> dict:
     """The label served alongside a line so an operator can see its origin.
 
     Every field here is read from the record. Nothing is inferred, and an
-    absent value stays absent rather than being filled with a plausible one.
+    absent value stays absent rather than being filled with a plausible one:
+    until 1.7.4 an unmarked record was labelled "U" here and then offered for
+    copy-out, which made the "no classification marking" refusal unreachable.
     """
-    marking = el.get("classification") or "U"
+    marking = str(el.get("classification") or "").strip() or None
     source = el.get("source") or ""
     copyable = is_copyable(marking)
     return {
@@ -327,7 +386,9 @@ def provenance_of(el: dict, *, native: bool) -> dict:
         "native": native,
         "classification_marking": marking,
         "rev_no": el.get("rev_no"),
-        "ephem_type": el.get("ephem_type"),
+        "ephem_type": ephem_type_of(el),
+        "data_mode": el.get("data_mode"),
+        "propagation_refused": propagation_refusal(el),
         "copyable": copyable,
         "copy_denied_reason": None if copyable else copy_denied_reason(marking),
     }

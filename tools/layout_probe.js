@@ -429,15 +429,38 @@ function checkBodyFits(m, label) {
           ? dt.nextElementSibling.textContent.trim() : "";
       })).trim();
     };
-    const wantAffil = { 43683: "Red", 41748: "Blue", 41836: "Other" };
+    // Demo ids carry the DEMO- prefix from 1.7.4: until then three of these
+    // were real high-interest catalogue numbers on synthetic positions.
+    const wantAffil = { "DEMO-A3": "Red", "DEMO-A4": "Blue", "DEMO-A1": "Other" };
     for (const [id, want] of Object.entries(wantAffil)) {
-      if (!ids.includes(id)) { continue; }
+      // A missing id FAILS. It used to be skipped, so a rename would have
+      // left this check passing while testing nothing.
+      if (!ids.includes(id)) { fail(`object ${id} is not in the watchlist, so its affiliation was not checked`); continue; }
       const got = await affilOf(id);
       console.log(`  affiliation: ${id} -> ${JSON.stringify(got)}`);
       if (got !== want) {
         fail(`object ${id} reported affiliation ${JSON.stringify(got)}, ` +
              `expected ${JSON.stringify(want)}. The policy lists, the ` +
              `/api/hrr payload and the panel are not agreeing.`);
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Provenance (1.7.4): the inspector names the provider of every position
+    // and of the head. Offline every position is the demo belt's, so both
+    // rows must read DEMO; an empty or missing row means the tags did not
+    // survive ingest, store or payload.
+    // ---------------------------------------------------------------------
+    {
+      const prov = await page.evaluate(() => {
+        const dts = Array.from(document.querySelectorAll(".ins-dl dt"));
+        const row = (n) => { const dt = dts.find((d) => d.textContent.trim() === n);
+          return dt && dt.nextElementSibling ? dt.nextElementSibling.textContent.trim() : ""; };
+        return { providers: row("Providers"), head: row("Head from") };
+      });
+      console.log(`  provenance rows: ${JSON.stringify(prov)}`);
+      if (!/^DEMO \d+$/.test(prov.providers) || prov.head !== "DEMO") {
+        fail(`the inspector does not name the provider of its positions: ${JSON.stringify(prov)}`);
       }
     }
 

@@ -6,7 +6,18 @@ Three sources implement the same shape:
   * DemoElsetSource  - deterministic synthetic belt for the offline/--demo path.
 
 Every raw elset is normalised, its sub-satellite longitude computed via the
-validated astro module, and emitted as a sample keyed by (object_id, epoch).
+validated astro module, and emitted as a sample keyed by (object_id, provider,
+epoch).
+
+PROVENANCE AND NOTHING FILLED IN (1.7.4). Owner rule, 17 November 2026: "The
+UDL is the primary source of information ... We are not in the business of
+making this up." Every sample now carries the provider, data mode and
+classification marking of the ONE record it was calculated from. A row that
+lacks any element a position needs, its provider, its marking or a recognised
+data mode is REJECTED and counted by reason (`FetchStats.rejected`), never
+completed with a default. Until 1.7.4 a missing mean anomaly, perigee, RAAN or
+eccentricity became 0.0, a missing mode became REAL and a missing marking
+became "U"; `audits/2026-11-17-tle-provenance/` reproduces each.
 """
 
 from __future__ import annotations
@@ -35,17 +46,10 @@ from .tle import ElsetProvenance, validate_native
 _log = logging.getLogger("psirens.sources")
 
 
-def _norm_mode(raw: str | None) -> DataMode:
-    try:
-        return DataMode((raw or "REAL").upper())
-    except ValueError:
-        return DataMode.REAL
-
-
 def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
                 eccentricity: float, raan_deg: float, argp_deg: float,
                 mean_anomaly_deg: float, mean_motion_rev_per_day: float,
-                bstar: float, classification: str, intl_desig: str = "",
+                bstar: float | None, classification: str, intl_desig: str = "",
                 provenance: ElsetProvenance = ElsetProvenance()) -> dict:
     """Latest mean elements retained per object so conjunctions and TLE export
     can be computed later. This is the only place the full element set survives
@@ -73,6 +77,7 @@ def _elset_dict(*, sat_no: str, epoch: datetime, inclination_deg: float,
         "mean_motion_dot": provenance.mean_motion_dot,
         "mean_motion_ddot": provenance.mean_motion_ddot,
         "ephem_type": provenance.ephem_type,
+        "data_mode": provenance.data_mode or None,
     }
 
 
@@ -94,6 +99,14 @@ def _opt_num(row: dict, key: str, cast: Callable[[object], _N]) -> _N | None:
         return None
 
 
+def candidate_key(el: dict) -> str:
+    """Candidates are kept per provider AND mode, so a provider's newer
+    EXERCISE set can never displace its REAL one under the same number."""
+    source = el.get("source") or "UNKNOWN"
+    mode = el.get("data_mode")
+    return source if mode in (None, "", "REAL") else f"{source}|{mode}"
+
+
 def _record_elset(rec: dict, el: dict) -> None:
     """File one element set against a record, per source and overall.
 
@@ -105,7 +118,7 @@ def _record_elset(rec: dict, el: dict) -> None:
     prev = rec.get("elset")
     if prev is None or el["epoch"] >= prev["epoch"]:
         rec["elset"] = el
-    key = el.get("source") or "UNKNOWN"
+    key = candidate_key(el)
     bucket = rec.setdefault("elset_candidates", {})
     held = bucket.get(key)
     if held is None or el["epoch"] >= held["epoch"]:
@@ -147,6 +160,85 @@ def _sample_from_elements(
     }
 
 
+# The elements a position needs, wire name -> stored name. Every one is
+# required: a row missing any of them is rejected, never zero-filled.
+_ROW_ELEMENTS = (
+    ("inclination", "inclination_deg"), ("eccentricity", "eccentricity"),
+    ("raan", "raan_deg"), ("argOfPerigee", "argp_deg"),
+    ("meanAnomaly", "mean_anomaly_deg"), ("meanMotion", "mean_motion_rev_per_day"),
+)
+TAG_KEYS = ("source", "data_mode", "classification_marking")
+
+
+def _row_elements(row: dict) -> dict | None:
+    out: dict = {}
+    for wire, key in _ROW_ELEMENTS:
+        val = row.get(wire)
+        if val is None or val == "":
+            return None
+        try:
+            out[key] = float(val)
+        except (TypeError, ValueError):
+            return None
+    return out
+
+
+def _row_tags(row: dict) -> dict | str:
+    """The provenance a sample carries, or the reason the row is rejected."""
+    source = str(row.get("source") or "").strip()
+    if not source:
+        return "no provider (source)"
+    marking = str(row.get("classificationMarking") or "").strip()
+    if not marking:
+        return "no classification marking"
+    try:
+        mode = DataMode(str(row.get("dataMode") or "").strip().upper())
+    except ValueError:
+        return "no recognised data mode"
+    return {"source": source, "data_mode": mode.value, "classification_marking": marking}
+
+
+def _row_epoch(row: dict) -> datetime | None:
+    try:
+        epoch = datetime.fromisoformat(str(row["epoch"]).replace("Z", "+00:00"))
+    except (KeyError, ValueError):
+        return None
+    return epoch if epoch.tzinfo is not None else None
+
+
+def parse_row(row: dict) -> tuple[str, datetime, dict, dict, dict] | str:
+    """(object id, epoch, elements, tags, sample) for one UDL row, or the
+    reason it is rejected. Nothing is defaulted."""
+    oid = str(row.get("satNo") or row.get("idOnOrbit") or row.get("id") or "")
+    if not oid:
+        return "no catalogue number"
+    epoch = _row_epoch(row)
+    if epoch is None:
+        return "no usable epoch with a time zone"
+    els = _row_elements(row)
+    if els is None:
+        return "incomplete elements"
+    tags = _row_tags(row)
+    if isinstance(tags, str):
+        return tags
+    # B* is optional on the wire and stored as absent when absent. It plays no
+    # part in a position AT the element set's own epoch (SGP4 drag terms scale
+    # with time since epoch, which is zero), so 0.0 here changes nothing; the
+    # stored element set keeps None, and propagation away from the epoch is
+    # refused without it (`tle.propagation_refusal`).
+    sample = _sample_from_elements(epoch=epoch, bstar=0.0, **els)
+    if sample is None:
+        return "SGP4 failed at the element set's own epoch"
+    sample.update(tags)
+    return oid, epoch, els, tags, sample
+
+
+def sample_key(s: dict) -> tuple[str, str]:
+    """Samples are distinct per PROVIDER and epoch: two providers' fixes at
+    the same instant are two observations, not one to be merged."""
+    return (str(s.get("source") or ""), str(s["epoch"]))
+
+
 _MIN_SLICE = timedelta(minutes=30)   # below this, subdividing stops helping
 _MAX_SPLIT_DEPTH = 6                 # 24h down to ~22 minutes
 
@@ -172,14 +264,14 @@ def _slices(start: datetime, end: datetime,
 
 def _merge_records(acc: dict[str, dict], incoming: dict[str, dict]) -> None:
     """Fold one slice's records into the accumulator, deduplicating samples by
-    epoch and keeping the newest element set per provider."""
+    (provider, epoch) and keeping the newest element set per provider."""
     for oid, rec in incoming.items():
         held = acc.get(oid)
         if held is None:
             acc[oid] = rec
             continue
-        seen = {s["epoch"] for s in held["samples"]}
-        held["samples"].extend(s for s in rec["samples"] if s["epoch"] not in seen)
+        seen = {sample_key(s) for s in held["samples"]}
+        held["samples"].extend(s for s in rec["samples"] if sample_key(s) not in seen)
         held["samples"].sort(key=lambda s: s["epoch"])
         for el in (rec.get("elset_candidates") or {}).values():
             _record_elset(held, el)
@@ -204,11 +296,17 @@ class FetchStats:
     rows: int = 0          # raw records returned, before normalisation
     objects: int = 0       # distinct objects after normalisation
     reasons: list[str] = field(default_factory=list)
+    # Rows refused at the boundary, by reason (1.7.4): incomplete elements, no
+    # provider, no marking, no recognised data mode. Counted, never filled in.
+    rejected: dict[str, int] = field(default_factory=dict)
 
     def note_failure(self, reason: str) -> None:
         self.failures += 1
         if reason not in self.reasons:
             self.reasons.append(reason)
+
+    def note_rejected(self, reason: str) -> None:
+        self.rejected[reason] = self.rejected.get(reason, 0) + 1
 
     def summary(self) -> str:
         detail = "; ".join(self.reasons[:3]) or "no reason recorded"
@@ -363,40 +461,28 @@ class UDLElsetSource:
     def _normalise(self, rows: list[dict]) -> dict[str, dict]:
         out: dict[str, dict] = {}
         for row in rows:
-            oid = str(row.get("satNo") or row.get("idOnOrbit") or row.get("id") or "")
-            if not oid:
+            parsed = parse_row(row)
+            if isinstance(parsed, str):
+                self.last_stats.note_rejected(parsed)
                 continue
-            try:
-                epoch = datetime.fromisoformat(str(row["epoch"]).replace("Z", "+00:00"))
-                els = {
-                    "inclination_deg": float(row["inclination"]),
-                    "eccentricity": float(row.get("eccentricity", 0.0)),
-                    "raan_deg": float(row.get("raan", 0.0)),
-                    "argp_deg": float(row.get("argOfPerigee", 0.0)),
-                    "mean_anomaly_deg": float(row.get("meanAnomaly", 0.0)),
-                    "mean_motion_rev_per_day": float(row["meanMotion"]),
-                    "bstar": float(row.get("bStar", 0.0)),
-                }
-                sample = _sample_from_elements(epoch=epoch, **els)
-            except (KeyError, ValueError, TypeError):
-                continue
-            if sample is None:
-                continue
+            oid, epoch, els, tags, sample = parsed
+            # Record-level fields are what the FIRST row of this response
+            # said. They are kept for older readers only; every consumer of
+            # provenance reads the sample's own tags.
             rec = out.setdefault(oid, {
                 "name": str(row.get("origObjectId") or row.get("satNo") or oid),
-                "data_mode": _norm_mode(row.get("dataMode")).value,
-                "classification_marking": str(row.get("classificationMarking", "U")),
-                "source": str(row.get("source", "UDL")),
+                **tags,
                 "origin": "UDL",
                 "target": self._target_of(row),
                 "samples": [],
             })
             rec["samples"].append(sample)
-            _record_elset(rec, self._elset_from_row(oid, row, epoch, els))
+            _record_elset(rec, self._elset_from_row(oid, row, epoch, els, tags))
         return out
 
     @staticmethod
-    def _elset_from_row(oid: str, row: dict, epoch: datetime, els: dict) -> dict:
+    def _elset_from_row(oid: str, row: dict, epoch: datetime, els: dict,
+                        tags: dict) -> dict:
         """Build the retained element set for one UDL row, native lines included.
 
         A native line is captured only if it validates against this record's
@@ -407,22 +493,31 @@ class UDLElsetSource:
         native = validate_native(row.get("line1"), row.get("line2"), oid)
         line1, line2 = native if native else ("", "")
         return _elset_dict(
-            sat_no=oid, epoch=epoch,
-            classification=str(row.get("classificationMarking", "U")),
+            sat_no=oid, epoch=epoch, bstar=_opt_num(row, "bStar", float),
+            classification=tags["classification_marking"],
             intl_desig=str(row.get("origObjectId", "") or ""),
             provenance=ElsetProvenance(
-                source=str(row.get("source", "") or ""),
+                source=tags["source"],
                 line1=line1, line2=line2,
                 rev_no=_opt_num(row, "revNo", int),
                 mean_motion_dot=_opt_num(row, "meanMotionDot", float),
                 mean_motion_ddot=_opt_num(row, "meanMotionDDot", float),
-                ephem_type=_opt_num(row, "ephemType", int)),
+                ephem_type=_opt_num(row, "ephemType", int),
+                data_mode=tags["data_mode"]),
             **els)
 
 
 # --------------------------------------------------------------------------
 # Manual (temporary, operator-supplied)
 # --------------------------------------------------------------------------
+MANUAL_PROVIDER = "MANUAL"
+DEMO_PROVIDER = "DEMO"
+# Demo objects are named so that no identifier can ever be a catalogue number.
+# Until 1.7.4 four of them reused REAL high-interest catalogue numbers
+# (41836, 28924, 43683, 41748) with synthetic positions labelled REAL.
+DEMO_ID_PREFIX = "DEMO-"
+
+
 class ManualElsetSource:
     def __init__(self, data_dir: str):
         self.data_dir = data_dir
@@ -471,41 +566,45 @@ class ManualElsetSource:
     def fetch(self, _start: datetime, _end: datetime) -> dict[str, dict]:
         out: dict[str, dict] = {}
         for i in self.list_active():
-            epoch = datetime.fromisoformat(i["epoch"])
-            sample = _sample_from_elements(
-                inclination_deg=i["inclination_deg"],
-                eccentricity=i["eccentricity"],
-                raan_deg=i["raan_deg"],
-                argp_deg=i["argp_deg"],
-                mean_anomaly_deg=i["mean_anomaly_deg"],
-                mean_motion_rev_per_day=i["mean_motion_rev_per_day"],
-                bstar=i.get("bstar", 0.0),
-                epoch=epoch,
-            )
-            if sample is None:
-                continue
-            out[i["object_id"]] = {
-                "name": i["name"],
-                "data_mode": i["data_mode"],
-                "classification_marking": i["classification_marking"],
-                "source": i["source"],
-                "origin": "MANUAL",
-                "target": i.get("target"),
-                "samples": [sample],
-                "elset": _elset_dict(
-                    sat_no=i["object_id"], epoch=epoch,
-                    inclination_deg=i["inclination_deg"], eccentricity=i["eccentricity"],
-                    raan_deg=i["raan_deg"], argp_deg=i["argp_deg"],
-                    mean_anomaly_deg=i["mean_anomaly_deg"],
-                    mean_motion_rev_per_day=i["mean_motion_rev_per_day"],
-                    bstar=i.get("bstar", 0.0),
-                    classification=i["classification_marking"],
-                    provenance=ElsetProvenance(
-                        source=str(i.get("source", "MANUAL") or "MANUAL")),
-                    intl_desig=str(i["object_id"])),
-            }
+            rec = self._record(i)
+            if rec is not None:
+                out[i["object_id"]] = rec
         self.last_stats = FetchStats(objects=len(out))
         return out
+
+    @staticmethod
+    def _record(i: dict) -> dict | None:
+        """One operator-supplied element set as a store record.
+
+        The PROVIDER is always MANUAL, whatever the operator typed as the
+        source: an operator is not SAFRAN or 18 SDS, and a manual set filed
+        under a provider's name would have competed in TLE selection as that
+        provider. The operator's own words are kept as `stated_source`. An
+        entry missing a marking, a data mode or B* (possible only in a
+        manual.json written before 1.7.4, when all three had defaults) is
+        skipped rather than completed.
+        """
+        if not all(i.get(k) not in (None, "") for k in
+                   ("classification_marking", "data_mode", "bstar")):
+            return None
+        epoch = datetime.fromisoformat(i["epoch"])
+        els = {k: i[k] for k in ("inclination_deg", "eccentricity", "raan_deg",
+                                 "argp_deg", "mean_anomaly_deg",
+                                 "mean_motion_rev_per_day")}
+        sample = _sample_from_elements(epoch=epoch, bstar=float(i["bstar"]), **els)
+        if sample is None:
+            return None
+        tags = {"source": MANUAL_PROVIDER, "data_mode": i["data_mode"],
+                "classification_marking": i["classification_marking"]}
+        sample.update(tags)
+        el = _elset_dict(sat_no=i["object_id"], epoch=epoch, bstar=float(i["bstar"]),
+                         classification=i["classification_marking"],
+                         provenance=ElsetProvenance(source=MANUAL_PROVIDER,
+                                                    data_mode=i["data_mode"]),
+                         intl_desig=str(i["object_id"]), **els)
+        el["stated_source"] = str(i.get("source") or "")
+        return {"name": i["name"], **tags, "origin": "MANUAL",
+                "target": i.get("target"), "samples": [sample], "elset": el}
 
 
 # --------------------------------------------------------------------------
@@ -515,6 +614,12 @@ class DemoElsetSource:
     """Synthetic GEO belt: station-kept anchors, longitude drifters, an
     inclined-orbit object, and an EXERCISE inspector that closes on a target.
     Deterministic given `now` so tests and CI are stable and offline-safe.
+
+    SYNTHETIC, AND KEPT AWAY FROM A LIVE STORE (1.7.4). It is never built when
+    UDL is enabled, whatever DEMO_MODE says (`main._build_sources`); every id
+    starts with DEMO- so none can be a catalogue number; every sample is tagged
+    provider DEMO; and a live start purges anything DEMO-tagged from the store
+    (`Store.purge_synthetic`).
     """
 
     _GEO_MM = 1.0027379093  # sidereal rev/day
@@ -533,46 +638,46 @@ class DemoElsetSource:
         # every neighbour's trail at one point offline and leave the new path
         # unexercised by the probe.
         anchors = [
-            ("41836", "SES-10", -67.0, 0.02, "REAL", 15.0),
-            ("28924", "EUTELSAT 174A", 174.0, 0.05, "REAL", 95.0),
-            ("43683", "BEIDOU-3 G1", 140.0, 1.9, "REAL", 210.0),
-            ("41748", "USA 270", 105.0, 3.6, "REAL", 300.0),
+            ("DEMO-A1", "ANCHOR-W67", -67.0, 0.02, "REAL", 15.0),
+            ("DEMO-A2", "ANCHOR-E174", 174.0, 0.05, "REAL", 95.0),
+            ("DEMO-A3", "ANCHOR-E140", 140.0, 1.9, "REAL", 210.0),
+            ("DEMO-A4", "ANCHOR-E105", 105.0, 3.6, "REAL", 300.0),
         ]
         for oid, name, lon, inc, mode, raan in anchors:
             out[oid] = self._track(oid, name, mode, "DEMO", None,
                                    self._span(now, 30, lon, inc, 0.0, raan))
 
         # 2) Longitude drifter (REAL), moving east ~0.9 deg/day over 40 days.
-        out["90210"] = self._track(
-            "90210", "DRIFTER-1", "REAL", "DEMO", None,
+        out["DEMO-D1"] = self._track(
+            "DEMO-D1", "DRIFTER-1", "REAL", "DEMO", None,
             self._span(now, 40, 120.0, 3.1, 0.9, 128.0),
         )
         # 3) Relocating satellite (SIMULATED), west then station-keeping.
-        out["99001"] = self._track(
-            "99001", "RELOCATE-SIM", "SIMULATED", "DEMO", None,
+        out["DEMO-S1"] = self._track(
+            "DEMO-S1", "RELOCATE-SIM", "SIMULATED", "DEMO", None,
             self._span(now, 30, 90.0, 0.4, -1.4, 44.0),
         )
         # 4) Inclined-orbit object climbing in inclination (TEST).
         incl = self._span(now, 25, 62.0, 0.5, 0.0, 262.0)
         for k, s in enumerate(incl):
             s["inclination_deg"] = round(0.5 + 0.11 * k, 4)
-        out["55555"] = self._track("55555", "INCLINED-TEST", "TEST", "DEMO", None, incl)
+        out["DEMO-T1"] = self._track("DEMO-T1", "INCLINED-TEST", "TEST", "DEMO", None, incl)
 
-        # 5) EXERCISE inspector closing on anchor 43683 (its labelled target).
-        out["77777"] = self._track(
-            "77777", "INSPECTOR-EX", "EXERCISE", "DEMO", "43683",
+        # 5) EXERCISE inspector closing on anchor DEMO-A3 (its labelled target).
+        out["DEMO-X1"] = self._track(
+            "DEMO-X1", "INSPECTOR-EX", "EXERCISE", "DEMO", "DEMO-A3",
             self._span(now, 20, 133.0, 1.5, 0.35, 208.0),
         )
-        # 6) A co-located cluster around BEIDOU-3 G1 at 140E. Real neighbourhoods
+        # 6) A co-located cluster around anchor DEMO-A3 at 140E. Real neighbourhoods
         # in the belt are crowded, and the offline belt was not: with two
         # neighbours the co-planar chart could never exercise label collision,
         # so the guard for it would have passed on a chart that had nothing to
         # collide. Same reasoning as the 30-day anchor trails above.
         cluster = [
-            ("90301", "CLUSTER-ALPHA", 138.5, 0.3, 203.0, 0.05),
-            ("90302", "CLUSTER-BRAVO", 141.2, 2.1, 212.0, -0.08),
-            ("90303", "CLUSTER-CHARLIE", 142.6, 1.2, 188.0, 0.12),
-            ("90304", "CLUSTER-DELTA", 136.9, 3.0, 249.0, -0.03),
+            ("DEMO-C1", "CLUSTER-ALPHA", 138.5, 0.3, 203.0, 0.05),
+            ("DEMO-C2", "CLUSTER-BRAVO", 141.2, 2.1, 212.0, -0.08),
+            ("DEMO-C3", "CLUSTER-CHARLIE", 142.6, 1.2, 188.0, 0.12),
+            ("DEMO-C4", "CLUSTER-DELTA", 136.9, 3.0, 249.0, -0.03),
         ]
         for oid, name, lon, inc, raan, rate in cluster:
             out[oid] = self._track(oid, name, "REAL", "DEMO", None,
@@ -582,12 +687,12 @@ class DemoElsetSource:
         # other demo object has one fix a day, which no event detector can
         # read, so without these the offline belt has no events and the probe
         # guarding the brief, the timeline and focus mode would pass on a page
-        # that had nothing to show. One burns westward towards BEIDOU-3 G1;
+        # that had nothing to show. One burns westward towards DEMO-A3;
         # the other stops reporting while the rest of the belt carries on.
-        out["90401"] = self._track("90401", "MANOEUVRE-DEMO", "REAL", "DEMO", None,
+        out["DEMO-M1"] = self._track("DEMO-M1", "MANOEUVRE-DEMO", "REAL", "DEMO", None,
                                    self._dense(now, lon0=150.4, inc=0.8, raan=230.0,
                                                burn_h=40.0, rate=-0.5))
-        out["90402"] = self._track("90402", "SILENT-DEMO", "REAL", "DEMO", None,
+        out["DEMO-Q1"] = self._track("DEMO-Q1", "SILENT-DEMO", "REAL", "DEMO", None,
                                    self._dense(now, lon0=-20.0, inc=0.3, raan=80.0,
                                                stop_h=16.0))
 
@@ -596,6 +701,7 @@ class DemoElsetSource:
             rec["elset"] = self._demo_elset(
                 oid, head["sub_lon_deg"], head["inclination_deg"],
                 datetime.fromisoformat(head["epoch"]), head["raan_deg"])
+            rec["elset"]["data_mode"] = rec["data_mode"]
         self.last_stats = FetchStats(objects=len(out))
         return out
 
@@ -618,7 +724,7 @@ class DemoElsetSource:
             raan_deg=raan, argp_deg=0.0, mean_anomaly_deg=mean_anom,
             mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
             classification="U", intl_desig="",
-            provenance=ElsetProvenance(source="DEMO"))
+            provenance=ElsetProvenance(source=DEMO_PROVIDER, ephem_type=0))
 
     def _span(self, now: datetime, days: int, lon0: float, inc: float,
               rate: float, raan: float = 0.0) -> list[dict]:
@@ -671,8 +777,9 @@ class DemoElsetSource:
 
     @staticmethod
     def _track(oid, name, mode, origin, target, samples) -> dict:
-        return {
-            "name": name, "data_mode": mode, "classification_marking": "U",
-            "source": "DEMO", "origin": origin, "target": target,
-            "samples": samples,
-        }
+        tags = {"source": DEMO_PROVIDER, "data_mode": mode,
+                "classification_marking": "U"}
+        for s in samples:
+            s.update(tags)
+        return {"name": name, **tags, "origin": origin, "target": target,
+                "samples": samples}

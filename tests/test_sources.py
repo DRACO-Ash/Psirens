@@ -16,24 +16,29 @@ def test_manual_elset_accepts_all_four_modes():
                           epoch=datetime(2026, 7, 1, tzinfo=timezone.utc),
                           inclination_deg=3.0, eccentricity=0.0, raan_deg=0.0,
                           argp_deg=0.0, mean_anomaly_deg=0.0,
-                          mean_motion_rev_per_day=1.0027, data_mode=m)
+                          mean_motion_rev_per_day=1.0027, bstar=0.0, classification_marking="U", data_mode=m)
         assert e.data_mode == DataMode(m)
 
 
 def test_manual_elset_rejects_bad_inclination():
-    with pytest.raises(ValidationError):
+    # `match` pins the failure to the field under test: once marking, mode
+    # and B* became required (1.7.4) an unpinned raises() passed on ANY
+    # missing field and stopped testing the inclination at all.
+    with pytest.raises(ValidationError, match="inclination_deg"):
         ManualElsetIn(object_id="X", name="x",
                       epoch=datetime(2026, 7, 1, tzinfo=timezone.utc),
                       inclination_deg=999.0, eccentricity=0.0, raan_deg=0.0,
-                      argp_deg=0.0, mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0)
+                      argp_deg=0.0, mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0,
+                      bstar=0.0, data_mode="REAL", classification_marking="U")
 
 
 def test_manual_elset_rejects_bad_eccentricity():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="eccentricity"):
         ManualElsetIn(object_id="X", name="x",
                       epoch=datetime(2026, 7, 1, tzinfo=timezone.utc),
                       inclination_deg=3.0, eccentricity=1.5, raan_deg=0.0,
-                      argp_deg=0.0, mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0)
+                      argp_deg=0.0, mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0,
+                      bstar=0.0, data_mode="REAL", classification_marking="U")
 
 
 # -- demo source --------------------------------------------------------
@@ -49,7 +54,7 @@ def test_demo_source_is_deterministic_and_covers_all_modes():
 def test_demo_source_has_target_link():
     now = datetime(2026, 7, 20, tzinfo=timezone.utc)
     recs = DemoElsetSource().fetch(now - timedelta(days=20), now)
-    assert recs["77777"]["target"] == "43683"
+    assert recs["DEMO-X1"]["target"] == "DEMO-A3"
 
 
 # -- manual source (temporary, TTL) ------------------------------------
@@ -59,7 +64,7 @@ def test_manual_add_list_and_expiry(tmp_path):
     e = ManualElsetIn(object_id="M1", name="temp", epoch=now,
                       inclination_deg=2.0, eccentricity=0.0, raan_deg=10.0,
                       argp_deg=0.0, mean_anomaly_deg=0.0,
-                      mean_motion_rev_per_day=1.0027, ttl_hours=1.0)
+                      mean_motion_rev_per_day=1.0027, bstar=0.0, classification_marking="U", data_mode="SIMULATED", ttl_hours=1.0)
     src.add(e, now=now)
     assert len(src.list_active(now=now)) == 1
     # after TTL the entry is gone (and pruned)
@@ -73,7 +78,7 @@ def test_manual_source_fetch_computes_sample(tmp_path):
     now = datetime.now(timezone.utc)
     src.add(ManualElsetIn(object_id="M2", name="t", epoch=now,
             inclination_deg=1.0, eccentricity=0.0, raan_deg=0.0, argp_deg=0.0,
-            mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0027,
+            mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0027, bstar=0.0, classification_marking="U", data_mode="SIMULATED",
             target="43683"))
     recs = src.fetch(now - timedelta(days=1), now)
     assert "M2" in recs and recs["M2"]["target"] == "43683"
@@ -85,7 +90,7 @@ def test_manual_remove(tmp_path):
     now = datetime(2026, 7, 20, tzinfo=timezone.utc)
     src.add(ManualElsetIn(object_id="M3", name="t", epoch=now,
             inclination_deg=1.0, eccentricity=0.0, raan_deg=0.0, argp_deg=0.0,
-            mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0027), now=now)
+            mean_anomaly_deg=0.0, mean_motion_rev_per_day=1.0027, bstar=0.0, classification_marking="U", data_mode="SIMULATED"), now=now)
     assert src.remove("M3") is True
     assert src.remove("nope") is False
 
@@ -140,9 +145,9 @@ def test_udl_fetch_failure_is_never_fatal():
 # -- native TLE capture at ingest ---------------------------------------
 def _native_pair(oid="43683"):
     """A genuine checksum-correct line pair for `oid`, from the exporter."""
-    from psirens.conjunction import tle_lines
+    from fixture_tle import export_lines
     from psirens.sources import _elset_dict
-    lines = tle_lines(_elset_dict(
+    lines = export_lines(_elset_dict(
         sat_no=oid, epoch=datetime(2026, 7, 1, tzinfo=timezone.utc),
         inclination_deg=1.9, eccentricity=0.0002, raan_deg=100.0,
         argp_deg=20.0, mean_anomaly_deg=30.0, mean_motion_rev_per_day=1.0027,

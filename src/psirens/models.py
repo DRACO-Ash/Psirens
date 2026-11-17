@@ -56,6 +56,12 @@ class ManualElsetIn(BaseModel):
 
     Accepts classical mean Keplerian elements directly so no TLE-string
     construction (with its checksum and exponent traps) is required.
+
+    NOTHING DEFAULTED (1.7.4). The marking, the data mode and B* are required:
+    until then they defaulted to "U", SIMULATED and 0.0, so an operator who
+    left the marking out published an element set as Unclassified. The stored
+    PROVIDER of a manual set is always MANUAL; `source` is kept only as the
+    operator's own note of where the numbers came from.
     """
 
     object_id: str = Field(min_length=1, max_length=64)
@@ -67,17 +73,29 @@ class ManualElsetIn(BaseModel):
     argp_deg: float = Field(ge=0.0, le=360.0)
     mean_anomaly_deg: float = Field(ge=0.0, le=360.0)
     mean_motion_rev_per_day: float = Field(gt=0.0, le=20.0)
-    bstar: float = 0.0
-    data_mode: DataMode = DataMode.SIMULATED
-    classification_marking: str = Field(default="U", max_length=64)
-    source: str = Field(default="MANUAL", max_length=64)
+    bstar: float
+    data_mode: DataMode
+    classification_marking: str = Field(min_length=1, max_length=64)
+    source: str = Field(default="", max_length=64)
     target: str | None = Field(default=None, max_length=120)
     ttl_hours: float = Field(default=24.0, gt=0.0, le=24.0 * 365.0)
 
     @field_validator("epoch")
     @classmethod
     def _tz_aware(cls, v: datetime) -> datetime:
-        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+        # Refused rather than assumed to be UTC (1.7.4): an epoch is a fact
+        # the operator states, and a guessed time zone moves the object.
+        if v.tzinfo is None:
+            raise ValueError("the epoch must state its time zone, e.g. a trailing Z")
+        return v
+
+    @field_validator("classification_marking")
+    @classmethod
+    def _marked(cls, v: str) -> str:
+        text = v.strip()
+        if not text:
+            raise ValueError("a classification marking is required")
+        return text
 
 
 class Sample(BaseModel):

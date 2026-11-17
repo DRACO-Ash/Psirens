@@ -439,6 +439,26 @@ seen and shipped again in 1.7.1. **When a pasted report ends on a heading, ask
 for the section, or read `sonar-issues.json`, which the job uploads on every
 failure.** A fix for a partial report is a partial fix.
 
+### D12. A rejection test that passed for the wrong reason (1.7.4)
+`test_manual_elset_rejects_bad_inclination` asserted only that a
+`ValidationError` was raised. Once marking, data mode and B* became required,
+it raised on the missing fields and stopped testing the inclination at all,
+while still passing. Found by reading the fixtures after the suite went green,
+not by the suite. **Pin a rejection test to the field it is about**
+(`pytest.raises(ValidationError, match="inclination_deg")`), and re-read every
+negative test whenever a model gains a required field.
+
+### D13. A probe that skipped what it could not find, and hotspots that pointed at nothing (1.7.4)
+The layout probe's affiliation check did `if (!ids.includes(id)) continue;`, so
+renaming the demo catalogue numbers would have left it passing while checking
+nothing. It now fails on a missing id. In the same pass the Operator Guide's
+inspector hotspots turned out to have been wrong since they were drawn: the
+capture was scrolled past the identity and state rows the hotspots pointed at.
+The capture is now taken unscrolled and the capture script MEASURES every row
+and prints the hotspot table. **A check that skips on missing input is a check
+that can be renamed out of existence; positions copied from a measurement beat
+positions estimated from a picture.**
+
 ### D6. A false positive in our own checker
 The zero-fraction pattern `\d+\.0` matched `127.0.0.1`. Found by running the
 checker over our own tree before publishing it. Fixed with a trailing negative
@@ -611,6 +631,12 @@ Ordered by return on effort, from this project's evidence.
     {"id": "D9", "title": "a red case masked by the test's own fixture",
      "fixed_in": "1.7.1", "cost": "a guard that claimed to bite and did not",
      "guard": "every red case is run, never asserted"},
+    {"id": "D13", "title": "probe skipped a missing id; guide hotspots pointed at rows the capture did not show",
+     "fixed_in": "1.7.4", "cost": "a check that could be renamed away; a guide figure wrong since it was drawn",
+     "guard": "fail on missing input; hotspots measured by the capture script"},
+    {"id": "D12", "title": "rejection test passed on a different missing field",
+     "fixed_in": "1.7.4", "cost": "two tests silently stopped testing their field",
+     "guard": "pytest.raises(..., match=<field>) on every negative test"},
     {"id": "D11", "title": "a truncated quality report read as a complete one",
      "fixed_in": "1.7.2", "cost": "a second upload cycle",
      "guard": "a report ending on a heading is incomplete: ask, or read sonar-issues.json"},
