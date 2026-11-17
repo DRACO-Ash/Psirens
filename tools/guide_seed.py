@@ -88,7 +88,7 @@ def _elset(sat: str, prof: dict, end: datetime, marking: str) -> dict:
         "raan_deg": round(prof["raan"], 4),
         "argp_deg": round(prof["argp"], 4),
         "mean_anomaly_deg": round(prof["ma"], 4),
-        "mean_motion_rev_per_day": round(_GEO_MM - prof["drift"] / 360.0, 9),
+        "mean_motion_rev_per_day": round(_GEO_MM + prof["drift"] / 360.0, 9),
         "bstar": 0.0, "classification": marking, "intl_desig": sat,
         "source": "ILLUSTRATIVE", "line1": "", "line2": "", "rev_no": None,
         "mean_motion_dot": 0.0, "mean_motion_ddot": 0.0, "ephem_type": 0,

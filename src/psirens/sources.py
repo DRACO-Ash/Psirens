@@ -623,6 +623,13 @@ class DemoElsetSource:
     """
 
     _GEO_MM = 1.0027379093  # sidereal rev/day
+    # The drift each synthetic trail is built with, deg/day east (1.7.8). The
+    # element set must state the SAME rate as the trail, because the published
+    # drift is now the element sets' own rate; a synthetic set at synchronous
+    # motion would publish zero for an object the trail shows drifting.
+    _ELSET_RATES = {"DEMO-D1": 0.9, "DEMO-S1": -1.4, "DEMO-X1": 0.35,
+                    "DEMO-C1": 0.05, "DEMO-C2": -0.08, "DEMO-C3": 0.12, "DEMO-C4": -0.03,
+                    "DEMO-M1": -0.5, "DEMO-M2": -0.5}
 
     def __init__(self) -> None:
         self.last_stats = FetchStats()
@@ -707,7 +714,8 @@ class DemoElsetSource:
             head = rec["samples"][-1]
             rec["elset"] = self._demo_elset(
                 oid, head["sub_lon_deg"], head["inclination_deg"],
-                datetime.fromisoformat(head["epoch"]), head["raan_deg"])
+                datetime.fromisoformat(head["epoch"]), head["raan_deg"],
+                rate=self._ELSET_RATES.get(oid, 0.0))
             rec["elset"]["data_mode"] = rec["data_mode"]
         out["DEMO-P1"] = self._providers_demo(now)
         self.last_stats = FetchStats(objects=len(out))
@@ -733,7 +741,7 @@ class DemoElsetSource:
             head = pts[-1]
             el = self._demo_elset("DEMO-P1", head["sub_lon_deg"], head["inclination_deg"],
                                   datetime.fromisoformat(head["epoch"]), head["raan_deg"],
-                                  source=source)
+                                  source=source, rate=rate)
             el["data_mode"] = "REAL"
             cands[source] = el
             samples.extend(pts)
@@ -744,7 +752,8 @@ class DemoElsetSource:
 
     @staticmethod
     def _demo_elset(oid: str, lon: float, inc: float, epoch: datetime,
-                    raan: float = 0.0, source: str = DEMO_PROVIDER) -> dict:
+                    raan: float = 0.0, source: str = DEMO_PROVIDER,
+                    rate: float = 0.0) -> dict:
         """Approximate mean elements placing a circular GEO object near `lon`:
         with argp=0 and e~0, right ascension ~= RAAN + mean anomaly, so the
         sub-longitude is RAAN + mean anomaly - GMST. The RAAN is carried in
@@ -759,7 +768,7 @@ class DemoElsetSource:
         return _elset_dict(
             sat_no=oid, epoch=epoch, inclination_deg=inc, eccentricity=0.0002,
             raan_deg=raan, argp_deg=0.0, mean_anomaly_deg=mean_anom,
-            mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
+            mean_motion_rev_per_day=DemoElsetSource._GEO_MM + rate / 360.0, bstar=0.0,
             classification="U", intl_desig="",
             provenance=ElsetProvenance(source=source, ephem_type=0))
 

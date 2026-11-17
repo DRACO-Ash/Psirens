@@ -20,7 +20,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from psirens.agreement import (AGREED, DISPUTED, SINGLE, UNCHECKED, Policy, Resolver,
-                               judge, lon_at, resolve, resolve_data, separation_deg)
+                               elset_rate, judge, lon_at, resolve, resolve_data,
+                               separation_deg)
 from psirens.astro import sub_longitude_deg
 from psirens.config import Config
 from psirens.conjunction import conjunctions_for
@@ -71,7 +72,7 @@ def rows(provider: str, lon0: float, *, rate: float = 0.0, hours: float = 96.0,
          ephem: int | None = 0, mode: str = "REAL", sat: str = SAT,
          scatter: float = 0.0) -> list[dict]:
     """UDL-shaped rows for one provider's view of one object."""
-    n = GEO_N - rate / 360.0
+    n = GEO_N + rate / 360.0   # faster than synchronous drifts EAST
     out, t, k = [], end - timedelta(hours=hours), 0
     while t <= end:
         days = (t - (end - timedelta(hours=hours))).total_seconds() / 86400.0
@@ -358,3 +359,78 @@ def test_lon_at_reads_the_provider_own_elements():
     assert lon_at(el, NOW) == pytest.approx(127.9, abs=1e-3)
     assert lon_at({**el, "ephem_type": 4}, NOW) is None
     assert resolve({"samples": []}, Policy())["samples"] == []
+
+
+# -- 1.7.8: a consensus drift rate, from the providers' own element sets ---------
+def _line_el(epoch_day: float, inc, raan, ecc, argp, ma, n, bstar) -> dict:
+    when = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(days=epoch_day - 1.0)
+    return {"epoch": when.isoformat(), "inclination_deg": inc, "raan_deg": raan,
+            "eccentricity": ecc, "argp_deg": argp, "mean_anomaly_deg": ma,
+            "mean_motion_rev_per_day": n, "bstar": bstar, "ephem_type": 0}
+
+
+def test_the_element_set_rate_reproduces_the_cosmos_2589_lines():
+    """Ash's two lines of 17 November 2026, verbatim elements. The vendor
+    comparison put COSMOS 2589 at -0.022 to -0.026 deg/day."""
+    udl = _line_el(321.41066406, 0.3274, 86.4242, 0.0007366, 37.1819, 208.6412,
+                   1.00265344, -6.3064e-5)
+    northstar = _line_el(321.35849668, 0.3270, 86.3698, 0.0006840, 38.8569, 124.4911,
+                         0.99642971, 0.0)
+    assert elset_rate(udl) == pytest.approx(-0.0257, abs=0.002)
+    assert elset_rate(northstar) == pytest.approx(-2.27, abs=0.02)
+
+
+def test_one_full_orbit_cancels_the_eccentricity_libration():
+    """An e = 0.0022 orbit swings 0.25 deg east-west once per orbit; sampled
+    over less than a whole orbit that swing would read as drift."""
+    el = _line_el(321.0, 0.05, 80.0, 0.0002, 90.0, 10.0, GEO_N, 1e-5)
+    eccentric = {**el, "eccentricity": 0.0022}
+    assert elset_rate(eccentric) == pytest.approx(elset_rate(el), abs=1e-3)
+    faster = {**el, "mean_motion_rev_per_day": GEO_N + 0.5 / 360.0}
+    assert elset_rate(faster) - elset_rate(el) == pytest.approx(0.5, abs=0.01)  # east
+
+
+def test_a_rate_is_published_with_hours_of_history_not_days(tmp_path):
+    """The owner's report of 17 November 2026: every object read "no usable
+    baseline" because each provider held under 24 h of tagged fixes. The
+    agreeing providers' element sets carry a rate from the first fix."""
+    store = ingest(tmp_path, rows("SAFRAN", 92.2, rate=-0.3, hours=6)
+                   + rows("KBR", 92.21, rate=-0.3, hours=6)
+                   + rows("EXO", 92.19, rate=-0.3, hours=6))
+    t = track(tmp_path, store)
+    assert t["drift_observed_deg_per_day"] is None
+    assert "no usable baseline" in t["drift_observed_withheld_reason"]
+    assert t["drift_basis"] == "element_sets"
+    assert t["drift_withheld_reason"] is None
+    assert t["drift_deg_per_day"] == pytest.approx(-0.3, abs=0.02)
+    assert t["drift_consensus"]["count"] == 3
+
+
+def test_the_consensus_never_counts_a_provider_set_aside(tmp_path):
+    t = track(tmp_path, _cosmos(tmp_path))
+    cons = t["drift_consensus"]
+    assert "NorthStar" not in cons["providers"] and cons["count"] == 4
+    assert cons["min_deg_per_day"] <= t["drift_deg_per_day"] <= cons["max_deg_per_day"]
+    assert t["providers"]["NorthStar"]["elset_rate_deg_per_day"] == pytest.approx(-2.28, abs=0.05)
+    assert t["drift_deg_per_day"] == pytest.approx(-0.024, abs=0.01)
+
+
+def test_one_checked_provider_is_published_as_one_source(tmp_path):
+    t = track(tmp_path, ingest(tmp_path, rows("SAFRAN", 40.0, rate=0.2, hours=6)))
+    assert t["agreement"]["status"] == SINGLE
+    assert t["drift_basis"] == "element_sets" and t["drift_consensus"]["count"] == 1
+
+
+def test_the_observed_track_is_kept_beside_the_consensus_as_a_cross_check(tmp_path):
+    """Samples drift west at 0.5 deg/day for four days while every element set
+    states synchronous motion: the consensus is published, the observed fit is
+    shown beside it, and the disagreement is flagged rather than hidden."""
+    batch = []
+    for name, off in (("SAFRAN", 0.0), ("KBR", 0.01)):
+        batch += [{**r, "meanMotion": GEO_N} for r in rows(name, 60.0 + off, rate=-0.5)]
+    t = track(tmp_path, ingest(tmp_path, batch))
+    assert t["drift_basis"] == "element_sets"
+    assert t["drift_observed_deg_per_day"] == pytest.approx(-0.5, abs=0.05)
+    assert t["drift_crosscheck"]["agrees"] is False
+    assert t["drift_crosscheck"]["difference_deg_per_day"] < -0.4
+

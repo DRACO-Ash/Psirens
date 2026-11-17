@@ -161,6 +161,44 @@ def _drift_block(pairs: list[tuple[datetime, float]],
     }
 
 
+# The element-set consensus and the observed track disagree when their rates
+# differ by more than this, deg/day: the "on station" readout's own threshold.
+CROSSCHECK_DEG_PER_DAY = 0.05
+
+
+def _drift_payload(observed: dict, cons: dict | None) -> dict:
+    """The published drift rate (1.7.8): the CONSENSUS of the agreeing
+    providers' own element sets whenever there is one, and the observed track
+    fit beside it as a cross-check, never in place of it.
+
+    Owner, 17 November 2026: "now we have sorted the provider states, we need
+    to come to a consensus on the actual drift rate, I cannot have nothing".
+    The observed fit needs 24 h of ONE provider's tagged fixes, so after 1.7.5
+    every object read "no usable baseline" until that history built up. The
+    element sets need no history: each states its own mean motion, and
+    `agreement.elset_rate` turns it into a rate by SGP4 over one orbit.
+
+    `drift_residual_deg`, `drift_fit_hours`, `drift_fit_points` and
+    `drift_fit_harmonic` keep describing the observed fit, and are null when
+    there is none; `drift_basis` says which one `drift_deg_per_day` is.
+    """
+    out = {**observed,
+           "drift_observed_deg_per_day": observed["drift_deg_per_day"],
+           "drift_observed_withheld_reason": observed["drift_withheld_reason"],
+           "drift_consensus": cons, "drift_basis": None, "drift_crosscheck": None}
+    obs = observed["drift_deg_per_day"]
+    if cons is None:
+        out["drift_basis"] = "observed_fit" if obs is not None else None
+        return out
+    rate = cons["rate_deg_per_day"]
+    out.update(drift_deg_per_day=rate, drift_basis="element_sets", drift_withheld_reason=None)
+    if obs is not None:
+        diff = obs - rate
+        out["drift_crosscheck"] = {"difference_deg_per_day": round(diff, 4),
+                                   "agrees": abs(diff) <= CROSSCHECK_DEG_PER_DAY}
+    return out
+
+
 def _stream_for(rec: dict, modes: set[DataMode]) -> tuple[str | None, list[dict]]:
     """The one stream this view shows: REAL before any other mode, and within
     a mode only the provider the agreement check chose (1.7.5)."""
@@ -208,7 +246,8 @@ def _track_entry(oid: str, rec: dict, modes: set[DataMode], since: datetime | No
         "origin": rec.get("origin", ""),
         "target": rec.get("target"),
         "samples": samples,
-        **_drift_block(pairs, since, ceiling, drift_withheld(block)),
+        **_drift_payload(_drift_block(pairs, since, ceiling, drift_withheld(block)),
+                         block.get("consensus")),
         "ra_deg": el.get("raan_deg"),
     }
 
@@ -681,7 +720,7 @@ def create_app(cfg: Config | None = None,
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="1.7.7", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.7.8", lifespan=_lifespan)
     # Request context for every log line, and one standard request line. The
     # X-Auth-Request-Email header becomes user.email, as the standard requires;
     # LOG_USER_EMAIL=false switches that off (see config.py).

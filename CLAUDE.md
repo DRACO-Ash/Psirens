@@ -57,7 +57,18 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.7; DEPLOYED 1.7.3, Active)
+## Current state (repo 1.7.8; DEPLOYED 1.7.7, per Ash's live screenshots of 17 November)
+
+1.7.8, 17 November 2026: a CONSENSUS DRIFT RATE. Ash, from four live
+inspector panels all reading "no usable baseline": "now we have sorted the
+provider states, we need to come to a consensus on the actual drift rate, I
+cannot have nothing." The published rate is now the median of the AGREEING
+providers' own element-set rates (`agreement.elset_rate`: SGP4 over exactly
+one orbit, so eccentricity libration cancels), available from the first fix;
+the observed track fit is kept beside it as a cross-check, flagged when the
+two differ by more than 0.05 deg/day. See the 1.7.8 entry in Open items.
+DEPLOYED BUILD: INFERENCE from the screenshots (the Agreement and Track from
+rows exist only from 1.7.5); `/api/meta` is the check. Upload 1.7.8.
 
 1.7.7, 17 November 2026: the DYNAMIC EVENT TIMELINE, built on Ash's challenge
 that the request had been ignored, with the proposal's recommended answers
@@ -563,6 +574,16 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   samples_untagged, common_epoch, positions, set_aside, unverified, aged_out.
   `drift_withheld_reason` explains every null rate; a poor fit keeps its
   residual, baseline and fix count with the rate null.
+  CHANGED in 1.7.8: `drift_deg_per_day` is the CONSENSUS of the agreeing
+  providers' element-set rates whenever there is one (`drift_basis:
+  "element_sets"`, `drift_consensus` {rate_deg_per_day, min, max, providers,
+  count, method}), else the observed fit (`drift_basis: "observed_fit"`).
+  The fit fields (`drift_residual_deg`, `drift_fit_hours`, `drift_fit_points`,
+  `drift_fit_harmonic`) now describe the OBSERVED fit only and may be null
+  beside a published rate; `drift_observed_deg_per_day`,
+  `drift_observed_withheld_reason` and `drift_crosscheck`
+  {difference_deg_per_day, agrees} carry it. Each `providers` row gains
+  `elset_rate_deg_per_day`, and the agreement block gains `consensus`.
   From 1.7.0 `drift_since_event` too: the epoch of the newest CONFIRMED E-W
   event, after which alone the rate is fitted, or null.
 - `GET /api/events?view=&modes=&ranks=` (1.7.0) — events newest first, filtered
@@ -1386,6 +1407,36 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- CONSENSUS DRIFT: BUILT in 1.7.8, 17 November 2026, on Ash's instruction
+  (above). CAUSE of the blank rows, stated plainly: 1.7.5 fitted the rate to
+  the track provider's TAGGED fixes only, and excluded the ~1,900 untagged
+  positions per object, so every object needed 24 h of new fixes (or the
+  backfill) before a rate appeared. That was flagged as a first-day effect
+  and should not have been accepted. FIX: `agreement.elset_rate` propagates a
+  provider's own element set through ONE ORBIT (1/n days) with SGP4 and
+  divides the longitude change by that time; `agreement.consensus` takes the
+  median over the providers in agreement (never one set aside; one checked
+  provider is labelled as one source; DISPUTED has none). MEASURED: Ash's UDL
+  line for COSMOS 2589 gives -0.0257 deg/day (vendor comparison -0.022 to
+  -0.026); NorthStar's gives -2.27; e = 0.0022 and 0.0002 agree to 1e-4;
+  exact synchronous mean motion gives +0.0066 deg/day (SGP4's J2 terms,
+  common to every provider, under the 0.05 "on station" line).
+  FOUND ON THE WAY: two synthetic generators had the mean-motion sign
+  reversed (faster than synchronous drifts EAST): `tests/test_agreement.py`
+  `rows()` and `tools/guide_seed.py`. Both fixed; the demo belt's element sets
+  now state their trail's own rate (`DemoElsetSource._ELSET_RATES`).
+  PROVEN: six new tests, including Ash's exact case (three providers, six
+  hours of fixes, rate published); three new red cases in
+  `redcases_1_7_5.py` (14 of 14 go red), one of them reinstating 1.7.7's
+  "no consensus"; the layout probe asserts the DEMO-P1 Drift fit row names the
+  consensus of the two agreeing providers. Guide: drift section rewritten,
+  rows, glossary, reference card, one self-check question replaced, inspector
+  figure recaptured and hotspots re-placed.
+  STILL TRUE: run the backfill. The observed cross-check needs 24 h of the
+  track provider's fixes, and the untagged history only re-tags on a re-pull.
+  The untagged counts in Ash's screenshots (1,884, 1,921, 657, 1,869) suggest
+  it has not been run (INFERENCE; epoch formatting is unchanged since 1.7.3,
+  so an exact-match re-pull should adopt them).
 - CODE QUALITY on 1.7.5, 17 November 2026: FAILED, eight smells, four rules
   new to this repo (S7517, S8517, S7508, S7504). Fixed in 1.7.6. Two of the
   fixes are not mechanical and must not be "simplified" back: the provider

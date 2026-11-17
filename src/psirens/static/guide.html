@@ -626,8 +626,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">on station</td><td>Under 0.05&deg;/day. Holding its slot.</td></tr>
       <tr><td class="k">&minus;1.20&deg;/day W</td><td>Moving west at 1.2&deg; a day. About 27 days to cross 30&deg;.</td></tr>
       <tr><td class="k">+0.40&deg;/day E</td><td>Moving east. A slow relocation, or an uncorrected orbit.</td></tr>
-      <tr><td class="k">no usable baseline</td><td>Under 24 hours of fixes from the track provider. The honest answer, not a zero.</td></tr>
-      <tr><td class="k">withheld</td><td>A rate could be computed and is deliberately not shown. The Drift fit row says why: the fit misses its own data by more than 1&deg; rms, or the providers disagree, or the positions predate provider tagging.</td></tr>
+      <tr><td class="k">no usable baseline</td><td>No agreeing provider's element set could give a rate, and the track provider has under 24 hours of fixes. Rare: the element sets normally carry a rate from the first fix.</td></tr>
+      <tr><td class="k">withheld</td><td>A rate could be computed and is deliberately not shown. The Drift fit row says why: most often, the providers disagree on where the object is.</td></tr>
     </tbody>
   </table>
 
@@ -655,9 +655,25 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     </div>
   </div>
 
-  <h3>The drift fit line</h3>
-  <p>Beneath Drift the inspector shows the fit itself, for example
-  <code>&plusmn;0.004&deg; rms &middot; 72h &middot; 37 fixes &middot; libration modelled</code>.</p>
+  <h3>Where the number comes from: the providers' consensus</h3>
+  <p>The rate in the Drift row is the <b>consensus of the providers that agree</b> on where the
+  object is. Every provider's own element set states how fast the orbit runs. PSIRENS propagates
+  each one with SGP4 through exactly one orbit, which brings the once-a-day swing back to where it
+  started so it cancels, and reads the change in longitude. The Drift row is the median of those
+  rates; the Drift fit row names how many providers gave it and their spread, for example
+  <code>consensus of 4 agreeing providers' element sets (&minus;0.026 to &minus;0.022&deg;/day)</code>.
+  Each provider's own rate is listed beside its name in the Providers row.</p>
+  <p>Because it needs no history, the rate is there from the first fix. A provider that was set
+  aside is never counted, and where the providers disagree there is no consensus and no rate.</p>
+
+  <h3>The observed track, as a cross-check</h3>
+  <p>Beneath the consensus the inspector shows what the track itself has done, fitted to the track
+  provider's own fixes, for example
+  <code>observed &minus;0.024&deg;/day &middot; &plusmn;0.004&deg; rms &middot; 72h &middot; 37 fixes &middot; libration modelled</code>.
+  It needs 24 hours of fixes before it appears. When it differs from the consensus by more than
+  0.05&deg;/day the panel says so in amber: the element sets and the track are telling two
+  different stories, which is worth a look (a manoeuvre the element sets have caught and the track
+  has not yet, or the other way round).</p>
   <ul>
     <li><b>rms</b> is the scatter of the fixes about the fitted line. Small means a clean,
       trustworthy rate. Large means noisy inputs, or a manoeuvre partway through the span being fitted.</li>
@@ -675,8 +691,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <a href="#brief">the Shift Brief</a>.</p>
 
   <h3>One provider, and a ceiling on the fit</h3>
-  <p>The rate is fitted to <b>one provider's</b> fixes, the provider named in Track from. Two
-  providers' views of the same object are never fitted together, because a difference between
+  <p>The observed track is fitted to <b>one provider's</b> fixes, the provider named in Track from.
+  Two providers' views of the same object are never fitted together, because a difference between
   providers is not motion. In November 2026 one provider's element sets put COSMOS 2589 at 64&deg;E
   while five others, and that provider's own state vectors, put it at 127.9&deg;E. Fitted together,
   that read &minus;12.96&deg;/day at 19&deg; rms and raised a manoeuvre that never happened.</p>
@@ -786,8 +802,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">Longitude</td><td>Sub-satellite longitude at the newest fix.</td></tr>
       <tr><td class="k">Inclination</td><td>Orbital inclination at the newest fix.</td></tr>
       <tr><td class="k">Affiliation</td><td>Red, Blue, Other or Unknown. The same value that colours the needle.</td></tr>
-      <tr><td class="k">Drift</td><td>The fitted longitude rate, with direction, or &ldquo;on station&rdquo;, or &ldquo;withheld&rdquo;.</td></tr>
-      <tr><td class="k">Drift fit</td><td>Scatter, baseline, fix count, and whether the libration was modelled. When the rate is withheld, the reason instead.</td></tr>
+      <tr><td class="k">Drift</td><td>The agreeing providers' consensus longitude rate, with direction, or &ldquo;on station&rdquo;, or &ldquo;withheld&rdquo;.</td></tr>
+      <tr><td class="k">Drift fit</td><td>Where the rate came from (how many providers, their spread), then the observed track fit beside it, flagged in amber if the two differ. When the rate is withheld, the reason instead.</td></tr>
       <tr><td class="k">Track span</td><td>Total longitude excursion across every stored fix. The sanity check on Drift.</td></tr>
       <tr><td class="k">Data age</td><td>Age of the newest fix, with a bar. Under an hour is a healthy feed.</td></tr>
       <tr><td class="k">Element set</td><td>The two-line element, with a provenance badge and the epoch it was issued for.</td></tr>
@@ -1033,6 +1049,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">Aged out</td><td>A provider whose newest element set is more than 48 hours older than the newest held for the object. Neither selected nor compared.</td></tr>
       <tr><td class="k">Confirmed, Suspected</td><td>The two tiers of a Shift Brief event. Confirmed: two independent fits disagree beyond the floor and six standard errors. Suspected: an early warning, or evidence at the edge of the data.</td></tr>
       <tr><td class="k">Disputed</td><td>The providers disagree on where an object is and none has a majority. No drift rate, no events, no provider chosen as the truth.</td></tr>
+      <tr><td class="k">Consensus drift</td><td>The median of the drift rates the agreeing providers' own element sets state, each propagated by SGP4 over one orbit. The rate in the Drift row.</td></tr>
       <tr><td class="k">Coplanar angle</td><td>The mutual tilt between two orbital planes. Zero means the same plane.</td></tr>
       <tr><td class="k">Drift</td><td>Rate of change of sub-satellite longitude, degrees per day, fitted over a trailing three-day span of fixes.</td></tr>
       <tr><td class="k">Element set, elset</td><td>The mean orbital elements for one object at one epoch. The input to every number here.</td></tr>
@@ -1075,7 +1092,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">12h</td><td>No fix for this long, from an object that usually reports often: Gone quiet.</td></tr>
       <tr><td class="k">4 days</td><td>How far back the Shift Brief and its timeline look.</td></tr>
       <tr><td class="k">1&deg;</td><td>Two providers further apart than this, at the same instant, disagree.</td></tr>
-      <tr><td class="k">1&deg; rms</td><td>A drift fit missing its data by more than this is withheld.</td></tr>
+      <tr><td class="k">1&deg; rms</td><td>An observed track fit missing its data by more than this is withheld.</td></tr>
+      <tr><td class="k">0.05&deg;/day</td><td>The observed track and the consensus differing by more than this is flagged in amber.</td></tr>
       <tr><td class="k">48h</td><td>A provider's element set this much older than the newest held is aged out.</td></tr>
       <tr><td class="k">&plusmn;10&deg;</td><td>Neighbourhood half-width in the inspector.</td></tr>
       <tr><td class="k">&plusmn;20&deg;</td><td>Half-width of the co-planar neighbourhood.</td></tr>
@@ -1197,21 +1215,21 @@ const HOTSPOTS={
     // not estimated: the earlier table pointed at rows the scrolled capture
     // did not even show.
     [2,0.3,96,4,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
-    [3,5.3,94,22.4,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track and the split, so you can see why the event was raised."],
-    [3,28.7,94,2.9,"Identity","Rank chip, common name, NORAD number and country code."],
-    [3,32.6,94,5,"State","Priority, data mode, and the classification marking of the track provider's records."],
-    [3,37.9,94,3.3,"Track from and agreement","The ONE provider whose positions are plotted, and whether the providers agree on where the object is, compared at the same instant."],
-    [3,41.5,94,6.6,"Providers","Every provider seen, with its fix count, its status and its own fit. Here one agrees and one is set aside: it puts the object 25 degrees from the other two. Hover a row for the reason."],
-    [3,48.3,94,3.3,"Position","Sub-satellite longitude and inclination at the newest fix."],
-    [3,51.9,94,1.5,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
-    [3,53.6,94,1.5,"Drift","The fitted longitude rate with direction, or “on station”, “no usable baseline” or “withheld”."],
-    [3,55.4,94,4.1,"Drift fit","Scatter about the fitted line, the baseline, the number of fixes, and whether the once-a-day libration was modelled. When the rate is withheld, the reason."],
-    [3,59.8,94,1.5,"Track span","Total longitude excursion across the track provider's stored fixes. Use it to sanity-check Drift."],
-    [3,61.6,94,1.5,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
-    [3,64,38,2.8,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
-    [3,67.8,94,6.4,"Element set","The track provider's own two lines, labelled NATIVE, with the copy control only for a plain unclassified, caveat-free marking. Where the provider issued no lines it reads NO TLE ISSUED: PSIRENS never builds one. This illustrative store has none."],
-    [3,75.3,94,2.2,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days. Objects whose element set cannot be propagated as issued are counted, not screened."],
-    [3,77.9,94,14.6,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
+    [3,5,94,21,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track and the split, so you can see why the event was raised."],
+    [3,26.9,94,2.8,"Identity","Rank chip, common name, NORAD number and country code."],
+    [3,30.5,94,4.8,"State","Priority, data mode, and the classification marking of the track provider's records."],
+    [3,35.5,94,3.1,"Track from and agreement","The ONE provider whose positions are plotted, and whether the providers agree on where the object is, compared at the same instant."],
+    [3,38.8,94,7.4,"Providers","Every provider seen, with its fix count, its status and its own fit. Here one agrees and one is set aside: it puts the object 25 degrees from the other two. Hover a row for the reason."],
+    [3,46.5,94,3.1,"Position","Sub-satellite longitude and inclination at the newest fix."],
+    [3,49.8,94,1.4,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
+    [3,51.4,94,1.4,"Drift","The agreeing providers' consensus rate with direction, or “on station”, or “withheld” when the providers disagree."],
+    [3,53.1,94,9,"Drift fit","How many providers' element sets gave the rate and their spread, then the observed track fit as a cross-check. Amber when the two differ."],
+    [3,62.4,94,1.4,"Track span","Total longitude excursion across the track provider's stored fixes. Use it to sanity-check Drift."],
+    [3,64,94,1.4,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
+    [3,66.3,38,2.6,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
+    [3,69.8,94,6,"Element set","The track provider's own two lines, labelled NATIVE, with the copy control only for a plain unclassified, caveat-free marking. Where the provider issued no lines it reads NO TLE ISSUED: PSIRENS never builds one. This illustrative store has none."],
+    [3,76.9,94,2.1,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days. Objects whose element set cannot be propagated as issued are counted, not screened."],
+    [3,79.4,94,13.5,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
   coplanar:[
     [2,1,96,5,"Title bar","The primary object and how many objects are in its neighbourhood. Drag to move, drag the corner to resize."],
     [10,12,82,70,"The field","Each point is one nearby object. Both axes are logarithmic."],
@@ -1465,10 +1483,10 @@ const QUESTIONS=[
    a:["It is accelerating","Its inclination is no longer being corrected",
       "It is a simulated object","Its element set has no native line"],right:1,
    why:"Inclination builds at roughly 0.8° a year once station-keeping stops. High up the plot often means retired in place."},
-  {q:"The inspector reads “no usable baseline” under Drift. That means:",
-   a:["The object is not moving","Under 24 hours of fixes, so no rate is claimed",
-      "The feed is down","The object has no element set"],right:1,
-   why:"Below one full sidereal day a rate would be measuring libration, not drift. Withholding it is the honest answer."},
+  {q:"Where does the rate in the Drift row come from?",
+   a:["The newest two fixes, differenced","The median of the rates the agreeing providers' own element sets state",
+      "An average of every provider, including any set aside","The operator's last manual entry"],right:1,
+   why:"Each agreeing provider's element set is propagated over one orbit, which cancels the daily swing, and the median is published. A provider set aside is never counted; the observed track is shown beside it as a cross-check."},
   {q:"The Providers row lists one provider as “set aside”. That means:",
    a:["Its data is classified","At the same instant it puts the object more than 1° from where most other providers do, so nothing uses it",
       "It is the newest provider","It is the track provider"],right:1,

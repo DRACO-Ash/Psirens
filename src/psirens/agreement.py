@@ -48,7 +48,7 @@ import os
 import statistics
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sgp4.api import jday
@@ -98,6 +98,7 @@ class Assessment:
     unverified: dict[str, str] = field(default_factory=dict)
     aged_out: dict[str, str] = field(default_factory=dict)
     eligible: list[dict] = field(default_factory=list)
+    rates: dict[str, float] = field(default_factory=dict)
 
 
 def separation_deg(a: float, b: float) -> float:
@@ -155,6 +156,43 @@ def _set_aside_reasons(positions: dict[str, float], agreed: set[str]) -> dict[st
             for p, lon in positions.items() if p not in agreed}
 
 
+# A GEO longitude rate above this is a data artefact, not motion (CONTEXT-001,
+# drift and trail ceilings); the same ceiling `astro.drift_fit` applies.
+_MAX_ELSET_RATE = 18.0
+
+
+def elset_rate(el: dict) -> float | None:
+    """The drift rate one provider's OWN element set states, in deg/day east.
+
+    1.7.8, after the owner's "we need to come to a consensus on the actual
+    drift rate, I cannot have nothing". The element set is propagated by
+    SGP4 from its epoch through exactly ONE ORBITAL PERIOD (1/n days) and the
+    change in sub-satellite longitude divided by that time. One full orbit
+    returns the mean anomaly to where it started, so the once-per-orbit
+    east-west libration from eccentricity cancels instead of reading as drift.
+    MEASURED: e = 0.0022 and e = 0.0002 give the same rate to 1e-4 deg/day.
+    A calculation from one record (CALCULATED in the audit's terms), not an
+    extrapolation: nothing is said about where the object will be.
+    MEASURED on the two COSMOS 2589 lines Ash supplied: the UDL line gives
+    -0.0257 deg/day (the vendor comparison read -0.022 to -0.026); NorthStar's
+    gives -2.27. SGP4's J2 terms leave a common +0.0066 deg/day offset at
+    exactly synchronous mean motion; it applies to every provider alike.
+    """
+    when = epoch_of(el)
+    try:
+        n = float(el["mean_motion_rev_per_day"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if when is None or n <= 0.0:
+        return None
+    period_d = 1.0 / n
+    start, end = lon_at(el, when), lon_at(el, when + timedelta(days=period_d))
+    if start is None or end is None:
+        return None
+    rate = _wrap(end - start) / period_d
+    return rate if abs(rate) <= _MAX_ELSET_RATE else None
+
+
 def _locate(fresh: list[dict], when: datetime, a: Assessment) -> None:
     for el in fresh:
         source = str(el.get("source") or "")
@@ -162,8 +200,35 @@ def _locate(fresh: list[dict], when: datetime, a: Assessment) -> None:
         lon = None if refused else lon_at(el, when)
         if lon is None:
             a.unverified[source] = refused or "SGP4 failed for this element set"
-        else:
-            a.positions[source] = lon
+            continue
+        a.positions[source] = lon
+        rate = elset_rate(el)
+        if rate is not None:
+            a.rates[source] = rate
+
+
+def consensus(a: Assessment) -> dict | None:
+    """The drift rate the providers AGREE on: the median of their own
+    element-set rates, with the spread and who contributed. Only providers in
+    agreement count (a provider set aside never does), and a single checked
+    provider is labelled as one source. A DISPUTED object has no consensus:
+    none is chosen as the truth, so no rate is either."""
+    if a.status == AGREED:
+        names = [p for p in a.positions if p not in a.set_aside]
+    elif a.status == SINGLE:
+        names = list(a.positions)
+    else:
+        return None
+    rates = {p: a.rates[p] for p in sorted(names) if p in a.rates}
+    if not rates:
+        return None
+    vals = sorted(rates.values())
+    return {"rate_deg_per_day": round(statistics.median(vals), 4),
+            "min_deg_per_day": round(vals[0], 4), "max_deg_per_day": round(vals[-1], 4),
+            "providers": {p: round(r, 4) for p, r in rates.items()},
+            "count": len(vals),
+            "method": "median of the agreeing providers' own element sets, "
+                      "each propagated by SGP4 over one orbit"}
 
 
 def assess(obj: dict, mode: str, policy: Policy) -> Assessment:
@@ -291,15 +356,17 @@ def provider_rows(a: Assessment, streams: Streams, primary: str | None,
     for name in sorted(names):
         rows = here.get(name, [])
         status, note = _status_note(name, a, primary)
-        lon = a.positions.get(name)
+        lon, rate = a.positions.get(name), a.rates.get(name)
         out[name] = {"count": len(rows), "status": status, "note": note,
                      "newest_epoch": rows[-1]["epoch"] if rows else None,
                      "lon_at_common_deg": None if lon is None else round(lon, 4),
+                     "elset_rate_deg_per_day": None if rate is None else round(rate, 4),
                      **_fit_summary(rows, policy)}
     if untagged:
         out[UNTAGGED] = {"count": untagged, "status": "excluded",
                          "note": "stored before 1.7.4; provider unknown",
                          "newest_epoch": None, "lon_at_common_deg": None,
+                         "elset_rate_deg_per_day": None,
                          "drift_deg_per_day": None, "drift_residual_deg": None,
                          "drift_withheld": None}
     return out
@@ -315,6 +382,7 @@ def _block(a: Assessment, primary: str | None, rows: dict, policy: Policy,
         "set_aside": dict(sorted(a.set_aside.items())),
         "unverified": dict(sorted(a.unverified.items())),
         "aged_out": dict(sorted(a.aged_out.items())),
+        "consensus": consensus(a),
         "providers": rows,
     }
 

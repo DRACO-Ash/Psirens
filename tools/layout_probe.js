@@ -482,7 +482,8 @@ function checkBodyFits(m, label) {
           const row = (n) => { const dt = dts.find((d) => d.textContent.trim() === n);
             return dt && dt.nextElementSibling ? dt.nextElementSibling.textContent.trim() : ""; };
           const pv = Array.from(document.querySelectorAll("#insprov .pv")).map((e) => e.textContent.trim());
-          return { head: row("Track from"), agree: row("Agreement"), drift: row("Drift"), pv };
+          return { head: row("Track from"), agree: row("Agreement"), drift: row("Drift"),
+                   fit: row("Drift fit"), pv };
         });
         console.log(`  agreement rows: ${JSON.stringify(ag)}`);
         const outlier = ag.pv.find((t) => t.startsWith("DEMO-OUTLIER")) || "";
@@ -494,6 +495,11 @@ function checkBodyFits(m, label) {
         }
         if (!/^agreed: 2 of 3/.test(ag.agree)) {
           fail(`the agreement row reads ${JSON.stringify(ag.agree)}, expected "agreed: 2 of 3 ..."`);
+        }
+        // 1.7.8: the published rate is the consensus of the two providers that
+        // agree, never including the outlier's -1.2 deg/day.
+        if (!/consensus of 2 agreeing providers' element sets/.test(ag.fit)) {
+          fail(`the Drift fit row does not name the consensus of the agreeing providers: ${JSON.stringify(ag.fit)}`);
         }
         if (ag.drift !== "on station") {
           fail(`DEMO-P1 drift reads ${JSON.stringify(ag.drift)}; the providers that agree are on station, so the outlier leaked into the fit`);

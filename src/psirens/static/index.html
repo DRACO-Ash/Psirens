@@ -427,7 +427,10 @@ function transform(tracks){
       ra:(t.ra_deg==null?null:t.ra_deg),
       mode:t.data_mode,mark:t.classification_marking,origin:t.origin,source:t.source,target:t.target,
       provs:t.providers||{},headSrc:t.head_source||null,
-      agree:t.agreement||{},dwhy:t.drift_withheld_reason||null});
+      agree:t.agreement||{},dwhy:t.drift_withheld_reason||null,
+      dbasis:t.drift_basis||null,dcons:t.drift_consensus||null,
+      dobs:(t.drift_observed_deg_per_day==null?null:t.drift_observed_deg_per_day),
+      dobsWhy:t.drift_observed_withheld_reason||null,dxc:t.drift_crosscheck||null});
   });
   return out;
 }
@@ -631,12 +634,26 @@ function driftText(o){
   const dir=o.drift>0?"E":"W";
   return `${o.drift.toFixed(2)}\u00b0/day ${dir}`;
 }
-function driftFitText(o){
-  if(!o.dknown){return o.dwhy?esc(o.dwhy):"under 24h of fixes";}
+// From 1.7.8 the published rate is the CONSENSUS of the agreeing providers'
+// own element sets, and the observed track fit is shown beside it as a cross
+// check. The row says which is which, and says so when the two disagree.
+function observedText(o){
+  if(o.dobs==null){return `observed track: ${esc(o.dobsWhy||"not fitted")}`;}
   const model=o.dharm?"libration modelled":"plain line";
   // 1.7.0: never fitted across a manoeuvre. Say where the fit was cut.
   const cut=o.dsince?` \u00b7 after the event of ${fmtZ(o.dsince)}`:"";
-  return `\u00b1${o.dres.toFixed(3)}\u00b0 rms \u00b7 ${o.dh.toFixed(0)}h \u00b7 ${o.dn} fixes \u00b7 ${model}${cut}`;
+  return `observed ${o.dobs.toFixed(3)}\u00b0/day \u00b7 \u00b1${o.dres.toFixed(3)}\u00b0 rms \u00b7 ${o.dh.toFixed(0)}h \u00b7 ${o.dn} fixes \u00b7 ${model}${cut}`;
+}
+function consensusText(c){
+  if(c.count===1){return `1 provider's element set (${c.rate_deg_per_day.toFixed(3)}\u00b0/day)`;}
+  return `consensus of ${c.count} agreeing providers' element sets (${c.min_deg_per_day.toFixed(3)} to ${c.max_deg_per_day.toFixed(3)}\u00b0/day)`;
+}
+function driftFitText(o){
+  if(!o.dknown){return o.dwhy?esc(o.dwhy):"under 24h of fixes";}
+  if(o.dbasis!=="element_sets"||!o.dcons){return observedText(o);}
+  const differs=o.dxc&&!o.dxc.agrees;
+  const flag=differs?`<br><b class="agree-bad">observed track differs by ${o.dxc.difference_deg_per_day.toFixed(3)}\u00b0/day</b>`:"";
+  return `${consensusText(o.dcons)}<br>${observedText(o)}${flag}`;
 }
 // Every position names the provider whose element set produced it (1.7.4),
 // and ONE provider drives the track (1.7.5). Each provider is listed with its
@@ -645,9 +662,9 @@ function driftFitText(o){
 const PV_ORDER={"track":0,"agrees":1,"disputed":2,"set aside":3,"unverified":4,"aged out":5,"not used":6,"excluded":7};
 function providerRow([name,r]){
   const st=r.status||"not used",cls=st.replace(/\s+/g,"-");
-  // The track provider's rate is the Drift row, cut at any confirmed event; its
-  // whole-window fit here would put a second, different number beside it.
-  const fit=st==="track"||r.drift_deg_per_day==null?"":` · ${r.drift_deg_per_day.toFixed(3)}°/day`;
+  // Each provider's OWN element-set rate (1.7.8): the inputs to the consensus
+  // in the Drift row, shown so the median can be checked by eye.
+  const fit=r.elset_rate_deg_per_day==null?"":` · ${r.elset_rate_deg_per_day.toFixed(3)}°/day`;
   return `<span class="pv pv-${cls}" title="${esc(r.note||"")}"><b>${esc(name)}</b> ${r.count||0} · ${esc(st)}${fit}</span>`;}
 function providersText(o){
   const rows=Object.entries(o.provs||{}).sort((a,b)=>(PV_ORDER[a[1].status]??9)-(PV_ORDER[b[1].status]??9)||(b[1].count||0)-(a[1].count||0));
