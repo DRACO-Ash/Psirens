@@ -409,6 +409,31 @@ plugin preset is curated for the plugin's users, not for your scanner's profile.
 Ask what the preset leaves out before trusting a green run, and check the answer
 by listing the rules rather than reading the documentation.
 
+### 3.18 Four rules from one upload, and how to calibrate a new one GATE
+
+PSIRENS 1.7.0 failed Code Quality on four findings at once (QUALITY-LEDGER A5 to
+A8). Each is now a `sniff_check.py` rule:
+
+● `PY-DUP-LITERAL` (`python:S1192`): a string literal three or more times in one
+  source file. Write a constant.
+● `PY-REPLACE-RETURN` (`python:S5886`): `dataclasses.replace(...)` returned from a
+  function with a concrete return annotation. It is typed as the generic
+  `DataclassInstance`; construct the instance explicitly.
+● `WEB-CANVAS-ROLE` (`Web:S6843`): any `role` on a `<canvas>`, which counts as an
+  interactive element. Describe a canvas with fallback text between its tags.
+● `WEB-IMG-ROLE` (`Web:S6819`): `role="img"` anywhere. Use `<img>` or `<svg>`.
+
+**HOW TO CALIBRATE A NEW RULE, the transferable part.** A duplicate-literal rule
+written naively fires dozens of times on any real codebase, and a rule that
+fires dozens of times gets switched off. Calibrate against two trees from git:
+one the platform PASSED (every hit there is a false positive against the tenant
+profile) and one it FAILED (the rule must reproduce the platform's findings at
+the same file and line). For PSIRENS that meant 1.6.12 (passed, 0 findings
+required) and 1.7.0 (failed, exactly four required). It took two exclusions to
+get there, each justified by the passing tree: identifier-like strings, and
+test code, which SonarQube analyses as `sonar.tests` and does not hold to
+S1192.
+
 ## 5. The meta-rules, which cost more than any sniff
 
 Four habits, each learned from a real failure. They are the reason the rules

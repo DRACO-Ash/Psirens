@@ -234,6 +234,32 @@ elif [ "$LAYOUT_RC" -ne 0 ]; then
   echo "FAIL: the layout probe found a defect (see above)"; exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# LOGGING STANDARD (1.7.1). The platform's Logging check is DYNAMIC: it runs
+# the image, sends requests carrying X-Request-Id, and reads stdout and stderr.
+# So this runs the Dockerfile's own CMD and reads both streams the same way.
+# Red case first: the CMD without --logger-class is the 1.7.0 behaviour for
+# gunicorn's own lines, and the check MUST reject it. Cannot run is a failure.
+# ---------------------------------------------------------------------------
+set +e
+python3 "$ROOT/tools/logging_check.py" --red --expect fail
+LOG_RED=$?
+python3 "$ROOT/tools/logging_check.py"
+LOG_RC=$?
+set -e
+if [ "$LOG_RED" -eq 2 ] || [ "$LOG_RC" -eq 2 ]; then
+  echo "FAIL: the logging check could not run (gunicorn missing?), and a check"
+  echo "      that cannot run must not report a pass."; exit 1
+fi
+if [ "$LOG_RED" -ne 0 ]; then
+  echo "FAIL: the logging check did not reject its red case, so a clean result"
+  echo "      from it would prove nothing"; exit 1
+fi
+if [ "$LOG_RC" -ne 0 ]; then
+  echo "FAIL: the container's logs break the platform logging standard (see above)"; exit 1
+fi
+echo "Logging OK (red case rejected; container CMD writes standard JSON to stdout only)"
+
 echo "SIMULATION GREEN (matches platform): tests passed, coverage.xml at $SIM/coverage.xml"
 echo "Every gate above was run against a case it MUST reject before being"
 echo "trusted against the real source. Still not covered here: a real"

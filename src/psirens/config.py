@@ -159,6 +159,9 @@ class Config:
     event_ns_floor: float = 0.008    # deg: a smaller inclination step is noise
     event_sigma: float = 6.0         # standard errors required on top of the floor
     event_quiet_hours: float = 12.0  # no fix for this long while the belt is current
+    # Log X-Auth-Request-Email as user.email (1.7.1). OFF until the owner
+    # decides: it puts an identifiable individual in every request line.
+    log_user_email: bool = False
     scheduler_enabled: bool = True  # background refresh loop; off in tests
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
@@ -216,4 +219,5 @@ def load_config() -> Config:
         event_ns_floor=_env_float("EVENT_NS_FLOOR_DEG", 0.008),
         event_sigma=_env_float("EVENT_SIGMA", 6),
         event_quiet_hours=_env_float("EVENT_QUIET_HOURS", 12),
+        log_user_email=_env_bool("LOG_USER_EMAIL", default=False),
     )

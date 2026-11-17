@@ -29,6 +29,7 @@ from .models import VIEW_MODES, DataMode, ManualElsetIn
 from .conjunction import conjunctions_for
 from .coplanar import coplanar_for
 from .events import EventEngine, Thresholds, latest_splits
+from .logjson import RequestLog, configure_logging
 from .tle import parse_priority
 from .hrr import HrrStore
 from .refresh import Refresher
@@ -36,11 +37,15 @@ from .security import RateLimiter, SingleFlight, token_ok
 from .sources import DemoElsetSource, ManualElsetSource, UDLElsetSource
 from .store import Store
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+# The platform logging standard (1.7.1): one JSON object per line on stdout.
+# basicConfig used to install a plain-text handler on STDERR, which is what the
+# Logging check reported. See logjson.py.
+configure_logging()
 _log = logging.getLogger("psirens")
 
 _STATIC = os.path.join(os.path.dirname(__file__), "static")
 _PNG = "image/png"
+_JSON = "application/json"
 _RATE_LIMIT = "rate limit"
 _NOT_FOUND = "not found"
 
@@ -54,7 +59,7 @@ _ASSET_MEDIA: dict[str, str] = {
     "apple-touch-icon.png": _PNG,
     "psirens-banner.png": _PNG,
     "manifest.webmanifest": "application/manifest+json",
-    "hrr-geo.json": "application/json",  # GEO subset of the JCO HRR list
+    "hrr-geo.json": _JSON,  # GEO subset of the JCO HRR list
     # The Operator Guide and its figures. Every figure is a screenshot of this
     # interface, captured by tools/guide_shots.sh; recapture them when the
     # layout changes rather than redrawing them by hand.
@@ -341,7 +346,7 @@ def _tracks(request: Request, view: str = "combined", modes: str = "",
                            "ranks", "stale_after_hours", "tracks"))
     if if_none_match == etag:
         return _cors(Response(status_code=304), cfg)
-    resp = Response(content=body, media_type="application/json")
+    resp = Response(content=body, media_type=_JSON)
     resp.headers["ETag"] = etag
     return _cors(resp, cfg)
 
@@ -404,7 +409,7 @@ def _events(request: Request, view: str = "combined", modes: str = "",
     if if_none_match == etag:
         return _cors(Response(status_code=304), cfg)
     resp = Response(content=json.dumps(payload, separators=(",", ":")),
-                    media_type="application/json")
+                    media_type=_JSON)
     resp.headers["ETag"] = etag
     return _cors(resp, cfg)
 
@@ -609,7 +614,11 @@ def create_app(cfg: Config | None = None,
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="1.7.0", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.7.1", lifespan=_lifespan)
+    # Request context for every log line, and one standard request line. The
+    # X-Auth-Request-Email header becomes user.email only when the owner has
+    # switched LOG_USER_EMAIL on: it is personal data (see CLAUDE.md).
+    app.add_middleware(RequestLog, log_email=cfg.log_user_email)
     app.state.cfg = cfg
     app.state.store = store
     app.state.manual = manual

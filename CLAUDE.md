@@ -51,7 +51,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.0; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.7.1; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -76,19 +76,21 @@ anyone has ever read, 1.6.21 gives the Co-Planar chart an axis swap and
 zoom, 1.6.22 dims the legend rows whose object is off screen, and **1.7.0 is
 the Shift Brief**: server-side event detection, a brief at the top of the rail,
 an event timeline, focus mode with evidence, and the drift rate fitted after a
-manoeuvre rather than across it (see Open items).
+manoeuvre rather than across it, and **1.7.1 clears the four Code Quality
+findings 1.7.0 drew and builds the platform Logging standard** (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.7.0: it carries everything. It also carries a fix 1.6.16 needed and
+Upload 1.7.1: it carries everything. 1.7.0 was uploaded on 16 to 17 November
+2026 and FAILED Code Quality on four findings (QUALITY-LEDGER A5 to A8); 1.7.1
+fixes them. It also carries a fix 1.6.16 needed and
 did not have, so do NOT upload 1.6.16 now: see the rotted-test entry in Open
 items. 1.6.17 to 1.6.22 exist in the repository and were never uploaded, each
 superseded before the upload; the platform has never seen any of them.
-1.7.0 does NOT carry the Logging standard, which starts blocking on 1 December
-2026: upload before then, or the Logging check will reject it.
+1.7.1 CARRIES the Logging standard, which starts blocking on 1 December 2026.
 CORRECTION, 10 November 2026, to a line written earlier the same day: an
 earlier draft of this section said the feed was "dry from 9 October to 9
 November". NOTHING RECORDED SUPPORTS THAT. The only evidence is the live
@@ -379,6 +381,14 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   or relative window).
 - `security.py` — token gate and rate limiting.
 - `main.py` — FastAPI app factory, routes, the tracks payload builder.
+- `logjson.py` — the platform logging standard (1.7.1): `JsonFormatter` (the
+  standard's fields, severity pairs, flat attributes, exception fields, and the
+  prohibitions ENFORCED: forbidden keys dropped, query strings and bearer
+  values scrubbed from every string), `StdoutHandler` (re-reads sys.stdout at
+  every emit), `configure_logging` (called at import of `main`), and
+  `RequestLog`, the ASGI middleware that holds the request attributes in a
+  context variable and writes one request line. `gunicorn_json.py` routes
+  gunicorn's own lines the same way and silences the duplicate access line.
 - `static/guide.html` — the HTML Operator Guide, served at `/static/guide.html`
   and linked from the top right of the SPA. Self-contained, no build step, same
   dark theme. Carries annotated screenshots with clickable hotspots, two live
@@ -393,7 +403,7 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drawHead` (+ `raNeedle`), the inspector modal, view/window/range controls.
 
 Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
-`test_coplanar.py`, `test_drift.py`, `test_events.py`, `test_hrr.py`, `test_sources.py`,
+`test_coplanar.py`, `test_drift.py`, `test_events.py`, `test_hrr.py`, `test_logging.py`, `test_sources.py`,
 `test_store.py`, `test_tle.py`.
 Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
 by the exporter, never hand-typed, so every "valid" line genuinely checksums.
@@ -430,6 +440,12 @@ exited 2 with a stated reason, and a two-chunk run added 229 samples.
 dynamic HTML file (figures inlined) and refuses on missing or orphan figures
 and house-style breaches. `--self-test` runs offline. NOT part of the deploy
 zip.
+
+`tools/logging_check.py` - runs the Dockerfile's own CMD (parsed, not retyped),
+sends two requests with distinct `X-Request-Id`s and a query-string secret,
+SIGTERMs the server and reads stdout and stderr apart, as the platform's
+dynamic Logging check does. `--red --expect fail` drops `--logger-class` (the
+1.7.0 behaviour) and must be rejected. In the golden loop since 1.7.1.
 
 `tools/udl_elset_probe.py` — Script-mode, stdlib-only live probe of `/udl/elset`.
 Checks the four assumptions the native-TLE work rests on (line presence, satNo
@@ -1217,7 +1233,18 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   the twelve by visibility while zoomed, which would mean carrying the original
   index with each row so the colours still line up. Left for Ash: it trades
   list stability for usefulness and that is a judgement, not a bug.
-- LOGGING STANDARD, NOT YET BUILT, and it has a DEADLINE. FACT, 11 November
+- LOGGING STANDARD: BUILT in 1.7.1, see CONTEXT-001 section 7 for the build
+  record and the corrected diagnosis (gunicorn's error log was on stderr too).
+  PROVEN by revert: removing the middleware fails two tests; restoring
+  `basicConfig` fails three; the gate's red case (CMD without
+  `--logger-class`) is rejected with 14 stderr lines. FOUND WHILE PROVING IT:
+  the first headline test's fixture called `configure_logging()` itself and
+  MASKED the basicConfig revert; its docstring claimed a protection it did not
+  have (QUALITY-LEDGER D9). `user.email`: behind `LOG_USER_EMAIL`, OFF by
+  default. STILL ASH'S CALL: set `LOG_USER_EMAIL=true` in the Environment
+  Variables tab to meet that line of the standard, or leave it off. The record
+  that follows is the original analysis, kept for its reasoning.
+  ORIGINAL ENTRY (11 November 2026): NOT YET BUILT, and it has a DEADLINE. FACT, 11 November
   2026, from a Logging modal badged Advisory on the PSIRENS build: our logs
   miss three parts of the platform logging standard, all Medium, and the check
   **starts blocking on 1 December 2026**. The full specification is recorded in
@@ -1340,6 +1367,13 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   or FAILED. The paste showed Medium (75) and Low (59) with a higher band cut
   off, and the verdict was not stated. It decides whether ~130 unfixable
   Debian findings are a waiver conversation or simply noise.
+- CODE QUALITY on 1.7.0, 17 November 2026: four findings, all in that week's
+  code (QUALITY-LEDGER A5 to A8): `python:S1192` "application/json" x3 in
+  `main.py`, `python:S5886` `dataclasses.replace` returned from `ew_split`,
+  and `Web:S6843` plus `Web:S6819` for `role="img"` on the timeline canvas.
+  Fixed in 1.7.1 and GATED by four new `sniff_check.py` rules, CALIBRATED
+  against git: on the 1.7.0 tree they report exactly the platform's four at the
+  same lines, on the 1.6.12 tree (passed) nothing. See SNIFFS.md 3.18.
 - `README.md` predates several features (RA needles, Simulation view, timescale/
   range pull, conjunctions, deep zoom). Refresh when convenient.
 

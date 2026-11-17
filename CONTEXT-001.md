@@ -225,8 +225,23 @@ specification and guessing at it wastes an upload:**
 ● Nothing in `src/` writes to stdout at all: no `print`, no `sys.stdout`.
 ● There is no request-scoped context anywhere, so finding 3 was unavoidable:
   nothing could have carried the header into a log line.
-● The nine lines are ours, not the server's. Gunicorn's access log is off unless
-  `--access-logfile` is given, and the CMD does not give it.
+● CORRECTED, 17 November 2026: the line that stood here said "the nine lines are
+  ours, not the server's". WRONG. Gunicorn's ACCESS log is off by default, but
+  its ERROR log defaults to stderr, and that log carries "Starting gunicorn",
+  "Listening at", "Booting worker" and the shutdown lines. The second reading of
+  the modal counted ten lines. MEASURED by running the container CMD without a
+  logger class: 14 lines on stderr, the first "[INFO] Starting gunicorn 26.0.0".
+  Gunicorn configures its loggers before the app is imported, so the app
+  cannot fix this alone: the CMD needs `--logger-class`.
+
+**BUILT in 1.7.1.** `psirens/logjson.py` (formatter, stdout handler, request
+middleware), `psirens/gunicorn_json.py` (gunicorn's lines), the Dockerfile CMD
+gains `--logger-class psirens.gunicorn_json.JsonGunicornLogger`, and
+`tools/logging_check.py` runs that CMD and reads both streams in the golden
+loop, red case first. MEASURED: 19 JSON lines on stdout, 0 on stderr, both
+request ids carried, a query-string secret scrubbed. `user.email` is behind
+`LOG_USER_EMAIL`, OFF by default, pending the owner's decision on personal
+data; the three findings the check listed do not depend on it.
 
 **THE GENERAL LESSON, and it is the one worth carrying to every App Store app:**
 the platform ADDS checks, with deadlines, to pipelines that are already green.

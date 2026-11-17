@@ -185,6 +185,79 @@ def _check_python(path: str, text: str) -> list[Finding]:
             out.extend(_check_none_compare(path, node))
         if isinstance(node, (ast.For, ast.AsyncFor)):
             out.extend(_check_loop_lambda(path, node))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out.extend(_check_replace_return(path, node))
+    # Test code is declared as sonar.tests, where S1192 is not applied: the
+    # 1.6.12 suite repeats URLs and ids freely and passed.
+    if not _is_test_file(path):
+        out.extend(_check_dup_literals(path, tree))
+    return out
+
+
+def _is_test_file(path: str) -> bool:
+    norm = path.replace(os.sep, "/")
+    return "/tests/" in norm or norm.startswith("tests/") or \
+        os.path.basename(norm).startswith("test_")
+
+
+# python:S1192. Calibrated against the 1.6.12 tree, which passed Code Quality
+# on 5 October 2026 and therefore holds no literal the tenant profile flags,
+# and against 1.7.0, which failed on "application/json" three times in
+# main.py. Identifier-like strings (dictionary keys, field names) are left
+# alone: the 1.6.12 tree repeats dozens of them and passed.
+_DUP_MIN_LEN = 5
+_DUP_THRESHOLD = 3
+_IDENTIFIER_LIKE = re.compile(r"^[A-Za-z_][\w.-]*$")
+
+
+def _docstring_nodes(tree: ast.AST) -> set[int]:
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                             ast.AsyncFunctionDef)):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(
+                    body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+                out.add(id(body[0].value))
+    return out
+
+
+def _check_dup_literals(path: str, tree: ast.AST) -> list[Finding]:
+    skip = _docstring_nodes(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            skip.update(id(v) for v in node.values)
+    seen: dict[str, list[int]] = {}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and id(node) not in skip and len(node.value) >= _DUP_MIN_LEN
+                and not _IDENTIFIER_LIKE.match(node.value)):
+            seen.setdefault(node.value, []).append(node.lineno)
+    return [Finding(path, min(lines), "PY-DUP-LITERAL",
+                    f"{value!r} appears {len(lines)} times; define a constant "
+                    f"(python:S1192)")
+            for value, lines in seen.items() if len(lines) >= _DUP_THRESHOLD]
+
+
+def _check_replace_return(path: str, node: ast.AST) -> list[Finding]:
+    """python:S5886. `dataclasses.replace` is typed as returning the generic
+    DataclassInstance, so returning it from a function annotated with a
+    concrete type reads to the analyser as a type mismatch. Construct the
+    instance explicitly instead. Raised on events.py in 1.7.0."""
+    if node.returns is None:  # type: ignore[attr-defined]
+        return []
+    out: list[Finding] = []
+    for ret in ast.walk(node):
+        call = getattr(ret, "value", None) if isinstance(ret, ast.Return) else None
+        func = getattr(call, "func", None) if isinstance(call, ast.Call) else None
+        name = getattr(func, "id", None) or getattr(func, "attr", None)
+        if name == "replace" and not isinstance(getattr(func, "value", None), ast.Constant):
+            if isinstance(func, ast.Attribute) and getattr(func.value, "id", "") != "dataclasses":
+                continue
+            out.append(Finding(path, ret.lineno, "PY-REPLACE-RETURN",
+                               "returning dataclasses.replace(...) from an annotated "
+                               "function reads as a type mismatch (python:S5886); "
+                               "construct the instance explicitly"))
     return out
 
 
@@ -283,6 +356,13 @@ WEB_RULES = (
      re.compile(r'role="(region|banner|navigation|main|contentinfo'
                 r'|complementary|form)"'),
      "use the native element instead of the ARIA landmark role (S6819)"),
+    # A canvas is treated as an interactive element, so ANY role on it is S6843,
+    # and role="img" anywhere is S6819 (use <img> or <svg>). Raised on the 1.7.0
+    # timeline canvas. Describe a canvas with fallback content between its tags.
+    ("WEB-CANVAS-ROLE", re.compile(r"<canvas\b[^>]*\brole="),
+     "do not give a canvas a role (S6843); put a text description inside the tags"),
+    ("WEB-IMG-ROLE", re.compile(r'role="img"'),
+     "use <img> or <svg> instead of role=\"img\" (S6819)"),
     ("WEB-GETATTR-DATA", re.compile(r'getAttribute\(\s*["\']data-'),
      "use element.dataset.x instead of getAttribute(\"data-x\")"),
     ("WEB-PROMISE-REJECT", re.compile(r"return\s+Promise\.reject\("),
@@ -472,6 +552,17 @@ _CASES = [
     ("WEB-PROMISE-REJECT", "function f(){ return Promise.reject(new Error()); }\n",
      "function f(){ throw new Error(); }\n", ".js"),
     ("WEB-ZERO-FRACTION", "var n = 2.0;\n", "var n = 2;\n", ".js"),
+    # The real ones, PSIRENS 1.7.0, each raised by Code Quality on upload.
+    ("WEB-CANVAS-ROLE", '<canvas id="t" aria-label="x" role="img"></canvas>\n',
+     '<canvas id="t">Event timeline, last four days</canvas>\n', ".html"),
+    ("WEB-IMG-ROLE", '<div role="img" aria-label="x"></div>\n',
+     '<img src="a.png" alt="x">\n', ".html"),
+    ("PY-DUP-LITERAL",
+     'A = {"a": "application/json"}\nB = "application/json"\nC = "application/json"\n',
+     'JSON = "application/json"\nA = {"a": JSON}\nB = JSON\nC = JSON\n', ".py"),
+    ("PY-REPLACE-RETURN",
+     "from dataclasses import replace\ndef f(s) -> int:\n    return replace(s, a=1)\n",
+     "def g(s) -> int:\n    return type(s)(a=1)\n", ".py"),
     # The real one, PSIRENS 1.6.6: a translucent amber tint that renders at
     # 13:1 on a dark page and reads as 2.5:1 to an analyser. The good case is
     # the same design with the composited colour declared.
@@ -543,7 +634,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{rule:22} {message}")
         print(f"{'WEB-CONTRAST':22} declared text contrast below WCAG AA")
         for rule in ("PY-COMPLEXITY", "PY-PARAMS", "PY-MUTABLE-DEFAULT",
-                     "PY-BARE-EXCEPT", "PY-NONE-COMPARE", "PY-LOOP-LAMBDA"):
+                     "PY-BARE-EXCEPT", "PY-NONE-COMPARE", "PY-LOOP-LAMBDA",
+                     "PY-DUP-LITERAL", "PY-REPLACE-RETURN"):
             print(f"{rule:22} see SNIFFS.md")
         return 0
     if not args.paths:

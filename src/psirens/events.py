@@ -45,7 +45,7 @@ import os
 import statistics
 import threading
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -172,7 +172,11 @@ def ew_split(lon: list[tuple[datetime, float]], ref: datetime,
         t += step
     if best is None or tested is None:
         return None
-    return replace(best, edge=(tested - best.when) <= step)
+    # Constructed explicitly: dataclasses.replace is typed as returning the
+    # generic DataclassInstance, which Code Quality read as a type mismatch
+    # against this function's annotation (python:S5886, raised on 1.7.0).
+    return _Split(when=best.when, before=best.before, after=best.after,
+                  z=best.z, edge=(tested - best.when) <= step)
 
 
 def ew_kind(before: float, after: float, floor: float) -> str:

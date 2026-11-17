@@ -4,7 +4,7 @@ Every code-quality issue raised against this application during development,
 what caused it, how it was fixed, and what now stops it recurring.
 
 Classification: Not Classified. Owner: Ash Higgins, Bluestaq Limited.
-Covers builds 1.4.14 to 1.6.19, 23 August to 10 November 2026, 33 issues.
+Covers builds 1.4.14 to 1.7.1, 23 August to 17 November 2026, 41 issues.
 
 ---
 
@@ -128,6 +128,30 @@ Each cost at least one build cycle.
   do not shadow them. PROVEN against the pre-fix file from git history, where it
   reports the same line the platform did.
 ● **Cost:** one scan cycle.
+
+### A5 to A8. Four findings on one upload (1.7.0, 17 November 2026)
+Raised together by Code Quality on the Shift Brief build, every one in code
+written that week, and every one a rule the local gates did not carry.
+● **A5, `python:S1192`:** "application/json" three times in `main.py`, the third
+  copy added with `/api/events`. Fixed with one `_JSON` constant.
+● **A6, `python:S5886`:** `ew_split` annotated `-> _Split | None` but returned
+  `dataclasses.replace(best, ...)`, which typeshed types as the generic
+  `DataclassInstance`. Not a runtime defect; the analyser reads it as a type
+  mismatch. Fixed by constructing `_Split(...)` explicitly.
+● **A7 and A8, `Web:S6843` and `Web:S6819`, one line:** the timeline canvas
+  carried `role="img"`. A canvas counts as an interactive element, so any role
+  on it is S6843, and `role="img"` anywhere is S6819 (use `<img>` or `<svg>`).
+  Fixed with fallback text between the canvas tags, which is the accessible
+  description a canvas is meant to have.
+● **Guards:** four new `sniff_check.py` rules, `PY-DUP-LITERAL`,
+  `PY-REPLACE-RETURN`, `WEB-CANVAS-ROLE` and `WEB-IMG-ROLE`, each with a red and
+  a green self-test case. **CALIBRATED, not guessed:** run over the 1.7.0 tree
+  from git they report the same four findings at the same file and line as the
+  platform; run over the 1.6.12 tree, which passed Code Quality, they report
+  nothing. `PY-DUP-LITERAL` skips identifier-like strings and test files,
+  because the 1.6.12 tree repeats both freely and passed, and `tests/` is
+  declared `sonar.tests`.
+● **Cost:** one upload cycle.
 
 ---
 
@@ -266,6 +290,19 @@ The standing rule is a habit, not a checker: **write it relative to `now`.**
 the full loop immediately before any upload, however long the tree has been
 untouched; "it was green when I built it" is not the same claim.
 
+### C14. A rail that ran under the footer (pre-existing, fixed in 1.7.0)
+The page grid's single row was `auto`, so it grew to fit the left rail. The rail
+ran on underneath the footer instead of scrolling, and pushed the plot legend
+off the bottom of the screen. Visible in every capture since the rail grew;
+noticed only when the Shift Brief made the rail longer. `minmax(0,1fr)`.
+
+### C15. A drift rate fitted across a manoeuvre (found prototyping, fixed in 1.7.0)
+The 72-hour drift fit straddled a burn and averaged "on station" with
+"drifting": 0.22 deg/day for an object drifting at 0.59. Found while building
+the evidence for a proposal, not by any check. Fixed by fitting only after the
+newest confirmed E-W event; guarded by a red case that asserts the trap is still
+in the data, and by the layout probe reading the inspector's drift row.
+
 ### C13. Labels drawn blind on top of each other (1.6.18)
 Point names on a chart were drawn at a fixed offset to the right of every
 marker. In a sparse test view that looks correct. In a real 40-object
@@ -362,6 +399,20 @@ the added block would have left the step reporting a pass over a weaker gate.
 **A preset is curated for the plugin's users, not for your scanner's profile.
 List what it leaves out before trusting a green run.**
 
+### D9. A red case that the test's own fixture masked (1.7.1)
+The first logging test claimed in its docstring that restoring
+`logging.basicConfig` would fail it. Running that revert showed it passing: the
+fixture called `configure_logging()` itself, which repaired the very thing under
+test. Fixed by testing the import-time configuration directly and keeping the
+fixtures out of it; the revert now fails three tests. **A guard's description
+of itself is a claim, and only its red case is evidence.**
+
+### D10. A probe that hung instead of failing (1.7.0)
+The layout probe walked the Shift Brief with `j` until it reached a given entry,
+in an unbounded loop. The red case that broke `j` made it run for ten minutes
+instead of failing. Bounded to the number of entries. A guard that cannot fail
+cleanly is found only by making it fail.
+
 ### D6. A false positive in our own checker
 The zero-fraction pattern `\d+\.0` matched `127.0.0.1`. Found by running the
 checker over our own tree before publishing it. Fixed with a trailing negative
@@ -423,8 +474,8 @@ Ordered by return on effort, from this project's evidence.
 ```json
 {
   "project": "PSIRENS",
-  "covers": {"from": "1.4.14", "to": "1.6.19",
-             "dates": "2026-08-23/2026-11-10", "issues": 33},
+  "covers": {"from": "1.4.14", "to": "1.7.1",
+             "dates": "2026-08-23/2026-11-17", "issues": 41},
   "categories": {
     "A": "rejected by the platform quality gate",
     "B": "caught by local gates before upload",
@@ -447,6 +498,14 @@ Ordered by return on effort, from this project's evidence.
     {"id": "A4", "rule": "python loop-variable capture",
      "title": "lambda capturing a loop variable", "fixed_in": "1.6.12",
      "cost": "scan cycle", "guard": "PY-LOOP-LAMBDA AST rule"},
+    {"id": "A5", "rule": "python:S1192", "title": "string literal duplicated three times",
+     "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "PY-DUP-LITERAL, calibrated on 1.6.12 and 1.7.0"},
+    {"id": "A6", "rule": "python:S5886", "title": "dataclasses.replace returned from an annotated function",
+     "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "PY-REPLACE-RETURN"},
+    {"id": "A7", "rule": "Web:S6843", "title": "a role on a canvas element",
+     "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "WEB-CANVAS-ROLE"},
+    {"id": "A8", "rule": "Web:S6819", "title": "role=img instead of img or svg",
+     "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "WEB-IMG-ROLE"},
 
     {"id": "B1", "rule": "python:S3776", "title": "cognitive complexity 18 in load_config",
      "fixed_in": "1.6.6", "cost": "none", "guard": "tools/ast_gates.py"},
@@ -516,6 +575,16 @@ Ordered by return on effort, from this project's evidence.
      "guard": "probe asserts a small view drops more labels than a large one",
      "note": "third instance of the same defect class on a third page; the guard measures the decision, not the pixels"},
 
+    {"id": "C14", "title": "grid row grew to fit the rail, which ran under the footer",
+     "fixed_in": "1.7.0", "cost": "legend off screen in every build", "guard": "visual review of captures"},
+    {"id": "C15", "title": "drift rate fitted across a manoeuvre",
+     "fixed_in": "1.7.0", "cost": "a rate a third of the real one on screen",
+     "guard": "red-case test plus the probe reading the drift row"},
+    {"id": "D9", "title": "a red case masked by the test's own fixture",
+     "fixed_in": "1.7.1", "cost": "a guard that claimed to bite and did not",
+     "guard": "every red case is run, never asserted"},
+    {"id": "D10", "title": "probe walked an unbounded loop and hung on failure",
+     "fixed_in": "1.7.0", "cost": "ten minutes and no verdict", "guard": "bounded walk"},
     {"id": "D8", "title": "linter preset silently weaker than the scanner profile",
      "fixed_in": "1.6.19", "cost": "five real violations sat unseen behind a green gate",
      "guard": "add the default-profile rules the preset omits, with their own red case",

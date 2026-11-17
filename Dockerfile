@@ -61,4 +61,6 @@ WORKDIR /app
 USER 10001:10001
 EXPOSE 8080
 # exec so SIGTERM reaches gunicorn; uvicorn worker for the ASGI app.
-CMD ["sh","-c","exec gunicorn psirens.main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8080} --workers 1 --timeout 60 --no-control-socket --preload"]
+# --logger-class: gunicorn's own lines in the platform logging standard, on
+# stdout. Its default error log is STDERR, which the Logging check counts.
+CMD ["sh","-c","exec gunicorn psirens.main:app -k uvicorn.workers.UvicornWorker -b 0.0.0.0:${PORT:-8080} --workers 1 --timeout 60 --no-control-socket --preload --logger-class psirens.gunicorn_json.JsonGunicornLogger"]
