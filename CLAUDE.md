@@ -51,7 +51,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.2; DEPLOYED 1.6.12, Active)
+## Current state (repo 1.7.3; DEPLOYED 1.6.12, Active)
 
 Keep these apart. FACT, 5 October 2026, from the App Store Pipeline and
 Versions tab: **1.6.12 passed ALL ELEVEN stages including Deploy and the app
@@ -78,14 +78,15 @@ the Shift Brief**: server-side event detection, a brief at the top of the rail,
 an event timeline, focus mode with evidence, and the drift rate fitted after a
 manoeuvre rather than across it, and **1.7.1 clears the four Code Quality
 findings 1.7.0 drew and builds the platform Logging standard**, and 1.7.2
-clears the one bug 1.7.1 drew, `python:S1244` (see Open items).
+clears the one bug 1.7.1 drew, `python:S1244`, and 1.7.3 logs `user.email` by
+default, the one Logging item 1.7.2 still missed (see Open items).
 Observed oddity, recorded not explained: the Date Uploaded column read
 "Jul 28, 2026" for a build uploaded on 5 October. Treat the platform's upload
 date as unreliable, not the build.
 Also observed: the app header moved from "Pending Approval" to "Active" once
 Deploy passed, and an "Open App" control appeared. Approval and deployment are
 the same milestone here, not two.
-Upload 1.7.2: it carries everything. 1.7.0 FAILED Code Quality on four smells
+Upload 1.7.3: it carries everything. 1.7.0 FAILED Code Quality on four smells
 (QUALITY-LEDGER A5 to A8) and, almost certainly, on the bug 1.7.1 then failed
 on; 1.7.1 FAILED on that bug alone, `python:S1244` at `events.py:437` (A9).
 FACT, 17 November 2026: the gate now reads "New issues: N (max allowed: 0)" and
@@ -1252,9 +1253,19 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   the first headline test's fixture called `configure_logging()` itself and
   MASKED the basicConfig revert; its docstring claimed a protection it did not
   have (QUALITY-LEDGER D9). `user.email`: behind `LOG_USER_EMAIL`, OFF by
-  default. STILL ASH'S CALL: set `LOG_USER_EMAIL=true` in the Environment
-  Variables tab to meet that line of the standard, or leave it off. The record
-  that follows is the original analysis, kept for its reasoning.
+  default in 1.7.1 and 1.7.2. RESOLVED in 1.7.3: the Logging check on 1.7.2
+  reported ONLY "Request logs do not name the user (Medium)": it sent
+  `X-Auth-Request-Email: logging-check@appstore.invalid` and lines 11 and 12
+  (the request lines) lacked `user.email`. So the three original findings PASS
+  on the platform (FACT), and Ash sent this finding back as the decision. The
+  default is now ON in both the dataclass and `load_config`, because the check
+  runs against the built image and a deployment-only environment variable
+  cannot be relied on to reach it (INFERENCE, unverified). `LOG_USER_EMAIL=false`
+  is the off switch. GUARDED: `tools/logging_check.py` sends the platform's own
+  email value and requires it on every request, with a second red case
+  (`--red email`, LOG_USER_EMAIL=false) that must be rejected; reverting the
+  default fails two unit tests. The record that follows is the original
+  analysis, kept for its reasoning.
   ORIGINAL ENTRY (11 November 2026): NOT YET BUILT, and it has a DEADLINE. FACT, 11 November
   2026, from a Logging modal badged Advisory on the PSIRENS build: our logs
   miss three parts of the platform logging standard, all Medium, and the check

@@ -242,6 +242,14 @@ loop, red case first. MEASURED: 19 JSON lines on stdout, 0 on stderr, both
 request ids carried, a query-string secret scrubbed. `user.email` is behind
 `LOG_USER_EMAIL`, OFF by default, pending the owner's decision on personal
 data; the three findings the check listed do not depend on it.
+FACT, 17 November 2026, from the Logging check on 1.7.2: "Your app's logs miss 1
+part of the logging standard": **Request logs do not name the user** (Medium).
+"The check sent requests as logging-check@appstore.invalid in the
+X-Auth-Request-Email header, and no log line for those requests has it in its
+attributes. Put the X-Auth-Request-Email header in the attributes of every
+request line as user.email. Lines: 11, 12." So the check DOES test
+`user.email`, the earlier three findings PASS, and the field is not optional in
+practice. Default ON from 1.7.3.
 
 **THE GENERAL LESSON, and it is the one worth carrying to every App Store app:**
 the platform ADDS checks, with deadlines, to pipelines that are already green.

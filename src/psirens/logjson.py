@@ -12,7 +12,7 @@ THE FORMAT (CONTEXT-001 section 7): top-level `timestamp` (UTC, milliseconds),
 ERROR=17, FATAL=21), `body` and a FLAT `attributes` object. Exceptions go into
 attributes as `exception.type`, `exception.message`, `exception.stacktrace`.
 Request lines carry `http.request.header.x-request-id`, and `user.email` from
-`X-Auth-Request-Email` where the owner has switched that on.
+`X-Auth-Request-Email` (on by default from 1.7.3; `LOG_USER_EMAIL=false` off).
 
 THE PROHIBITIONS are enforced HERE, in the formatter, not trusted to call
 sites: no `service.name`, no tenant or app identifiers, no Authorization or

@@ -150,17 +150,36 @@ def test_an_unidentified_health_probe_is_not_logged_at_info(app_client, capsys):
                 if ln["attributes"].get("url.path") == "/healthz"]
 
 
-def test_user_email_is_logged_only_when_switched_on(tmp_path, capsys):
-    hdr = {"X-Request-Id": "e1", "X-Auth-Request-Email": "operator@example.test"}
+def test_every_request_line_names_the_user_by_default(tmp_path, capsys):
+    """The platform's finding on 1.7.2, byte for byte: it sent requests as
+    logging-check@appstore.invalid and no request line carried user.email."""
+    hdr = {"X-Request-Id": "e1", "X-Auth-Request-Email": "logging-check@appstore.invalid"}
     with TestClient(create_app(_cfg(tmp_path), sources=[])) as c:
         capsys.readouterr()
         c.get("/", headers=hdr)
-        assert "operator@example.test" not in capsys.readouterr().out
-    with TestClient(create_app(_cfg(tmp_path, log_user_email=True), sources=[])) as c:
+        c.get("/api/meta", headers=hdr)
+        req = [ln for ln in _lines(capsys.readouterr().out)
+               if ln["attributes"].get("logger.name") == "psirens.http"]
+        assert len(req) == 2
+        assert all(ln["attributes"].get(EMAIL_ATTR) == "logging-check@appstore.invalid"
+                   for ln in req)
+
+
+def test_user_email_can_be_switched_off(tmp_path, capsys):
+    hdr = {"X-Request-Id": "e2", "X-Auth-Request-Email": "operator@example.test"}
+    with TestClient(create_app(_cfg(tmp_path, log_user_email=False), sources=[])) as c:
         capsys.readouterr()
         c.get("/", headers=hdr)
-        lines = _lines(capsys.readouterr().out)
-        assert any(ln["attributes"].get(EMAIL_ATTR) == "operator@example.test" for ln in lines)
+        assert "operator@example.test" not in capsys.readouterr().out
+
+
+def test_the_email_default_is_on_in_the_dataclass_and_the_environment(monkeypatch):
+    from psirens.config import load_config
+    monkeypatch.delenv("LOG_USER_EMAIL", raising=False)
+    assert load_config().log_user_email is True
+    assert Config.__dataclass_fields__["log_user_email"].default is True
+    monkeypatch.setenv("LOG_USER_EMAIL", "false")
+    assert load_config().log_user_email is False
 
 
 def test_configure_logging_silences_the_uvicorn_access_line():

@@ -18,10 +18,15 @@ asserts:
   5. the query-string secret appears nowhere, and no forbidden attribute key
      (service.name, tenant or app ids, authorization, cookie, token) appears.
 
-`--red` runs the same command WITHOUT the --logger-class flag, which is the
-1.7.0 behaviour for gunicorn's own lines; the check MUST reject it. Run with
-`--expect fail` that way, so a checker that can no longer see stderr fails the
-build instead of passing it.
+Each request also carries `X-Auth-Request-Email: logging-check@appstore.invalid`,
+the value the platform's check sends, and every request must have a line naming
+the user as `user.email` (the 1.7.2 finding).
+
+`--red stderr` drops the --logger-class flag (the 1.7.0 behaviour for
+gunicorn's own lines); `--red email` sets LOG_USER_EMAIL=false (the 1.7.1 and
+1.7.2 behaviour). The check MUST reject both. Run them with `--expect fail`,
+so a checker that can no longer see what it guards fails the build instead of
+passing it.
 
 Exit codes: 0 as expected, 1 not as expected, 2 cannot run (no gunicorn).
 Stdlib only.
@@ -50,16 +55,24 @@ _PAIRS = {"TRACE": 1, "DEBUG": 5, "INFO": 9, "WARN": 13, "ERROR": 17, "FATAL": 2
 _FORBIDDEN = re.compile(r"^service\.name$|tenant|app[._-]?id|authorization|cookie|token",
                         re.IGNORECASE)
 REQUEST_ID = "http.request.header.x-request-id"
+USER_EMAIL = "user.email"
+EMAIL = "logging-check@appstore.invalid"   # the value the platform's check sends
 SECRET = "LOGCHECKSECRET42"
+RED_MODES = {
+    # gunicorn's own lines on stderr: the 1.7.0 behaviour
+    "stderr": {"strip_logger_class": True, "env": {}},
+    # request lines without user.email: the 1.7.1 and 1.7.2 behaviour
+    "email": {"strip_logger_class": False, "env": {"LOG_USER_EMAIL": "false"}},
+}
 
 
-def container_command(red: bool) -> str:
+def container_command(strip_logger_class: bool) -> str:
     with open(os.path.join(ROOT, "Dockerfile"), encoding="utf-8") as fh:
         match = _CMD.search(fh.read())
     if match is None:
         raise SystemExit("cannot find the CMD in the Dockerfile")
     cmd = match.group(1)
-    return re.sub(r"\s--logger-class\s+\S+", "", cmd) if red else cmd
+    return re.sub(r"\s--logger-class\s+\S+", "", cmd) if strip_logger_class else cmd
 
 
 def _free_port() -> int:
@@ -69,7 +82,8 @@ def _free_port() -> int:
 
 
 def _get(url: str, rid: str) -> None:
-    req = urllib.request.Request(url, headers={"X-Request-Id": rid})
+    req = urllib.request.Request(url, headers={"X-Request-Id": rid,
+                                               "X-Auth-Request-Email": EMAIL})
     with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (localhost)
         resp.read()
 
@@ -86,16 +100,19 @@ def _wait_healthy(base: str, proc: subprocess.Popen) -> bool:
     return False
 
 
-def run_server(red: bool) -> tuple[str, str, list[str]]:
+def run_server(red: str | None) -> tuple[str, str, list[str]]:
     """Start the container command, send the probes, stop it, return output."""
     port = _free_port()
     data = tempfile.mkdtemp(prefix="psirens-logcheck-")
     env = dict(os.environ, PORT=str(port), DATA_DIR=data,
                PYTHONPATH=os.path.join(ROOT, "src"), PYTHONUNBUFFERED="1")
+    mode = RED_MODES.get(red or "", {"strip_logger_class": False, "env": {}})
+    env.update(mode["env"])
     env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
     out_f = tempfile.TemporaryFile(mode="w+")
     err_f = tempfile.TemporaryFile(mode="w+")
-    proc = subprocess.Popen(["sh", "-c", container_command(red)], cwd=ROOT, env=env,
+    proc = subprocess.Popen(["sh", "-c", container_command(bool(mode["strip_logger_class"]))],
+                            cwd=ROOT, env=env,
                             stdout=out_f, stderr=err_f)
     ids = [f"logcheck-{uuid.uuid4().hex[:12]}" for _ in range(2)]
     base = f"http://127.0.0.1:{port}"
@@ -150,16 +167,22 @@ def evaluate(stdout: str, stderr: str, ids: list[str]) -> list[str]:
     if errs:
         problems.append(f"{len(errs)} line(s) went to stderr, first: {errs[0][:120]!r}")
     seen: set[str] = set()
+    named: set[str] = set()
     for n, line in enumerate(lines, 1):
         problems.extend(_line_problems(n, line))
         try:
             attrs = json.loads(line).get("attributes") or {}
-            seen.add(str(attrs.get(REQUEST_ID, "")))
         except (json.JSONDecodeError, AttributeError):
             continue
+        rid = str(attrs.get(REQUEST_ID, ""))
+        seen.add(rid)
+        if attrs.get(USER_EMAIL) == EMAIL:
+            named.add(rid)
     for rid in ids:
         if rid not in seen:
             problems.append(f"no log line carries request id {rid} in its attributes")
+        elif rid not in named:
+            problems.append(f"no line for request {rid} names the user as user.email")
     if SECRET in stdout or SECRET in stderr:
         problems.append("a query-string secret was written to the logs")
     return problems
@@ -167,8 +190,8 @@ def evaluate(stdout: str, stderr: str, ids: list[str]) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--red", action="store_true",
-                    help="drop --logger-class from the CMD: the 1.7.0 behaviour")
+    ap.add_argument("--red", choices=sorted(RED_MODES),
+                    help="stderr: drop --logger-class (1.7.0); email: LOG_USER_EMAIL=false (1.7.2)")
     ap.add_argument("--expect", choices=("pass", "fail"), default="pass")
     a = ap.parse_args(argv)
     if shutil.which("gunicorn", path=os.path.dirname(sys.executable)) is None \
@@ -185,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     for p in problems:
         print(("  rejected: " if a.expect == "fail" else "FAIL: ") + p)
     passed = not problems
-    print(f"logging check ({'red: no --logger-class' if a.red else 'container CMD'}): "
+    print(f"logging check ({'red: ' + a.red if a.red else 'container CMD'}): "
           f"{lines} stdout line(s), {len([ln for ln in stderr.splitlines() if ln.strip()])} "
           f"stderr line(s), {'compliant' if passed else 'NOT compliant'}")
     return 0 if passed == (a.expect == "pass") else 1

@@ -242,8 +242,11 @@ fi
 # gunicorn's own lines, and the check MUST reject it. Cannot run is a failure.
 # ---------------------------------------------------------------------------
 set +e
-python3 "$ROOT/tools/logging_check.py" --red --expect fail
+python3 "$ROOT/tools/logging_check.py" --red stderr --expect fail
 LOG_RED=$?
+python3 "$ROOT/tools/logging_check.py" --red email --expect fail
+LOG_RED2=$?
+[ "$LOG_RED" -eq 0 ] && LOG_RED=$LOG_RED2
 python3 "$ROOT/tools/logging_check.py"
 LOG_RC=$?
 set -e
@@ -258,7 +261,7 @@ fi
 if [ "$LOG_RC" -ne 0 ]; then
   echo "FAIL: the container's logs break the platform logging standard (see above)"; exit 1
 fi
-echo "Logging OK (red case rejected; container CMD writes standard JSON to stdout only)"
+echo "Logging OK (both red cases rejected; container CMD writes standard JSON to stdout only, naming the user)"
 
 echo "SIMULATION GREEN (matches platform): tests passed, coverage.xml at $SIM/coverage.xml"
 echo "Every gate above was run against a case it MUST reject before being"
