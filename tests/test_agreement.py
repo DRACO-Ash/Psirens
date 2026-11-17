@@ -171,7 +171,7 @@ def test_the_tle_coplanar_and_screen_follow_the_track_provider(tmp_path):
     obj = resolved["objects"][SAT]
     primary = obj["agreement"]["REAL"]["primary"]
     assert obj["elset"]["source"] == primary
-    assert list(obj["elset_candidates"].values())[0]["source"] == primary
+    assert next(iter(obj["elset_candidates"].values()))["source"] == primary
     out = conjunctions_for(resolved, SAT)
     assert out["target"]["tle_provenance"]["source"] == primary
 

@@ -198,41 +198,55 @@ def _eligible(a: Assessment, fresh: list[dict], agreed: set[str],
 # --------------------------------------------------------------------------
 # Streams: one provider's samples in one mode
 # --------------------------------------------------------------------------
-def streams_of(obj: dict) -> tuple[dict[tuple[str, str], list[dict]], list[dict]]:
-    """Samples grouped by (provider, mode), and the untagged remainder."""
-    streams: dict[tuple[str, str], list[dict]] = {}
+# Streams are keyed MODE first, then provider: {mode: {provider: samples}}.
+# Until 1.7.6 they were keyed by a (provider, mode) tuple, and every loop over
+# them unpacked a dict key, which Code Quality reads as a missed .items()
+# (python:S7517, four times on the 1.7.5 upload). Keyed this way, the provider
+# streams for one mode are a plain dict lookup and nothing is unpacked.
+Streams = dict[str, dict[str, list[dict]]]
+
+
+def streams_of(obj: dict) -> tuple[Streams, list[dict]]:
+    """Samples grouped by mode, then provider, and the untagged remainder."""
+    streams: Streams = {}
     untagged: list[dict] = []
     for s in obj.get("samples") or []:
         prov = sample_provenance(obj, s)
         if prov is None:
             untagged.append(s)
         else:
-            streams.setdefault((prov["source"], prov["data_mode"]), []).append(s)
-    for rows in streams.values():
-        rows.sort(key=lambda s: s["epoch"])
+            streams.setdefault(prov["data_mode"], {}).setdefault(prov["source"], []).append(s)
+    for by_provider in streams.values():
+        for rows in by_provider.values():
+            rows.sort(key=lambda s: s["epoch"])
     return streams, untagged
 
 
-def _pick_uncatalogued(names: list[str], streams: dict, mode: str,
+def _newest_ts(rows: list[dict]) -> float:
+    return datetime.fromisoformat(rows[-1]["epoch"]).timestamp()
+
+
+def _pick_uncatalogued(here: dict[str, list[dict]], names: list[str],
                        policy: Policy) -> str | None:
     """A provider with samples but no current element set drives only when no
-    provider with one has samples. Policy class, then the newest last fix."""
+    provider with one has samples. Policy class, then the newest last fix:
+    one comparison on a compound key, not two sorts (python:S7508, S8517)."""
     if not names:
         return None
-    newest_first = sorted(names, key=lambda n: streams[(n, mode)][-1]["epoch"], reverse=True)
-    return sorted(newest_first, key=lambda n: policy_rank(n, policy.priority))[0]
+    return min(names, key=lambda n: (policy_rank(n, policy.priority), -_newest_ts(here[n])))
 
 
-def choose_primary(a: Assessment, streams: dict, policy: Policy) -> str | None:
+def choose_primary(a: Assessment, streams: Streams, policy: Policy) -> str | None:
     """The provider whose samples drive the object in this mode."""
+    here = streams.get(a.mode, {})
     for el in a.eligible:
-        if (el.get("source"), a.mode) in streams:
+        if el.get("source") in here:
             return str(el.get("source"))
     if a.status == AGREED or a.eligible:
         return None   # the providers that may drive have no samples held
     excluded = set(a.set_aside) | set(a.aged_out) | set(a.unverified) | set(a.positions)
-    names = [n for (n, m) in streams if m == a.mode and n not in excluded]
-    return _pick_uncatalogued(names, streams, a.mode, policy)
+    names = [n for n in here if n not in excluded]
+    return _pick_uncatalogued(here, names, policy)
 
 
 def _fit_summary(rows: list[dict], policy: Policy) -> dict:
@@ -266,15 +280,16 @@ def _status_note(name: str, a: Assessment, primary: str | None) -> tuple[str, st
     return "not used", "no current element set from this provider"
 
 
-def provider_rows(a: Assessment, streams: dict, primary: str | None,
+def provider_rows(a: Assessment, streams: Streams, primary: str | None,
                   policy: Policy, untagged: int) -> dict[str, dict]:
     """Every provider seen for the object in this mode, each with its own
     status, its own longitude at the common instant and its own fit."""
-    names = ({n for (n, m) in streams if m == a.mode} | set(a.positions)
-             | set(a.set_aside) | set(a.unverified) | set(a.aged_out))
+    here = streams.get(a.mode, {})
+    names = (set(here) | set(a.positions) | set(a.set_aside)
+             | set(a.unverified) | set(a.aged_out))
     out: dict[str, dict] = {}
     for name in sorted(names):
-        rows = streams.get((name, a.mode), [])
+        rows = here.get(name, [])
         status, note = _status_note(name, a, primary)
         lon = a.positions.get(name)
         out[name] = {"count": len(rows), "status": status, "note": note,
@@ -304,8 +319,8 @@ def _block(a: Assessment, primary: str | None, rows: dict, policy: Policy,
     }
 
 
-def _modes_present(obj: dict, streams: dict) -> list[str]:
-    seen = {m for (_, m) in streams} | {mode_of(el) for el in usable_candidates(obj)}
+def _modes_present(obj: dict, streams: Streams) -> list[str]:
+    seen = set(streams) | {mode_of(el) for el in usable_candidates(obj)}
     return [m for m in MODE_ORDER if m in seen]
 
 
@@ -329,11 +344,12 @@ class _Resolved:
     heard: dict[str, list[str]] = field(default_factory=dict)
 
 
-def _resolve_mode(obj: dict, mode: str, streams: dict, untagged: list[dict],
+def _resolve_mode(obj: dict, mode: str, streams: Streams, untagged: list[dict],
                   policy: Policy, out: _Resolved) -> None:
     a = assess(obj, mode, policy)
     primary = choose_primary(a, streams, policy)
-    tagged_here = any(m == mode for (_, m) in streams)
+    here = streams.get(mode, {})
+    tagged_here = bool(here)
     legacy = not streams and bool(untagged) and _legacy_mode(obj) == mode
     rows = provider_rows(a, streams, primary, policy,
                          len(untagged) if tagged_here or legacy else 0)
@@ -342,12 +358,12 @@ def _resolve_mode(obj: dict, mode: str, streams: dict, untagged: list[dict],
     if el is not None:
         out.elsets[mode] = el
     if primary is not None:
-        out.streams[mode] = streams[(primary, mode)]
+        out.streams[mode] = here[primary]
     elif legacy:
         out.streams[mode] = sorted(untagged, key=lambda s: s["epoch"])
     skip = set(a.set_aside) | set(a.aged_out)
-    heard = sorted(s["epoch"] for (n, m), rows_ in streams.items()
-                   if m == mode and n not in skip for s in rows_)
+    heard = sorted(s["epoch"] for name, rows_ in here.items()
+                   if name not in skip for s in rows_)
     out.heard[mode] = heard or [s["epoch"] for s in out.streams.get(mode, [])]
 
 

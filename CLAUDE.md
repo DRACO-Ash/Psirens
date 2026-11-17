@@ -51,7 +51,14 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.5; DEPLOYED 1.7.3, Active)
+## Current state (repo 1.7.6; DEPLOYED 1.7.3, Active)
+
+1.7.6, 17 November 2026: 1.7.5 FAILED Code Quality on eight smells from four
+rules never met before (`python:S7517` x4, `S8517`, `S7508` x2, `S7504`;
+QUALITY-LEDGER A10 to A17). 1.7.6 is 1.7.5 with those fixed, four calibrated
+`sniff_check` rules (exactly the eight lines on the 1.7.5 tree, nothing on
+1.7.3 or 1.6.12), and a NEW loop gate running ruff's equivalents for the whole
+collection-idiom family with its own red case (SNIFFS.md 3.19). Upload 1.7.6.
 
 1.7.5, built 17 November 2026 on Ash's "Build it", is the rest of the audit:
 ONE PROVIDER PER TRACK chosen by an agreement check (outlier set aside,
@@ -1368,6 +1375,18 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- CODE QUALITY on 1.7.5, 17 November 2026: FAILED, eight smells, four rules
+  new to this repo (S7517, S8517, S7508, S7504). Fixed in 1.7.6. Two of the
+  fixes are not mechanical and must not be "simplified" back: the provider
+  streams in `agreement.py` are keyed MODE then provider (a tuple key is what
+  S7517 fires on), and `tle.by_policy` / `agreement._pick_uncatalogued` sort
+  ONCE on `(class rank, negated epoch)` (a two-pass stable sort is S7508).
+  `Store.purge_synthetic` decides first and deletes after (S7504; removing
+  `list()` alone raises at runtime). GUARDED twice: four calibrated
+  `sniff_check` rules and the ruff collection-idiom gate in the loop. HONEST
+  LIMIT: every local rule still follows a platform finding; ruff caught one of
+  the eight directly. Running the tenant's own scanner remains the only
+  complete fix.
 - PROVIDER AGREEMENT: BUILT in 1.7.5, 17 November 2026, on Ash's "Build it"
   for the five items left by 1.7.4. One provider per track, chosen by the
   agreement check; drift withheld over 1 deg rms with the reason; age-out at

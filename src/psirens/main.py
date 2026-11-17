@@ -681,7 +681,7 @@ def create_app(cfg: Config | None = None,
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="1.7.5", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.7.6", lifespan=_lifespan)
     # Request context for every log line, and one standard request line. The
     # X-Auth-Request-Email header becomes user.email, as the standard requires;
     # LOG_USER_EMAIL=false switches that off (see config.py).

@@ -1,5 +1,8 @@
 """Prove each 1.7.5 guard by reinstating the behaviour it replaces.
 
+Anchors follow the 1.7.6 shape of agreement.py (streams keyed mode, then
+provider); the behaviours each case reinstates are unchanged.
+
 Each case edits ONE line of the shipped source back to the 1.7.4 behaviour
 (or to the bypass the guard exists to stop), runs the one test that guards
 it, and restores the file byte for byte. A test that stays green against
@@ -14,8 +17,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 T = "tests/test_agreement.py"
 CASES = [
  ("providers pooled into one track (1.7.4, F1)", "src/psirens/agreement.py",
-  "        out.streams[mode] = streams[(primary, mode)]",
-  "        out.streams[mode] = sorted((s for (n, m), r in streams.items() if m == mode for s in r), key=lambda s: s[\"epoch\"])",
+  "        out.streams[mode] = here[primary]",
+  "        out.streams[mode] = sorted((s for r in here.values() for s in r), key=lambda s: s[\"epoch\"])",
   T, "test_cosmos_2589_northstar_is_set_aside_and_the_drift_is_real"),
  ("no outlier ever set aside", "src/psirens/agreement.py",
   "    agreed = {p for p in positions if _has_majority(p, positions, agree_deg)}",
@@ -30,8 +33,8 @@ CASES = [
   "    return by_policy(checked + rest, policy.priority)",
   T, "test_an_unverifiable_provider_is_listed_not_judged_and_not_preferred"),
  ("untagged history mixed into a tagged track", "src/psirens/agreement.py",
-  "        out.streams[mode] = streams[(primary, mode)]",
-  "        out.streams[mode] = sorted(streams[(primary, mode)] + untagged, key=lambda s: s[\"epoch\"])",
+  "        out.streams[mode] = here[primary]",
+  "        out.streams[mode] = sorted(here[primary] + untagged, key=lambda s: s[\"epoch\"])",
   T, "test_untagged_history_is_never_mixed_with_tagged_samples"),
  ("silence judged on the track provider alone", "src/psirens/agreement.py",
   "    out.heard[mode] = heard or [s[\"epoch\"] for s in out.streams.get(mode, [])]",

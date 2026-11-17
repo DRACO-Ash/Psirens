@@ -352,15 +352,20 @@ class Store:
         with _LOCK:
             data = self.load()
             objects = data.setdefault("objects", {})
-            for oid in list(objects):
-                rec = objects[oid]
+            # Decide first, delete after: the dict cannot change size while
+            # it is being walked, and wrapping it in list() to allow that was
+            # python:S7504 on the 1.7.5 upload.
+            doomed = []
+            for oid, rec in objects.items():
                 if rec.get("origin") == "DEMO" or oid.startswith("DEMO-"):
                     removed += 1 + len(rec.get("samples") or [])
-                    del objects[oid]
+                    doomed.append(oid)
                     continue
                 removed += _drop_demo_parts(rec)
                 if not rec.get("samples"):
-                    del objects[oid]
+                    doomed.append(oid)
+            for oid in doomed:
+                del objects[oid]
             if removed:
                 self._write_atomic(data)
         if removed:

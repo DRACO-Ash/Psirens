@@ -172,6 +172,46 @@ written that week, and every one a rule the local gates did not carry.
   for the rest. See D11.
 ● **Cost:** one upload cycle.
 
+### A10 to A17. Eight collection idioms from four rules (`python:S7517`, `S8517`, `S7508`, `S7504`, 1.7.5)
+● **Raised:** 17 November 2026, "New issues: 8 (max allowed: 0). 8 code smells
+  exceed threshold", all in code written that day or the day before:
+  `agreement.py:234, 273, 308, 336` "Use items to iterate over key-value pairs"
+  (S7517); `agreement.py:223` "Use min() instead of sorting to find this value"
+  (S8517); `agreement.py:222` and `tle.py:415` "Remove this redundant call"
+  (S7508); `store.py:355` "Remove this unnecessary list() call on an already
+  iterable object" (S7504).
+● **Why the gates missed them, plainly:** none of the four rules had ever fired
+  on this repository, and every local Python rule was written after the
+  platform raised it. The gates were complete for the rules we had met, not for
+  the profile.
+● **Fixes, two of them not mechanical:**
+  ■ S7517: provider streams were keyed by a `(provider, mode)` tuple, so every
+  loop unpacked a dict key. Re-keyed mode first, then provider; nothing is
+  unpacked now.
+  ■ S7508 and S8517: the double sort was a deliberate stable two-pass sort
+  (policy class, then newest). Replaced by ONE sort, or `min`, on a compound key
+  `(class rank, negated epoch timestamp)`, not by deleting a pass.
+  ■ S7504: the `list()` existed because the loop deletes from the dict it walks.
+  Removing it alone would raise at runtime; the loop now decides first and
+  deletes after.
+● **Guards, two layers:**
+  ■ `sniff_check.py` gained `PY-DICT-UNPACK`, `PY-SORTED-INDEX`,
+  `PY-REDUNDANT-CALL` and `PY-LIST-ITER`. CALIBRATED on git: the uploaded 1.7.5
+  tree (`b159761`) gives exactly the platform's eight lines and nothing else;
+  1.7.3 (`de7d91f`) and 1.6.12 (`9258395`), both passed, give nothing.
+  ■ A NEW wider gate in the loop: ruff's equivalents for this family (`C4`,
+  `PERF101`, `PERF102`, `PLC0206`, `FURB192`, `RUF015`, `SIM118`), pinned, with
+  a red case (`gate-cases/collections_case.py`) that must produce six named
+  codes. Same calibration: silent on 1.7.3 and 1.6.12, catches the S8517 line
+  on 1.7.5. `C408` excluded, because it fires on test helpers that passed
+  every upload since 1.6.12. Its first run FAILED on its own red case
+  (PERF101 needs a locally visible list), which is the red case working.
+● **What it does NOT close, stated:** ruff caught only one of the eight
+  directly (it declines S7504 where the loop mutates, which Sonar does not),
+  so neither layer is a SonarQube profile. The durable fix is unchanged: run
+  the tenant's own scanner before upload.
+● **Cost:** one upload cycle.
+
 ---
 
 ## 4. Caught by local gates before upload
@@ -577,6 +617,14 @@ Ordered by return on effort, from this project's evidence.
      "fixed_in": "1.7.1", "cost": "upload cycle", "guard": "WEB-IMG-ROLE"},
     {"id": "A9", "rule": "python:S1244", "title": "equality against a float literal",
      "fixed_in": "1.7.2", "cost": "upload cycle", "guard": "PY-FLOAT-EQ, calibrated on 1.6.12 and 1.7.1"},
+    {"id": "A10-A13", "rule": "python:S7517", "title": "unpacking while iterating a tuple-keyed dict (x4)",
+     "fixed_in": "1.7.6", "cost": "upload cycle", "guard": "PY-DICT-UNPACK, calibrated on 1.6.12, 1.7.3 and 1.7.5"},
+    {"id": "A14", "rule": "python:S8517", "title": "sorted(...)[0] instead of min()",
+     "fixed_in": "1.7.6", "cost": "upload cycle", "guard": "PY-SORTED-INDEX; ruff FURB192"},
+    {"id": "A15-A16", "rule": "python:S7508", "title": "sorted, then sorted again (x2)",
+     "fixed_in": "1.7.6", "cost": "upload cycle", "guard": "PY-REDUNDANT-CALL; ruff C4"},
+    {"id": "A17", "rule": "python:S7504", "title": "list() around a dict being mutated in the loop",
+     "fixed_in": "1.7.6", "cost": "upload cycle", "guard": "PY-LIST-ITER (ruff PERF101 declines this form)"},
 
     {"id": "B1", "rule": "python:S3776", "title": "cognitive complexity 18 in load_config",
      "fixed_in": "1.6.6", "cost": "none", "guard": "tools/ast_gates.py"},

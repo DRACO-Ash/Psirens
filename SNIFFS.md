@@ -438,6 +438,34 @@ get there, each justified by the passing tree: identifier-like strings, and
 test code, which SonarQube analyses as `sonar.tests` and does not hold to
 S1192.
 
+### 3.19 A rule family, not a rule: collection idioms GATE
+
+PSIRENS 1.7.5 failed Code Quality on eight findings from four Python rules the
+project had never met (QUALITY-LEDGER A10 to A17). They belong together: each
+says "you used a collection the long way round".
+
+● `PY-DICT-UNPACK` (`python:S7517`): unpacking while iterating a dict directly,
+  `for a, b in d`. Iterating a dict yields keys, so this reads as a missed
+  `.items()`. If the keys really are tuples, key the dict so nothing is unpacked.
+● `PY-SORTED-INDEX` (`python:S8517`): `sorted(x)[0]` or `[-1]`. Use `min` or `max`
+  with the same key.
+● `PY-REDUNDANT-CALL` (`python:S7508`): `sorted(list(x))`, `list(sorted(x))` and
+  kin, AND a name assigned from `sorted()` whose only use is to be sorted again.
+  Two stable sorts in a row are one sort on a compound key; do not just delete
+  a pass, or the ordering changes.
+● `PY-LIST-ITER` (`python:S7504`): `for x in list(y)`. The analyser raises it even
+  when the loop mutates `y`, where the copy is load-bearing. Decide first,
+  mutate after.
+
+THE LESSON is the family. Every earlier Python rule in this file was added after
+the platform raised it, one per cycle. This time the loop also runs ruff's
+equivalents for the whole family (`C4`, `PERF101`, `PERF102`, `PLC0206`,
+`FURB192`, `RUF015`, `SIM118`), calibrated the 3.18 way and with its own red
+case. When a new rule arrives, ask what family it belongs to and whether an
+off-the-shelf linter already covers the rest of it, then calibrate that linter
+on git rather than trusting its documentation. Ruff is still not the profile:
+it caught one of these eight directly.
+
 ## 5. The meta-rules, which cost more than any sniff
 
 Four habits, each learned from a real failure. They are the reason the rules

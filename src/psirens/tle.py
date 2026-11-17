@@ -410,10 +410,19 @@ def policy_rank(source: str | None, priority: tuple[str, ...]) -> int:
     return priority.index(cls) if cls in priority else len(priority)
 
 
+def _newest_first_key(el: dict) -> float:
+    """Sorts newest first when ascending: the negated epoch timestamp. An
+    unparseable epoch sorts last rather than raising."""
+    when = epoch_of(el)
+    return -when.timestamp() if when is not None else float("inf")
+
+
 def by_policy(items: list[dict], priority: tuple[str, ...]) -> list[dict]:
-    """Element sets in selection order: policy class, then newest first."""
-    newest_first = sorted(items, key=_epoch_key, reverse=True)
-    return sorted(newest_first, key=lambda el: policy_rank(el.get("source"), priority))
+    """Element sets in selection order: policy class, then newest first, in
+    ONE sort on a compound key (two stable sorts in a row were python:S7508
+    on the 1.7.5 upload)."""
+    return sorted(items, key=lambda el: (policy_rank(el.get("source"), priority),
+                                         _newest_first_key(el)))
 
 
 def select_elset(obj: dict, priority: tuple[str, ...] = DEFAULT_PRIORITY,

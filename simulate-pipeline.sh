@@ -57,6 +57,32 @@ python3 "$ROOT/tools/sniff_check.py" src tests   || { echo "FAIL: sniff findings
 echo "sniff_check OK (self-test passed, no findings in src or tests)"
 
 # ---------------------------------------------------------------------------
+# Collection idioms (1.7.6). Code Quality rejected 1.7.5 on eight findings from
+# four rules this repository had never been flagged for (python:S7517, S8517,
+# S7508, S7504). sniff_check now carries those four, calibrated on git. This
+# gate casts the WIDER net over the same family with ruff's equivalents, so the
+# next rule in the family is caught here rather than on an upload. CALIBRATED
+# on git: silent on 1.7.3 and 1.6.12 (both passed Code Quality); on the 1.7.5
+# upload it reports the S8517 line. C408 (dict() with keywords) is excluded:
+# it fires on test helpers that have passed every upload since 1.6.12.
+# Pinned, red case first, and a ruff that cannot be installed is a FAILURE.
+# ---------------------------------------------------------------------------
+RUFF_COLLECTIONS="C4,PERF101,PERF102,PLC0206,FURB192,RUF015,SIM118"
+pip install -q ruff==0.16.9 >/dev/null 2>&1
+command -v ruff >/dev/null 2>&1 || { echo "FAIL: ruff is not available, so the collection-idiom gate cannot run"; exit 1; }
+RED_CODES="$(ruff check --isolated --select "$RUFF_COLLECTIONS" --ignore C408 \
+  "$ROOT/gate-cases/collections_case.py" --output-format concise 2>/dev/null \
+  | sed -n 's/.*:[0-9]*:[0-9]*: \([A-Z]*[0-9]*\) .*/\1/p' | sort -u | tr '\n' ' ')"
+for code in FURB192 PERF101 PLC0206 C413 SIM118 RUF015; do
+  case " $RED_CODES" in *" $code "*) ;; *)
+    echo "FAIL: the collection-idiom gate did not flag $code in its red case (saw: $RED_CODES)"; exit 1;;
+  esac
+done
+ruff check --isolated --select "$RUFF_COLLECTIONS" --ignore C408 src tests --output-format concise \
+  || { echo "FAIL: collection-idiom findings above (python:S75xx family; see SNIFFS.md 3.19)"; exit 1; }
+echo "collection idioms OK (ruff bit all six codes in its red case, nothing in src or tests)"
+
+# ---------------------------------------------------------------------------
 # The four text rules the eslint plugin does not carry. MEASURED, not assumed:
 # eslint-plugin-sonarjs does NOT carry the throw-versus-rejected-promise rule
 # even with all 279 of its rules enabled, so running eslint would NOT have

@@ -195,6 +195,7 @@ def _check_python(path: str, text: str) -> list[Finding]:
     # 1.6.12 suite repeats URLs and ids freely and passed.
     if not _is_test_file(path):
         out.extend(_check_dup_literals(path, tree))
+    out.extend(_check_collections(path, tree))
     return out
 
 
@@ -348,6 +349,158 @@ def _check_float_eq(path: str, node: ast.Compare) -> list[Finding]:
                                "equality check against a float literal (python:S1244); "
                                "compare with a tolerance or restructure"))
     return out
+
+
+# --------------------------------------------------------------------------
+# Collection idioms (python:S7517, S8517, S7508, S7504). Raised together by
+# Code Quality on PSIRENS 1.7.5, 17 November 2026: eight findings, four rules
+# none of which had fired on this repository before. CALIBRATED against git:
+# on the uploaded 1.7.5 tree (b159761) these four rules report exactly the
+# eight lines the platform did. The analyser infers types; these rules use the
+# cheap evidence available in one function (annotations and literal
+# assignments), which is how every one of the eight could be seen.
+# --------------------------------------------------------------------------
+_COLLECTIONS = ("list", "sorted", "set", "tuple")
+_REDUNDANT_INNER = {
+    "sorted": ("sorted", "list", "tuple"),
+    "list": ("list", "sorted"),
+    "set": ("set", "list", "sorted", "tuple"),
+    "tuple": ("tuple", "list"),
+}
+
+
+def _call_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id
+    return None
+
+
+def _is_dict_annotation(ann: ast.AST | None) -> bool:
+    if ann is None:
+        return False
+    text = ast.unparse(ann).replace(" ", "")
+    return text.split("[")[0].split(".")[-1] in ("dict", "Dict", "defaultdict", "OrderedDict")
+
+
+def _is_dict_value(value: ast.AST | None) -> bool:
+    return isinstance(value, (ast.Dict, ast.DictComp)) or _call_name(value) == "dict"
+
+
+def _dict_names(func: ast.AST) -> set[str]:
+    """Names a function's own code shows to be dicts: annotated parameters,
+    annotated assignments and literal or dict() assignments."""
+    names: set[str] = set()
+    args = getattr(func, "args", None)
+    if args is not None:
+        for a in [*args.posonlyargs, *args.args, *args.kwonlyargs]:
+            if _is_dict_annotation(a.annotation):
+                names.add(a.arg)
+    for node in ast.walk(func):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if _is_dict_annotation(node.annotation) or _is_dict_value(node.value):
+                names.add(node.target.id)
+        elif isinstance(node, ast.Assign) and _is_dict_value(node.value):
+            names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+    return names
+
+
+def _iterations(node: ast.AST) -> list[tuple[ast.AST, ast.AST, int]]:
+    """(target, iterable, line) for every for loop and comprehension."""
+    out = []
+    for sub in ast.walk(node):
+        if isinstance(sub, (ast.For, ast.AsyncFor)):
+            out.append((sub.target, sub.iter, sub.lineno))
+        elif isinstance(sub, ast.comprehension):
+            out.append((sub.target, sub.iter, sub.iter.lineno))
+    return out
+
+
+def _check_dict_unpack(path: str, func: ast.AST) -> list[Finding]:
+    """python:S7517: unpacking while iterating a dict directly. Iterating a
+    dict yields its keys, so `for k, v in d` only works when the keys are
+    tuples and reads as a missed `.items()`. PSIRENS 1.7.5 keyed streams by
+    (provider, mode) and was flagged four times."""
+    names = _dict_names(func)
+    return [Finding(path, line, "PY-DICT-UNPACK",
+                    f"unpacking while iterating the dict `{it.id}` (python:S7517); "
+                    f"use .items(), or key it so no unpacking is needed")
+            for target, it, line in _iterations(func)
+            if isinstance(target, ast.Tuple) and isinstance(it, ast.Name) and it.id in names]
+
+
+def _check_sorted_index(path: str, node: ast.Subscript) -> list[Finding]:
+    """python:S8517: `sorted(x)[0]` or `[-1]` sorts everything to read one end."""
+    if _call_name(node.value) != "sorted":
+        return []
+    idx = node.slice
+    value = idx.value if isinstance(idx, ast.Constant) else None
+    if isinstance(idx, ast.UnaryOp) and isinstance(idx.op, ast.USub) and isinstance(idx.operand, ast.Constant):
+        value = -idx.operand.value
+    if value not in (0, -1):
+        return []
+    return [Finding(path, node.lineno, "PY-SORTED-INDEX",
+                    "sorting to read one end (python:S8517); use min() or max() with the same key")]
+
+
+def _check_nested_collection(path: str, node: ast.Call) -> list[Finding]:
+    """python:S7508, nested form: sorted(list(x)), list(sorted(x)), set(list(x))..."""
+    outer = _call_name(node)
+    if outer not in _REDUNDANT_INNER or not node.args:
+        return []
+    inner = _call_name(node.args[0])
+    if inner not in _REDUNDANT_INNER[outer]:
+        return []
+    return [Finding(path, node.lineno, "PY-REDUNDANT-CALL",
+                    f"{outer}({inner}(...)) (python:S7508): the inner call is redundant")]
+
+
+def _check_resorted(path: str, func: ast.AST) -> list[Finding]:
+    """python:S7508, the form that fired on 1.7.5: a name assigned from
+    sorted() whose only use is to be sorted again. Two stable sorts in a row
+    are one sort with a compound key."""
+    loads: dict[str, list[ast.Name]] = {}
+    for node in ast.walk(func):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            loads.setdefault(node.id, []).append(node)
+    resorted = {id(c.args[0]) for c in ast.walk(func)
+                if _call_name(c) == "sorted" and c.args and isinstance(c.args[0], ast.Name)}
+    out = []
+    for node in ast.walk(func):
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and _call_name(node.value) == "sorted"):
+            continue
+        uses = loads.get(node.targets[0].id, [])
+        if len(uses) == 1 and id(uses[0]) in resorted:
+            out.append(Finding(path, node.lineno, "PY-REDUNDANT-CALL",
+                               "sorted, then sorted again (python:S7508); use one sort "
+                               "with a compound key"))
+    return out
+
+
+def _check_list_iter(path: str, func: ast.AST) -> list[Finding]:
+    """python:S7504: `for x in list(y)`. The analyser raises it even where the
+    loop mutates `y` (PSIRENS 1.7.5, store.py:355, deleting from a dict while
+    walking it), so restructure: collect what to change first, then change it."""
+    return [Finding(path, line, "PY-LIST-ITER",
+                    "unnecessary list() around an iterable in a loop (python:S7504)")
+            for _, it, line in _iterations(func)
+            if _call_name(it) == "list" and len(it.args) == 1 and not it.keywords
+            and not isinstance(it.args[0], ast.Starred)]
+
+
+def _check_collections(path: str, tree: ast.AST) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out.extend(_check_dict_unpack(path, node))
+            out.extend(_check_resorted(path, node))
+            out.extend(_check_list_iter(path, node))
+        elif isinstance(node, ast.Subscript):
+            out.extend(_check_sorted_index(path, node))
+        elif isinstance(node, ast.Call):
+            out.extend(_check_nested_collection(path, node))
+    # A nested function is walked from its parent too; report each line once.
+    return list(dict.fromkeys(out))
 
 
 def _check_none_compare(path: str, node: ast.Compare) -> list[Finding]:
@@ -585,6 +738,21 @@ _CASES = [
     ("PY-FLOAT-EQ",
      "def f(gap, closing):\n    return gap == 0.0 or gap * closing <= 0.0\n",
      "def g(gap, closing):\n    return gap * closing <= 0.0\n", ".py"),
+    # The real ones, PSIRENS 1.7.5, each raised by Code Quality on upload.
+    ("PY-DICT-UNPACK",
+     "def f(streams: dict, mode):\n    return [n for (n, m) in streams if m == mode]\n",
+     "def g(streams: dict, mode):\n    return list(streams.get(mode, {}))\n", ".py"),
+    ("PY-SORTED-INDEX",
+     "def f(names, rank):\n    return sorted(names, key=rank)[0]\n",
+     "def g(names, rank):\n    return min(names, key=rank)\n", ".py"),
+    ("PY-REDUNDANT-CALL",
+     "def f(items, k1, k2):\n    newest = sorted(items, key=k1, reverse=True)\n"
+     "    return sorted(newest, key=k2)\n",
+     "def g(items, k):\n    return sorted(items, key=k)\n", ".py"),
+    ("PY-LIST-ITER",
+     "def f(objects):\n    for oid in list(objects):\n        del objects[oid]\n",
+     "def g(objects):\n    doomed = [o for o in objects if o]\n"
+     "    for oid in doomed:\n        del objects[oid]\n", ".py"),
     ("PY-REPLACE-RETURN",
      "from dataclasses import replace\ndef f(s) -> int:\n    return replace(s, a=1)\n",
      "def g(s) -> int:\n    return type(s)(a=1)\n", ".py"),
@@ -660,7 +828,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'WEB-CONTRAST':22} declared text contrast below WCAG AA")
         for rule in ("PY-COMPLEXITY", "PY-PARAMS", "PY-MUTABLE-DEFAULT",
                      "PY-BARE-EXCEPT", "PY-NONE-COMPARE", "PY-LOOP-LAMBDA",
-                     "PY-DUP-LITERAL", "PY-REPLACE-RETURN", "PY-FLOAT-EQ"):
+                     "PY-DUP-LITERAL", "PY-REPLACE-RETURN", "PY-FLOAT-EQ",
+                     "PY-DICT-UNPACK", "PY-SORTED-INDEX", "PY-REDUNDANT-CALL",
+                     "PY-LIST-ITER"):
             print(f"{rule:22} see SNIFFS.md")
         return 0
     if not args.paths:
