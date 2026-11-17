@@ -1,0 +1,309 @@
+{
+"note": "PROTOTYPE scenario events from dense_scenario.py, epochs stored as age so the demo is always current",
+"events": [
+{
+"id": "36868:LEAVING:2026-11-17T07:49:35+00:00",
+"object_id": "36868",
+"type": "LEAVING",
+"tier": "SUSPECTED",
+"name": "AEHF 1 (USA 214)",
+"age_ms": 2272735
+},
+{
+"id": "43162:LEAVING:2026-11-17T05:49:35+00:00",
+"object_id": "43162",
+"type": "LEAVING",
+"tier": "SUSPECTED",
+"name": "SBIRS GEO 3 (USA 282)",
+"age_ms": 9472735
+},
+{
+"id": "54230:LEAVING:2026-11-17T03:49:35+00:00",
+"object_id": "54230",
+"type": "LEAVING",
+"tier": "SUSPECTED",
+"name": "CHINASAT 19",
+"age_ms": 16672735
+},
+{
+"id": "38093:QUIET:2026-11-16T09:49:35+00:00",
+"object_id": "38093",
+"type": "QUIET",
+"tier": "CONFIRMED",
+"name": "MUOS 1",
+"age_ms": 81472735
+},
+{
+"id": "51281:QUIET:2026-11-16T09:49:35+00:00",
+"object_id": "51281",
+"type": "QUIET",
+"tier": "CONFIRMED",
+"name": "USA 325",
+"age_ms": 81472735
+},
+{
+"id": "65486:QUIET:2026-11-16T09:49:35+00:00",
+"object_id": "65486",
+"type": "QUIET",
+"tier": "CONFIRMED",
+"name": "SY-29 (SHIYAN 29)",
+"age_ms": 81472735
+},
+{
+"id": "63157:QUIET:2026-11-16T09:49:35+00:00",
+"object_id": "63157",
+"type": "QUIET",
+"tier": "CONFIRMED",
+"name": "TJS-15",
+"age_ms": 81472735
+},
+{
+"id": "33436:STARTED:2026-11-16T01:49:35+00:00",
+"object_id": "33436",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "ASTRA 1M",
+"age_ms": 110272735
+},
+{
+"id": "64470:STARTED:2026-11-16T01:49:35+00:00",
+"object_id": "64470",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "CHINASAT 9C",
+"age_ms": 110272735
+},
+{
+"id": "39168:STARTED:2026-11-15T22:49:35+00:00",
+"object_id": "39168",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "WGS 5 (USA 243)",
+"age_ms": 121072735
+},
+{
+"id": "60327:STARTED:2026-11-15T22:49:35+00:00",
+"object_id": "60327",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "HG-02",
+"age_ms": 121072735
+},
+{
+"id": "41021:STARTED:2026-11-15T22:49:35+00:00",
+"object_id": "41021",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "CHINASAT 2C",
+"age_ms": 121072735
+},
+{
+"id": "55131:STARTED:2026-11-15T16:49:35+00:00",
+"object_id": "55131",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "SJ-23",
+"age_ms": 142672735
+},
+{
+"id": "55841:STARTED:2026-11-15T10:49:35+00:00",
+"object_id": "55841",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "LUCH (OLYMP) 2",
+"age_ms": 164272735
+},
+{
+"id": "62374:NS:2026-11-15T10:49:35+00:00",
+"object_id": "62374",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "TJS-12",
+"age_ms": 164272735
+},
+{
+"id": "64467:NS:2026-11-15T10:49:35+00:00",
+"object_id": "64467",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "COSMOS 2589",
+"age_ms": 164272735
+},
+{
+"id": "38978:NS:2026-11-15T07:49:35+00:00",
+"object_id": "38978",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "YAMAL 300K",
+"age_ms": 175072735
+},
+{
+"id": "40746:NS:2026-11-15T04:49:35+00:00",
+"object_id": "40746",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "WGS 7 (USA 263)",
+"age_ms": 185872735
+},
+{
+"id": "62485:STARTED:2026-11-15T04:49:35+00:00",
+"object_id": "62485",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "SJ-25",
+"age_ms": 185872735
+},
+{
+"id": "49505:NS:2026-11-15T04:49:35+00:00",
+"object_id": "49505",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "CHINASAT 1D",
+"age_ms": 185872735
+},
+{
+"id": "43874:NS:2026-11-15T04:49:35+00:00",
+"object_id": "43874",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "TJS-3",
+"age_ms": 185872735
+},
+{
+"id": "42075:NS:2026-11-14T22:49:35+00:00",
+"object_id": "42075",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "WGS 9 (USA 275)",
+"age_ms": 207472735
+},
+{
+"id": "100172:STARTED:2026-11-14T10:49:35+00:00",
+"object_id": "100172",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "TIANLIAN-3 01",
+"age_ms": 250672735
+},
+{
+"id": "37951:STARTED:2026-11-14T10:49:35+00:00",
+"object_id": "37951",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "LUCH 5A",
+"age_ms": 250672735
+},
+{
+"id": "58204:NS:2026-11-14T07:49:35+00:00",
+"object_id": "58204",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "TJS-10",
+"age_ms": 261472735
+},
+{
+"id": "47851:STARTED:2026-11-14T07:49:35+00:00",
+"object_id": "47851",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "SY-9 (SHIYAN 9)",
+"age_ms": 261472735
+},
+{
+"id": "50574:STARTED:2026-11-14T07:49:35+00:00",
+"object_id": "50574",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "TJS-9",
+"age_ms": 261472735
+},
+{
+"id": "44481:STARTED:2026-11-14T07:49:35+00:00",
+"object_id": "44481",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "AEHF 5 (USA 292)",
+"age_ms": 261472735
+},
+{
+"id": "43432:NS:2026-11-14T04:49:35+00:00",
+"object_id": "43432",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "COSMOS 2526",
+"age_ms": 272272735
+},
+{
+"id": "67757:STARTED:2026-11-14T01:49:35+00:00",
+"object_id": "67757",
+"type": "STARTED",
+"tier": "CONFIRMED",
+"name": "JAM-E JAM 1",
+"age_ms": 283072735
+},
+{
+"id": "38352:NS:2026-11-14T01:49:35+00:00",
+"object_id": "38352",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "CHINASAT 2A",
+"age_ms": 283072735
+},
+{
+"id": "63662:NS:2026-11-13T10:49:35+00:00",
+"object_id": "63662",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "TIANLIAN-2 05",
+"age_ms": 337072735
+},
+{
+"id": "33595:NS:2026-11-13T10:49:35+00:00",
+"object_id": "33595",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "EXPRESS AM-44",
+"age_ms": 337072735
+},
+{
+"id": "59069:NS:2026-11-13T10:49:35+00:00",
+"object_id": "59069",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "HG-01",
+"age_ms": 337072735
+},
+{
+"id": "44307:NS:2026-11-13T10:49:35+00:00",
+"object_id": "44307",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "YAMAL 601",
+"age_ms": 337072735
+},
+{
+"id": "34713:NS:2026-11-13T10:49:35+00:00",
+"object_id": "34713",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "WGS F2 (USA 204)",
+"age_ms": 337072735
+},
+{
+"id": "55239:NS:2026-11-13T07:49:35+00:00",
+"object_id": "55239",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "APSTAR 6E",
+"age_ms": 347872735
+},
+{
+"id": "63924:NS:2026-11-13T07:49:35+00:00",
+"object_id": "63924",
+"type": "NS",
+"tier": "CONFIRMED",
+"name": "TJS-19",
+"age_ms": 347872735
+}
+]
+}

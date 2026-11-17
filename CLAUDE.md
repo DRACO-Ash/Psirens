@@ -1297,6 +1297,28 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- EVENT TIMELINE REWORK: PROPOSED 17 November 2026, NOT BUILT, awaiting Ash.
+  `proposals/2026-11-17-timeline/PROPOSAL.html`. Ash, from a live screenshot:
+  "needs to be more dynamic, I need to be able to move it around, zoom in to
+  fully see what's there, the icons are overlapping". The prototype is
+  `prototype/timeline.patch` against 1.7.3 (applies cleanly; `index.html` in
+  the repo is UNCHANGED): wheel zoom, drag pan, 4d/24h/6h presets, an overview
+  strip, a live edge, count bubbles with a pinned list, placed labels with a
+  hidden count, the focused event lifted out of its bubble.
+  FINDING, and the reason zoom alone was never going to be enough. FACT: every
+  E-W and N-S event is stamped with its winning split, and the splits are a
+  shared 3-hour grid from `ref - 96 h` (`events.py:163`, `:206`). Two objects
+  manoeuvring in the same slot get the SAME EPOCH TO THE SECOND: the dense
+  scenario's 38 events sit on 17 timestamps. Hence the list behind every
+  bubble. Finer E-W timing is offered to Ash as a separate decision.
+  GATES ON THE PROTOTYPE: the first loop REJECTED it (three
+  `sonarjs/no-nested-conditional`); fixed in the patch; second loop GREEN.
+  FOUND IN THE PROTOTYPE, kept for the build: zooming about the pointer near
+  "now" pushed the newest event off the right edge (live edge added); `Esc`
+  with a list open also exits focus mode (both handlers fire).
+  ASKED OF ASH: an `/api/events` export from the live app, to confirm the
+  shared-epoch inference on real data and to calibrate the thresholds (his
+  screenshot suggests about 40 events in four days, many N-S).
 - SHIFT BRIEF: BUILT in 1.7.0. Proposed 16 November 2026
   (`proposals/2026-11-16-shift-brief/PROPOSAL.html`), approved by Ash the same
   day ("make it happen with the drift fix too"), so built ahead of the Logging

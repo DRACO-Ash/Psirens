@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSIRENS Event Timeline</title>
+<meta name="description" content="Change proposal: a zoomable, pannable event timeline for PSIRENS with count bubbles, an overview strip and nothing silently hidden. Proposal only, not built.">
+<style>
+:root{
+  --navy:#162646;--blue1:#385FAF;--blue2:#739BCF;--amber:#C67C00;--green:#27AE60;
+  --bg:#F6F7F9;--surface:#FFFFFF;--surface2:#EEF2F8;--ink:#2C3E50;--ink2:#4A5D73;--muted:#6B7C90;
+  --line:#D9E0EA;--accent:#385FAF;--head:#162646;--warn-bg:#FFF6E6;--warn-line:#E8C27A;
+  --ok-bg:#E9F7EF;--ok-ink:#1E7D46;--sus-ink:#9A5F00;
+  --s1:#385FAF;--s2:#C67C00;--sbelow:#A9B4C2;--grid:#E3E8EF;
+  --shadow:0 1px 2px rgba(22,38,70,.06),0 4px 16px rgba(22,38,70,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1322;--surface:#111C30;--surface2:#16233B;--ink:#DCE5F2;--ink2:#B4C2D6;--muted:#8A9AB2;
+    --line:#24344F;--accent:#7FA4E0;--head:#EAF1FB;--warn-bg:#24190A;--warn-line:#6B4A12;
+    --ok-bg:#0E2A1B;--ok-ink:#5BD08F;--sus-ink:#F0B04A;
+    --s1:#5A86D6;--s2:#B87810;--sbelow:#4A5A72;--grid:#1C2A43;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1322;--surface:#111C30;--surface2:#16233B;--ink:#DCE5F2;--ink2:#B4C2D6;--muted:#8A9AB2;
+  --line:#24344F;--accent:#7FA4E0;--head:#EAF1FB;--warn-bg:#24190A;--warn-line:#6B4A12;
+  --ok-bg:#0E2A1B;--ok-ink:#5BD08F;--sus-ink:#F0B04A;
+  --s1:#5A86D6;--s2:#B87810;--sbelow:#4A5A72;--grid:#1C2A43;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+.mono,code,pre{font-family:"Cascadia Mono",Consolas,ui-monospace,monospace}
+code{font-size:.88em;background:var(--surface2);padding:.1em .35em;border-radius:4px}
+a{color:var(--accent)}
+h1,h2,h3{color:var(--head);line-height:1.25}
+h2{font-size:1.45rem;margin:0 0 .6rem}
+h3{font-size:1.08rem;margin:1.4rem 0 .4rem}
+p{margin:.5rem 0 .9rem}
+ul.dot{list-style:none;padding-left:0;margin:.4rem 0 1rem}
+ul.dot li{position:relative;padding-left:1.35rem;margin:.35rem 0}
+ul.dot li::before{content:"\25CF";position:absolute;left:0;top:.05em;color:var(--blue1);font-size:.8em}
+ul.sq li::before{content:"\25A0"}
+
+.topbar{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.topbar .in{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;align-items:center;gap:16px;min-height:56px}
+.brand{font-weight:700;letter-spacing:.16em;font-size:.78rem;color:#F0B04A;white-space:nowrap}
+.navlinks{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;flex:1}
+.navlinks::-webkit-scrollbar{display:none}
+.navlinks a{color:#C8D6EE;text-decoration:none;font-size:.86rem;padding:6px 10px;border-radius:6px;white-space:nowrap}
+.navlinks a:hover{background:rgba(255,255,255,.08)}
+.navlinks a.on{background:#385FAF;color:#fff}
+.iconbtn{background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font:inherit;font-size:.82rem;white-space:nowrap}
+
+.hero{background:linear-gradient(135deg,#162646 0%,#1F3563 60%,#2A4580 100%);color:#fff}
+.hero .in{max-width:1180px;margin:0 auto;padding:40px 16px 36px}
+.kicker{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:#9FB8E2}
+.hero h1{color:#fff;font-size:clamp(1.8rem,4vw,2.6rem);margin:.3rem 0 .6rem}
+.hero .lede{font-size:1.12rem;max-width:820px;color:#E2EAF7}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.3);color:#E2EAF7}
+.chip.stop{background:#C67C00;border-color:#C67C00;color:#fff;font-weight:600}
+
+main{max-width:1180px;margin:0 auto;padding:8px 16px 64px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px clamp(16px,3vw,36px);margin:22px 0;box-shadow:var(--shadow)}
+.callout{border-left:4px solid var(--amber);background:var(--warn-bg);padding:14px 16px;border-radius:0 8px 8px 0;margin:1rem 0}
+.callout.blue{border-color:var(--blue1);background:var(--surface2)}
+.callout strong{color:var(--head)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--surface)}
+.card h3{margin-top:0}
+.tag{display:inline-block;font:600 .7rem/1 "Cascadia Mono",Consolas,monospace;letter-spacing:.06em;padding:4px 7px;border-radius:4px;vertical-align:middle}
+.tag.conf{background:var(--ok-bg);color:var(--ok-ink);border:1px solid currentColor}
+.tag.sus{color:var(--sus-ink);border:1px dashed currentColor}
+.tag.fact{background:var(--surface2);color:var(--accent)}
+.tag.inf{background:var(--warn-bg);color:var(--sus-ink)}
+
+table{width:100%;border-collapse:collapse;font-size:.93rem;margin:.6rem 0 1rem}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.num{font-family:"Cascadia Mono",Consolas,monospace;white-space:nowrap}
+.glyph{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;border:2px solid currentColor;font-weight:700;font-size:.8rem}
+.tablewrap{overflow-x:auto}
+
+/* figure explorer */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:.4rem 0 12px}
+.tabs button,.seg button{font:inherit;font-size:.9rem;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--ink);cursor:pointer}
+.tabs button[aria-selected="true"],.seg button[aria-pressed="true"]{background:var(--blue1);border-color:var(--blue1);color:#fff}
+.figwrap{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#0B1322}
+.figwrap img{display:block;width:100%;height:auto;cursor:zoom-in}
+.hs{position:absolute;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:#C67C00;color:#fff;font:700 .78rem/1 "Segoe UI",sans-serif;cursor:pointer;box-shadow:0 0 0 4px rgba(198,124,0,.35);display:grid;place-items:center;padding:0}
+.hs[aria-pressed="true"]{background:#fff;color:#162646;box-shadow:0 0 0 6px rgba(255,255,255,.45)}
+.hs:focus-visible{outline:3px solid #F0B04A;outline-offset:2px}
+.figcap{display:flex;gap:14px;align-items:flex-start;margin-top:12px;padding:14px 16px;border-radius:10px;background:var(--surface2);min-height:86px}
+.figcap .n{flex:none;width:30px;height:30px;border-radius:50%;background:var(--amber);color:#fff;display:grid;place-items:center;font-weight:700}
+.figcap h4{margin:0 0 .25rem;color:var(--head);font-size:1rem}
+.figcap p{margin:0;color:var(--ink2)}
+.capnav{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap}
+.capnav button{font:inherit;font-size:.85rem;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.small{font-size:.85rem;color:var(--muted)}
+
+/* compare */
+.compare{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);user-select:none;background:#0B1322}
+.compare img{display:block;width:100%;height:auto}
+.compare .top{position:absolute;inset:0;clip-path:inset(0 50% 0 0)}
+.compare .bar{position:absolute;top:0;bottom:0;left:50%;width:3px;background:#F0B04A;transform:translateX(-50%);pointer-events:none}
+.compare .lab{position:absolute;top:10px;font:600 .75rem "Segoe UI",sans-serif;letter-spacing:.08em;padding:4px 8px;border-radius:4px;background:rgba(11,19,34,.85);color:#fff}
+.compare input{width:100%;margin-top:10px;accent-color:#C67C00}
+
+/* charts */
+.chart{width:100%;height:auto;display:block}
+.chartbox{position:relative}
+.tip{position:absolute;pointer-events:none;background:var(--navy);color:#fff;font-size:.82rem;padding:8px 10px;border-radius:6px;box-shadow:var(--shadow);opacity:0;transition:opacity .1s;max-width:240px;z-index:3}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:.85rem;color:var(--ink2);margin:6px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:3px;border-radius:2px;display:inline-block}
+.sw.dash{background:repeating-linear-gradient(90deg,currentColor 0 5px,transparent 5px 8px);height:3px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0 18px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}
+.stat b{display:block;font-size:1.7rem;color:var(--head);font-family:"Cascadia Mono",Consolas,monospace}
+.stat span{font-size:.82rem;color:var(--muted)}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px 22px;margin:10px 0}
+.ctl label{font-size:.85rem;color:var(--ink2);display:block}
+.ctl output{font-family:"Cascadia Mono",Consolas,monospace;color:var(--head);font-weight:600}
+.ctl input[type=range]{width:100%;accent-color:var(--blue1)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0}
+.readout div{border-radius:10px;padding:12px 14px;background:var(--surface2)}
+.readout b{display:block;font:700 1.35rem "Cascadia Mono",Consolas,monospace;color:var(--head)}
+.readout span{font-size:.82rem;color:var(--muted)}
+
+/* decisions */
+fieldset{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 14px}
+legend{font-weight:600;color:var(--head);padding:0 6px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:7px 4px;border-radius:6px;cursor:pointer}
+.opt:hover{background:var(--surface2)}
+.opt input{margin-top:.3em;accent-color:var(--blue1)}
+.opt small{display:block;color:var(--muted)}
+textarea{width:100%;min-height:80px;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+pre.reply{white-space:pre-wrap;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:.88rem;margin:10px 0}
+.btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:8px;border:1px solid var(--blue1);background:var(--blue1);color:#fff;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+
+dialog{border:none;padding:0;background:transparent;max-width:96vw;max-height:94vh}
+dialog::backdrop{background:rgba(5,9,18,.88)}
+dialog img{max-width:96vw;max-height:88vh;display:block;border-radius:8px}
+dialog .close{position:absolute;top:8px;right:8px}
+footer{max-width:1180px;margin:0 auto;padding:0 16px 40px;color:var(--muted);font-size:.82rem;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+@media (max-width:640px){.hs{width:24px;height:24px;font-size:.7rem}.topbar .in{gap:10px}}
+@media print{
+  .topbar,.tabs,.capnav,.compare input,.iconbtn,.btn,#decide-out-actions,.seg{display:none!important}
+  section{box-shadow:none;break-inside:avoid-page}
+  body{background:#fff}
+  [data-print-all] [hidden]{display:block!important}
+}
+
+/* live demo: the SPA's own dark palette, scoped to the demo */
+.demo{--line:#1b2740;--line2:#2b3d63;--ink:#eaf1fb;--dim:#8ea3c4;--accent:#f0a52e;--panel:#0e1524;--mono:"Cascadia Mono",Consolas,ui-monospace,monospace;
+  position:relative;background:#05070e;border-radius:10px;padding:10px;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif}
+.demo .tline{height:100px;position:relative;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.demo .tline canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y}
+.demo .tlzoom{position:absolute;left:10px;top:37px;display:flex;gap:3px;z-index:2}
+.demo .tlzoom button{font:10px "Segoe UI",sans-serif;padding:1px 6px;border:1px solid var(--line2);border-radius:9px;color:var(--dim);background:#0b1220;cursor:pointer}
+.demo .tlzoom button:hover{color:var(--ink);border-color:var(--accent)}
+.demo .tlzoom button.on{color:#05070e;background:#F0A52E;border-color:#F0A52E;font-weight:600}
+.demo .tltip{position:absolute;top:100px;z-index:30;max-width:300px;background:#080e1c;border:1px solid #F0A52E;border-radius:5px;padding:6px 9px;font-size:11.5px;color:var(--ink);line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.6);pointer-events:none}
+.demo .tltip .m{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.demo .tltip.pinned{pointer-events:auto;max-height:260px;overflow:auto;max-width:330px}
+.demo .tltip .tlrow{display:block;width:100%;text-align:left;background:none;border:0;border-radius:3px;color:var(--ink);font-size:11.5px;padding:3px 4px;cursor:pointer}
+.demo .tltip .tlrow:hover,.demo .tltip .tlrow:focus-visible{background:#16233d}
+.demo .tltip .tlzoomto{margin-top:4px;font-size:10.5px;padding:2px 8px;border:1px solid var(--line2);border-radius:9px;color:var(--dim);background:#0b1220;cursor:pointer}
+.demo-foot{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:8px;font-size:.85rem;color:var(--dim);min-height:28px}
+.demo-btn{font:inherit;font-size:.8rem;padding:3px 10px;border-radius:12px;border:1px solid var(--line2);background:#0b1220;color:var(--ink);cursor:pointer}
+ul.checks{list-style:none;padding:0;margin:.4rem 0 1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
+ul.checks li{border:1px solid var(--line);border-radius:8px;padding:9px 12px 9px 38px;position:relative;background:var(--surface)}
+ul.checks li::before{content:"";position:absolute;left:12px;top:11px;width:16px;height:16px;border-radius:50%;border:2px solid var(--muted)}
+ul.checks li.done{background:var(--ok-bg);border-color:var(--ok-ink);color:var(--ok-ink)}
+ul.checks li.done::before{background:var(--ok-ink);border-color:var(--ok-ink)}
+#cmp-r{width:100%;accent-color:#C67C00;margin-top:10px}
+#demo .readout{grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}
+#demo .readout b{font-size:1.15rem}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="in">
+    <span class="brand">BLUESTAQ LIMITED</span>
+    <nav class="navlinks" aria-label="Sections">
+      <a href="#decision">Decision</a><a href="#problem">Problem</a><a href="#finding">Finding</a>
+      <a href="#demo">Try it</a><a href="#figures">Walkthrough</a><a href="#limits">Limits</a>
+      <a href="#build">Build plan</a><a href="#ask">What I need</a><a href="#decide">Your decisions</a>
+    </nav>
+    <button class="iconbtn" id="theme" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="in">
+    <div class="kicker">PSIRENS change proposal · 17 November 2026 · 1.7.4 candidate</div>
+    <h1>An event timeline you can move, zoom and read</h1>
+    <p class="lede">Your screenshot showed the four-day strip doing the one thing a timeline must not: putting events on top of each other so the operator cannot tell how many there are or whose they are. This proposal makes the strip a window you can steer, and makes sure nothing in it is ever silently hidden.</p>
+    <div class="chips">
+      <span class="chip stop">PROPOSAL · NOT BUILT</span>
+      <span class="chip">Working prototype inside, try it below</span>
+      <span class="chip">Owner decision required</span>
+      <span class="chip">Not Classified</span>
+    </div>
+  </div>
+</div>
+
+<main>
+<section id="decision">
+  <h2>The decision in one line</h2>
+  <p>Turn the timeline into a <strong>zoomable, pannable window</strong> on the four days, with an <strong>overview strip</strong> beneath it, <strong>count bubbles</strong> where events share a moment, and a <strong>list</strong> behind every bubble, so every event is always one click from its name.</p>
+  <div class="grid2">
+    <div class="card"><h3>What you do</h3><p>Scroll over the strip to zoom, drag to pan, or press <code>24h</code> or <code>6h</code>. Click a numbered bubble to list what is inside it, click a name to focus it. Double-click to go back to four days.</p></div>
+    <div class="card"><h3>What PSIRENS does</h3><p>Merges glyphs that would touch into one bubble carrying the count and a ring coloured by event type. Places names only where they fit, and says how many it could not place.</p></div>
+    <div class="card"><h3>What it unlocks</h3><p>A busy hour reads as "five N-S manoeuvres at 10:49Z" instead of a smudge. You can see the whole four days and any single hour of it without leaving the plot.</p></div>
+  </div>
+</section>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <p>The strip is 1.7.0's: fixed at four days, one glyph per event, names drawn in two rows above. That holds up for a handful of events. It does not hold up for the belt you are looking at.</p>
+  <ul class="dot">
+    <li><strong>Glyphs land on the same pixels.</strong> Four days across about 1,450 pixels is roughly four minutes a pixel. Any two events closer than about an hour overlap, and identical times stack perfectly, so a pile of five looks like one.</li>
+    <li><strong>Names overprint.</strong> The label pass has two rows and no way to give up, so the third name in a crowd is drawn over the first two and none can be read.</li>
+    <li><strong>Nothing can be steered.</strong> No zoom, no pan, no shorter span. The only way to see what is inside a knot is to step through the whole brief with <code>j</code>.</li>
+  </ul>
+  <p>Drag the slider: the shipped 1.7.3 strip on the right, the prototype on the left. Same scenario, same 35 events in the window, same clip.</p>
+  <div class="compare" id="cmp">
+    <img src="figures/A-as-is.jpg" alt="Shipped 1.7.3 timeline with overlapping glyphs and overprinted names" width="2400" height="450">
+    <img class="top" src="figures/B-full.jpg" alt="Prototype timeline with count bubbles, span buttons, adaptive ticks and an overview strip" width="2400" height="450">
+    <div class="bar"></div>
+    <span class="lab" style="left:10px">PROTOTYPE</span><span class="lab" style="right:10px">AS-IS 1.7.3</span>
+  </div>
+  <input type="range" id="cmp-r" min="0" max="100" value="50" aria-label="Reveal more of the prototype or the shipped timeline">
+</section>
+
+<section id="finding">
+  <h2>The finding that shaped the design</h2>
+  <p>The obvious fix is "let me zoom in". Building that first showed it is not enough on its own.</p>
+  <div class="stats">
+    <div class="stat"><b>38</b><span>events in the dense scenario</span></div>
+    <div class="stat"><b>17</b><span>distinct timestamps among them</span></div>
+    <div class="stat"><b>3 h</b><span>grid every E-W and N-S epoch sits on</span></div>
+    <div class="stat"><b>5</b><span>N-S events sharing one second</span></div>
+  </div>
+  <p><span class="tag fact">FACT</span> The detector tests candidate splits every three hours from a start of <code>ref − 96 h</code> (<code>events.py</code> lines 163 and 206), and an event is stamped with its winning split. Every object shares that grid. Two objects that manoeuvre in the same three-hour slot therefore get the <strong>same epoch to the second</strong>, and no zoom, however deep, will separate glyphs drawn at the same time.</p>
+  <p><span class="tag inf">INFERENCE</span> Your screenshot's stacks are at least partly this, not only density. I cannot confirm it from a picture; the <code>/api/events</code> export asked for <a href="#ask">below</a> would settle it.</p>
+  <div class="callout blue"><strong>So the design has two halves.</strong> Zoom and pan for events that are merely close. A <strong>list</strong> for events that share a moment, because for those a list is the only honest view. The bubble is the hinge: it says how many, and one click says who.</div>
+  <p>Whether the detector should place E-W events more finely than its grid is a separate question with a separate cost (it changes what the evidence block reports). It is listed as decision 5 and is <strong>not</strong> part of this change.</p>
+</section>
+
+<section id="demo">
+  <h2>Try it: the prototype, running here</h2>
+  <p>This is the prototype's own timeline code, copied in unchanged, fed the 38 scenario events. Event times are stored as ages, so the strip is current whenever you open this page. The <span class="mono">since last look</span> mark sits 34 hours back, as in the figures.</p>
+  <div class="demo" id="tline-demo">
+    <div class="tline" id="tline">
+      <canvas id="tlcv" data-glyphs="0">Event timeline demo. Scroll to zoom, drag to pan, double-click to reset.</canvas>
+      <div class="tlzoom" id="tlzoom"><button type="button" data-tlspan="96" title="All four days">4d</button><button type="button" data-tlspan="24" title="The last 24 hours">24h</button><button type="button" data-tlspan="6" title="The last 6 hours">6h</button></div>
+      <div class="tltip" id="tltip" hidden></div>
+    </div>
+    <div class="demo-foot"><span id="demo-focus">Nothing focused. Click a single glyph, or a name in a bubble's list.</span><button type="button" id="demo-unfocus" class="demo-btn" hidden>Clear focus</button></div>
+  </div>
+  <div class="readout" aria-live="polite">
+    <div><b id="ro-span">96.0 h</b><span>span shown</span></div>
+    <div><b id="ro-glyphs">0</b><span>events in view</span></div>
+    <div><b id="ro-clusters">0</b><span>bubbles</span></div>
+    <div><b id="ro-hidden">0</b><span>names hidden, and said so</span></div>
+    <div><b id="ro-live">yes</b><span>pinned to now</span></div>
+  </div>
+  <h3>Six things to try</h3>
+  <ul class="checks" id="checks">
+    <li data-check="zoom">Scroll over the strip to zoom in</li>
+    <li data-check="pan">Drag the strip sideways, or drag the box in the overview</li>
+    <li data-check="list">Click a numbered bubble to list what is inside</li>
+    <li data-check="focus">Click a name in that list to focus it: it leaves the bubble and is ringed</li>
+    <li data-check="preset">Press 24h, then 6h</li>
+    <li data-check="reset">Double-click the strip to return to four days</li>
+  </ul>
+  <p class="small">On a phone or tablet the span buttons and taps work; scroll-zoom and drag are mouse only in the prototype. The build adds touch, see <a href="#build">Build plan</a>.</p>
+</section>
+
+<section id="figures">
+  <h2>Walkthrough</h2>
+  <p>Captured from the real 1.7.3 interface with the prototype applied as an uncommitted patch, driven by real mouse and wheel events. Each figure carries a banner saying what it is. Click a numbered marker or step through. Click the image for full size.</p>
+  <div class="tabs" role="tablist" aria-label="Figures" id="tabs"></div>
+  <div class="figwrap" id="fig"><img id="fig-img" src="figures/A-as-is.jpg" alt="" width="2400" height="450"></div>
+  <div class="figcap" aria-live="polite"><div class="n" id="cap-n">1</div><div><h4 id="cap-h"></h4><p id="cap-p"></p></div></div>
+  <div class="capnav"><button type="button" id="cap-prev">&#8592; Previous</button><button type="button" id="cap-next">Next &#8594;</button><span class="small" id="cap-count"></span></div>
+</section>
+
+<section id="limits">
+  <h2>What this does not prove</h2>
+  <ul class="dot">
+    <li><span class="tag inf">INFERENCE</span> <strong>The density is built to resemble your screenshot, not measured from it.</strong> The scenario plants 38 events with knots on day two and late on day three, then runs the real detector over them. Names, countries and ranks are the real HRR list; the orbital geometry is synthesised, because this machine has no feed access.</li>
+    <li><strong>Mouse only.</strong> The prototype handles wheel, drag, hover and click. Touch, pen and keyboard steering of the strip are build work, listed below.</li>
+    <li><strong>One rough edge, found and left visible.</strong> With a bubble's list open, <code>Esc</code> closes the list and also leaves focus mode, because both handlers hear the key. The build closes the innermost thing first.</li>
+    <li><strong>The strip is 26 pixels taller</strong> (74 to 100) to fit the overview, and the plot gives that up. Decision 3 offers the shorter strip without the overview.</li>
+    <li><strong>Gate status is in <a href="#build">Build plan</a></strong>, measured on the working copy, not assumed.</li>
+  </ul>
+</section>
+
+<section id="build">
+  <h2>How it would be built</h2>
+  <p>About 180 lines of the SPA change, all inside the timeline block; no server change, no API change. The patch is <code>prototype/timeline.patch</code>.</p>
+  <h3>On top of the prototype</h3>
+  <ul class="dot">
+    <li>Pointer events, so touch and pen drag the strip, and pinch zooms it.</li>
+    <li>The strip becomes focusable: <code>←</code> <code>→</code> pan, <code>+</code> <code>−</code> zoom, <code>0</code> resets. Bubble lists are buttons, so a list is fully keyboard driven.</li>
+    <li><code>Esc</code> closes the innermost layer first: the list, then focus mode.</li>
+    <li>The bubble's list states the time resolution, "one 3-hour slot", so a shared timestamp is never read as a coordinated burn.</li>
+  </ul>
+  <h3>Guards, each with a red case</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Guard in the layout probe</th><th>Red case that must fail it</th></tr></thead>
+    <tbody>
+      <tr><td>A real wheel event over the strip shortens the span</td><td>Invert the zoom guard</td></tr>
+      <tr><td>Zooming at the newest end keeps the newest event in view</td><td>Remove the live edge (the prototype's first version had exactly this bug: the newest event slid off the right)</td></tr>
+      <tr><td>A bubble's list has as many rows as its count</td><td>Truncate the list to one row</td></tr>
+      <tr><td>A focused event is never inside a bubble</td><td>Drop the lift-out</td></tr>
+      <tr><td>The hidden-name count is non-zero at four days and zero when zoomed into a quiet hour</td><td>Make every name "fit"</td></tr>
+      <tr><td>24h, 6h and double-click set the span they say</td><td>Swap two preset values</td></tr>
+    </tbody>
+  </table></div>
+  <p>The canvas already publishes its state in <code>dataset</code> (span, glyphs, bubbles, names hidden, pinned to now), which is how the probe reads pixels it cannot inspect, as it does for the co-planar chart.</p>
+  <h3>Gate status of the working copy, measured today</h3>
+  <p id="gate-status"><span class="tag fact">FACT</span> First run of <code>simulate-pipeline.sh</code> over the working copy: the SPA lint gate <strong>rejected</strong> it with three <code>sonarjs/no-nested-conditional</code> findings in the new code, which Code Quality would have raised on upload. Extracted into <code>tlSpanText</code> and <code>tlCursor</code>. Second run: <strong>SIMULATION GREEN</strong>, 267 tests passed, 95% coverage, sniff check clean, layout probe OK, including its existing check that clicking a timeline glyph focuses the event. Not yet covered: the six guards above do not exist yet. They are build work.</p>
+  <h3>Also in the change</h3>
+  <ul class="dot">
+    <li>Operator Guide: the timeline section rewritten, the two figures recaptured, three reference-card rows, one self-check question.</li>
+    <li>Version 1.7.4 in both places; QUALITY-LEDGER and CLAUDE.md updated.</li>
+  </ul>
+</section>
+
+<section id="ask">
+  <h2>What I need from you</h2>
+  <div class="callout"><strong>One export from the live app, when convenient.</strong> Open <code>/api/events?view=real&amp;ranks=1,2,3,4,5</code> on the deployed PSIRENS, save the JSON and send it over. It does three jobs at once.</div>
+  <ul class="dot">
+    <li>It confirms or refutes the shared-timestamp inference above on real data.</li>
+    <li>It is the threshold calibration the 1.7.0 entry left open. Your screenshot suggests about 40 events in four days, many of them N-S. <span class="tag inf">INFERENCE</span> That is more than a quiet belt should produce, and the N-S floor (0.008°) is the first suspect.</li>
+    <li>It lets me rerun these figures on the real distribution rather than a built one.</li>
+  </ul>
+  <p class="small">The payload carries names, ranks, countries and event numbers. Handle it at the marking the app shows.</p>
+</section>
+
+<section id="decide">
+  <h2>Your decisions</h2>
+  <p>Pick an answer for each. The page writes the reply for you to paste back. Nothing is sent anywhere.</p>
+  <form id="decide-form">
+    <fieldset><legend>1. Go or no-go</legend>
+      <label class="opt"><input type="radio" name="q1" value="Go as proposed"><span>Go as proposed</span></label>
+      <label class="opt"><input type="radio" name="q1" value="Go, with the changes in my notes"><span>Go, with changes<small>Say what in the notes</small></span></label>
+      <label class="opt"><input type="radio" name="q1" value="No-go"><span>No-go</span></label>
+    </fieldset>
+    <fieldset><legend>2. Clicking a bubble</legend>
+      <label class="opt"><input type="radio" name="q2" value="Open a list of its events (recommended)"><span>Open a list of its events (recommended)<small>Works even when every member shares one timestamp</small></span></label>
+      <label class="opt"><input type="radio" name="q2" value="Zoom to the bubble, and list only when zoom cannot separate it"><span>Zoom to it, list only when zoom cannot separate it<small>Two behaviours for one control</small></span></label>
+    </fieldset>
+    <fieldset><legend>3. Strip height</legend>
+      <label class="opt"><input type="radio" name="q3" value="100 px with the overview strip (recommended)"><span>100 px with the overview strip (recommended)<small>The plot gives up 26 px</small></span></label>
+      <label class="opt"><input type="radio" name="q3" value="Keep 74 px and drop the overview strip"><span>Keep 74 px, no overview strip<small>Zoom and pan still work; you lose the "where am I" box</small></span></label>
+    </fieldset>
+    <fieldset><legend>4. One line or lanes</legend>
+      <label class="opt"><input type="radio" name="q4" value="One line, types mixed, ring colour shows the mix (recommended)"><span>One line, types mixed (recommended)<small>The bubble ring shows the mix</small></span></label>
+      <label class="opt"><input type="radio" name="q4" value="Three lanes: E-W, N-S, warnings and silences"><span>Three lanes: E-W, N-S, warnings and silences<small>Fewer collisions, needs about 40 px more height</small></span></label>
+    </fieldset>
+    <fieldset><legend>5. The 3-hour event grid (separate from this change)</legend>
+      <label class="opt"><input type="radio" name="q5" value="Leave the detector alone; say the slot in the list (recommended for now)"><span>Leave the detector; state the slot in the list (recommended for now)</span></label>
+      <label class="opt"><input type="radio" name="q5" value="Send me a separate proposal to time E-W events between grid points"><span>Send a separate proposal to time E-W events more finely<small>Where the before and after fits cross; changes the evidence block</small></span></label>
+    </fieldset>
+    <fieldset><legend>6. Which build</legend>
+      <label class="opt"><input type="radio" name="q6" value="Upload 1.7.3 as it is now; this goes in 1.7.4 (recommended)"><span>Upload 1.7.3 now; this goes in 1.7.4 (recommended)<small>1.7.3 carries the Logging fix the platform starts blocking on 1 December</small></span></label>
+      <label class="opt"><input type="radio" name="q6" value="Hold 1.7.3 and fold this in before uploading"><span>Hold 1.7.3 and fold this in first</span></label>
+    </fieldset>
+    <label for="notes" class="small">Notes</label>
+    <textarea id="notes" placeholder="Anything to change, add or question"></textarea>
+  </form>
+  <pre class="reply" id="decide-out" aria-live="polite"></pre>
+  <div id="decide-out-actions" style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" id="copy">Copy reply</button><button class="btn ghost" type="button" id="clear">Clear answers</button><span class="small" id="copy-msg" style="align-self:center"></span></div>
+</section>
+
+<section id="reproduce">
+  <h2>Reproducing this</h2>
+  <p>Everything is in <code>prototype/</code> beside this page. From the repository root with the project venv:</p>
+<pre class="reply">python prototype/dense_scenario.py . &lt;store-dir&gt;           # plant 38 events, run the real detector
+DATA_DIR=&lt;store-dir&gt; UDL_BASE_URL=http://127.0.0.1:1/ SCHEDULER_ENABLED=0 UVICORN_PORT=8301 \
+  PYTHONPATH=src uvicorn psirens.main:app
+node prototype/capture_asis.js http://127.0.0.1:8301/ figures   # shipped 1.7.3
+git apply prototype/timeline.patch
+node prototype/capture.js http://127.0.0.1:8301/ figures        # the prototype, every state
+python prototype/splice.py .                                     # refresh the demo code and events in this page</pre>
+</section>
+</main>
+
+<footer><span>Bluestaq Limited · PSIRENS · Not Classified</span><span>Change proposal, 17 November 2026. Proposal only, not built.</span></footer>
+
+<dialog id="lightbox" aria-label="Full-size figure"><button class="btn close" type="button" id="lb-close">Close</button><img id="lb-img" src="" alt=""></dialog>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage is a convenience */ } }
+};
+
+/* theme */
+(function theme(){
+  const root = document.documentElement, saved = store.get("psi-prop-theme");
+  if (saved) root.dataset.theme = saved;
+  $("theme").addEventListener("click", () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark"; store.set("psi-prop-theme", root.dataset.theme);
+  });
+})();
+
+/* scroll-spy */
+(function spy(){
+  const links = [...document.querySelectorAll(".navlinks a")];
+  const byId = Object.fromEntries(links.map(a => [a.hash.slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { links.forEach(a => a.classList.remove("on")); const a = byId[e.target.id]; if (a) { a.classList.add("on"); a.scrollIntoView({block:"nearest",inline:"center"}); } } });
+  }, { rootMargin: "-40% 0px -55% 0px" });
+  document.querySelectorAll("main section[id]").forEach(s => io.observe(s));
+})();
+
+/* compare slider */
+(function compare(){
+  const r = $("cmp-r"), top = document.querySelector("#cmp .top"), bar = document.querySelector("#cmp .bar");
+  const set = v => { top.style.clipPath = `inset(0 ${100 - v}% 0 0)`; bar.style.left = v + "%"; };
+  r.addEventListener("input", () => set(+r.value)); set(50);
+})();
+
+/* figure explorer */
+const FIGS = [
+  { tab: "A · As-is", src: "figures/A-as-is.jpg", alt: "Shipped 1.7.3 timeline: glyphs and names on top of each other", spots: [
+    [42.5, 8, "Names drawn over names", "Two label rows and no way to give up: the third name in a crowd is printed over the first two. TJS-10, SHIYAN and three others share these pixels."],
+    [72, 16.3, "A stack that looks like one glyph", "Three events at 11/16 sit within a few pixels. Nothing says how many there are."],
+    [54.6, 24.5, "Day ticks only", "Four labels across four days. There is no finer scale because there is no way to look closer."],
+    [19.5, 13, "No controls", "Fixed at four days. The only way into a knot is to step through the whole brief."]
+  ]},
+  { tab: "B · Four days", src: "figures/B-full.jpg", alt: "Prototype at four days: count bubbles, span buttons, adaptive ticks, overview strip", spots: [
+    [26.2, 17.6, "A count, not a pile", "Glyphs that would touch merge into one bubble. The number is how many; the ring is split by event type, purple for N-S, amber for E-W and warnings, grey for silences."],
+    [20.2, 17.9, "Span buttons", "4d, 24h and 6h, each ending now. The pressed one is lit only while the strip actually shows that span."],
+    [60, 31.2, "Overview strip", "All four days in miniature, one tick per event, with the box showing what the strip above is looking at. Drag the box, or click anywhere to jump."],
+    [19.7, 32.5, "Said, not hidden", "A name is drawn only where it fits. Two did not, and the strip says so, the rule the co-planar chart has used since 1.6.18."],
+    [19.4, 11.7, "Pinned to now", "While the window touches the present it stays there as time passes and as you zoom. Pan away and it says \"shown\" instead."],
+    [71.9, 5.3, "Since you last looked", "The unread period is shaded and the dashed line marks your last visit, as in 1.7.0."]
+  ]},
+  { tab: "C · Hover", src: "figures/C-hover.jpg", alt: "Hovering a bubble lists its events in a tooltip", spots: [
+    [26.2, 17.6, "Hover a bubble", "No click needed to see who is inside."],
+    [36, 56, "Who, what and when", "Name, event type and time for up to six members, with a count of the rest. All four here are N-S manoeuvres at 10:49Z on 13 November: the same second, which is the finding above."]
+  ]},
+  { tab: "D · List", src: "figures/D-list.jpg", alt: "Clicking a bubble pins a list of its events", spots: [
+    [35, 40.5, "One time slot, stated", "The list says these share one time slot. In the build it will say the slot is three hours wide, so a shared timestamp is not read as a coordinated burn."],
+    [29.7, 55, "Every member is a button", "Click a name to focus that event. Keyboard reachable; Esc closes the list."]
+  ]},
+  { tab: "E · Focus", src: "figures/E-focus-strip.jpg", alt: "A focused event lifted out of its bubble and ringed", spots: [
+    [26.2, 17.6, "Lifted out and ringed", "The focused event leaves its bubble and is drawn alone, on top, with its name. Without this it would vanish into the count it came from."],
+    [30.3, 47, "The rest of focus mode is unchanged", "The plot frames the object and the inspector carries the evidence, exactly as 1.7.0 does."]
+  ]},
+  { tab: "F · Zoomed", src: "figures/F-zoom.jpg", alt: "Zoomed to 13 hours at the newest end: three early warnings separated and named", spots: [
+    [94.4, 17.6, "The newest event stays in view", "Zooming near now keeps now on screen. The prototype's first version zoomed about the pointer and pushed this one off the right edge; that is now a guard in the build plan."],
+    [71.5, 17.6, "Separated and named", "At four days these three early warnings were a bubble. At 13 hours each has its own glyph and its full name."],
+    [78, 25, "Ticks follow the span", "Hourly here; six-hourly at a day; day boundaries at four days."],
+    [93, 31.2, "Where you are", "The overview box has shrunk to the last 13 hours."]
+  ]},
+  { tab: "G · 24 h", src: "figures/G-24h.jpg", alt: "The 24-hour span preset", spots: [
+    [20.2, 17.9, "One click to the last day", "The 24h button is lit because the strip shows exactly that."],
+    [28.7, 17.6, "Four silences, one slot", "Four objects went quiet in the same reporting gap. Still a bubble even at 24 hours, which is right: they share a moment."],
+    [88.7, 31.2, "The last day of four", "The overview box makes the proportion obvious."]
+  ]},
+  { tab: "H · In the app", src: "figures/H-focus-app.jpg", alt: "The whole interface with an event focused from a bubble's list", width: 2400, height: 1380, spots: [
+    [26.2, 19.4, "The strip in place", "100 pixels high, above the plot, where 1.7.0 put it."],
+    [30.3, 29, "Focus mode", "Reached from the list in two clicks."],
+    [89.5, 34.8, "Evidence", "The inspector's evidence block, unchanged."]
+  ]}
+];
+let figI = 0, spotI = 0;
+FIGS.forEach((f, i) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.setAttribute("role", "tab"); b.dataset.fig = i; b.textContent = f.tab;
+  b.addEventListener("click", () => { figI = i; spotI = 0; renderFig(); });
+  $("tabs").appendChild(b);
+});
+function renderFig(){
+  const f = FIGS[figI], wrap = $("fig"), img = $("fig-img");
+  if (img.getAttribute("src") !== f.src) img.src = f.src;
+  img.alt = f.alt; img.width = f.width || 2400; img.height = f.height || 450;
+  wrap.querySelectorAll(".hs").forEach(b => b.remove());
+  f.spots.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "hs"; b.textContent = i + 1;
+    b.style.left = s[0] + "%"; b.style.top = s[1] + "%";
+    b.setAttribute("aria-label", `Point ${i + 1}: ${s[2]}`);
+    b.setAttribute("aria-pressed", String(i === spotI));
+    b.addEventListener("click", ev => { ev.stopPropagation(); spotI = i; renderFig(); });
+    wrap.appendChild(b);
+  });
+  const s = f.spots[spotI];
+  $("cap-n").textContent = spotI + 1; $("cap-h").textContent = s[2]; $("cap-p").textContent = s[3];
+  $("cap-count").textContent = `Point ${spotI + 1} of ${f.spots.length} · figure ${"ABCDEFGH"[figI]}`;
+  document.querySelectorAll('#tabs [role="tab"]').forEach((t, i) => t.setAttribute("aria-selected", String(i === figI)));
+}
+function step(d){
+  spotI += d;
+  if (spotI >= FIGS[figI].spots.length) { figI = (figI + 1) % FIGS.length; spotI = 0; }
+  else if (spotI < 0) { figI = (figI + FIGS.length - 1) % FIGS.length; spotI = FIGS[figI].spots.length - 1; }
+  renderFig();
+}
+$("cap-next").addEventListener("click", () => step(1));
+$("cap-prev").addEventListener("click", () => step(-1));
+$("fig-img").addEventListener("click", () => { $("lb-img").src = FIGS[figI].src; $("lb-img").alt = FIGS[figI].alt; $("lightbox").showModal(); });
+$("lb-close").addEventListener("click", () => $("lightbox").close());
+$("lightbox").addEventListener("click", e => { if (e.target === $("lightbox")) $("lightbox").close(); });
+renderFig();
+
+/* -- live demo: shims for what the SPA provides around the timeline ------- */
+const SCENARIO = /* @@EVENTS-BEGIN@@ */[{"id":"36868:LEAVING:2026-11-17T07:49:35+00:00","object_id":"36868","type":"LEAVING","tier":"SUSPECTED","name":"AEHF 1 (USA 214)","age_ms":2272735},{"id":"43162:LEAVING:2026-11-17T05:49:35+00:00","object_id":"43162","type":"LEAVING","tier":"SUSPECTED","name":"SBIRS GEO 3 (USA 282)","age_ms":9472735},{"id":"54230:LEAVING:2026-11-17T03:49:35+00:00","object_id":"54230","type":"LEAVING","tier":"SUSPECTED","name":"CHINASAT 19","age_ms":16672735},{"id":"38093:QUIET:2026-11-16T09:49:35+00:00","object_id":"38093","type":"QUIET","tier":"CONFIRMED","name":"MUOS 1","age_ms":81472735},{"id":"51281:QUIET:2026-11-16T09:49:35+00:00","object_id":"51281","type":"QUIET","tier":"CONFIRMED","name":"USA 325","age_ms":81472735},{"id":"65486:QUIET:2026-11-16T09:49:35+00:00","object_id":"65486","type":"QUIET","tier":"CONFIRMED","name":"SY-29 (SHIYAN 29)","age_ms":81472735},{"id":"63157:QUIET:2026-11-16T09:49:35+00:00","object_id":"63157","type":"QUIET","tier":"CONFIRMED","name":"TJS-15","age_ms":81472735},{"id":"33436:STARTED:2026-11-16T01:49:35+00:00","object_id":"33436","type":"STARTED","tier":"CONFIRMED","name":"ASTRA 1M","age_ms":110272735},{"id":"64470:STARTED:2026-11-16T01:49:35+00:00","object_id":"64470","type":"STARTED","tier":"CONFIRMED","name":"CHINASAT 9C","age_ms":110272735},{"id":"39168:STARTED:2026-11-15T22:49:35+00:00","object_id":"39168","type":"STARTED","tier":"CONFIRMED","name":"WGS 5 (USA 243)","age_ms":121072735},{"id":"60327:STARTED:2026-11-15T22:49:35+00:00","object_id":"60327","type":"STARTED","tier":"CONFIRMED","name":"HG-02","age_ms":121072735},{"id":"41021:STARTED:2026-11-15T22:49:35+00:00","object_id":"41021","type":"STARTED","tier":"CONFIRMED","name":"CHINASAT 2C","age_ms":121072735},{"id":"55131:STARTED:2026-11-15T16:49:35+00:00","object_id":"55131","type":"STARTED","tier":"CONFIRMED","name":"SJ-23","age_ms":142672735},{"id":"55841:STARTED:2026-11-15T10:49:35+00:00","object_id":"55841","type":"STARTED","tier":"CONFIRMED","name":"LUCH (OLYMP) 2","age_ms":164272735},{"id":"62374:NS:2026-11-15T10:49:35+00:00","object_id":"62374","type":"NS","tier":"CONFIRMED","name":"TJS-12","age_ms":164272735},{"id":"64467:NS:2026-11-15T10:49:35+00:00","object_id":"64467","type":"NS","tier":"CONFIRMED","name":"COSMOS 2589","age_ms":164272735},{"id":"38978:NS:2026-11-15T07:49:35+00:00","object_id":"38978","type":"NS","tier":"CONFIRMED","name":"YAMAL 300K","age_ms":175072735},{"id":"40746:NS:2026-11-15T04:49:35+00:00","object_id":"40746","type":"NS","tier":"CONFIRMED","name":"WGS 7 (USA 263)","age_ms":185872735},{"id":"62485:STARTED:2026-11-15T04:49:35+00:00","object_id":"62485","type":"STARTED","tier":"CONFIRMED","name":"SJ-25","age_ms":185872735},{"id":"49505:NS:2026-11-15T04:49:35+00:00","object_id":"49505","type":"NS","tier":"CONFIRMED","name":"CHINASAT 1D","age_ms":185872735},{"id":"43874:NS:2026-11-15T04:49:35+00:00","object_id":"43874","type":"NS","tier":"CONFIRMED","name":"TJS-3","age_ms":185872735},{"id":"42075:NS:2026-11-14T22:49:35+00:00","object_id":"42075","type":"NS","tier":"CONFIRMED","name":"WGS 9 (USA 275)","age_ms":207472735},{"id":"100172:STARTED:2026-11-14T10:49:35+00:00","object_id":"100172","type":"STARTED","tier":"CONFIRMED","name":"TIANLIAN-3 01","age_ms":250672735},{"id":"37951:STARTED:2026-11-14T10:49:35+00:00","object_id":"37951","type":"STARTED","tier":"CONFIRMED","name":"LUCH 5A","age_ms":250672735},{"id":"58204:NS:2026-11-14T07:49:35+00:00","object_id":"58204","type":"NS","tier":"CONFIRMED","name":"TJS-10","age_ms":261472735},{"id":"47851:STARTED:2026-11-14T07:49:35+00:00","object_id":"47851","type":"STARTED","tier":"CONFIRMED","name":"SY-9 (SHIYAN 9)","age_ms":261472735},{"id":"50574:STARTED:2026-11-14T07:49:35+00:00","object_id":"50574","type":"STARTED","tier":"CONFIRMED","name":"TJS-9","age_ms":261472735},{"id":"44481:STARTED:2026-11-14T07:49:35+00:00","object_id":"44481","type":"STARTED","tier":"CONFIRMED","name":"AEHF 5 (USA 292)","age_ms":261472735},{"id":"43432:NS:2026-11-14T04:49:35+00:00","object_id":"43432","type":"NS","tier":"CONFIRMED","name":"COSMOS 2526","age_ms":272272735},{"id":"67757:STARTED:2026-11-14T01:49:35+00:00","object_id":"67757","type":"STARTED","tier":"CONFIRMED","name":"JAM-E JAM 1","age_ms":283072735},{"id":"38352:NS:2026-11-14T01:49:35+00:00","object_id":"38352","type":"NS","tier":"CONFIRMED","name":"CHINASAT 2A","age_ms":283072735},{"id":"63662:NS:2026-11-13T10:49:35+00:00","object_id":"63662","type":"NS","tier":"CONFIRMED","name":"TIANLIAN-2 05","age_ms":337072735},{"id":"33595:NS:2026-11-13T10:49:35+00:00","object_id":"33595","type":"NS","tier":"CONFIRMED","name":"EXPRESS AM-44","age_ms":337072735},{"id":"59069:NS:2026-11-13T10:49:35+00:00","object_id":"59069","type":"NS","tier":"CONFIRMED","name":"HG-01","age_ms":337072735},{"id":"44307:NS:2026-11-13T10:49:35+00:00","object_id":"44307","type":"NS","tier":"CONFIRMED","name":"YAMAL 601","age_ms":337072735},{"id":"34713:NS:2026-11-13T10:49:35+00:00","object_id":"34713","type":"NS","tier":"CONFIRMED","name":"WGS F2 (USA 204)","age_ms":337072735},{"id":"55239:NS:2026-11-13T07:49:35+00:00","object_id":"55239","type":"NS","tier":"CONFIRMED","name":"APSTAR 6E","age_ms":347872735},{"id":"63924:NS:2026-11-13T07:49:35+00:00","object_id":"63924","type":"NS","tier":"CONFIRMED","name":"TJS-19","age_ms":347872735}]/* @@EVENTS-END@@ */;
+const PAGE_NOW = Date.now();
+const EVENTS = SCENARIO.map(e => ({ ...e, epoch: new Date(PAGE_NOW - e.age_ms).toISOString() }));
+const EV_LOOKBACK_MS = 96 * 3600000;
+const MONO = '"Cascadia Mono",Consolas,ui-monospace,monospace';
+const EVK = {
+  STARTED:{g:"⇆",n:"E-W manoeuvre",c:"#F0A52E"}, EW:{g:"⇆",n:"Drift rate changed",c:"#F0A52E"},
+  STOPPED:{g:"■",n:"Drift stopped",c:"#3FC27A"}, NS:{g:"⇅",n:"N-S manoeuvre",c:"#A98BEB"},
+  LEAVING:{g:"?",n:"Leaving its track",c:"#F0A52E"}, QUIET:{g:"○",n:"Gone quiet",c:"#9AA7BC"}};
+const evKind = e => EVK[e.type] || EVK.EW;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function fmtZ(iso){ const d = new Date(iso); return d.toUTCString().slice(5, 11) + " " + iso.slice(11, 16) + "Z"; }
+const lastLook = PAGE_NOW - 34 * 3600000;
+const state = { focus: null };
+const shownEvents = () => EVENTS;
+const findObj = id => { const e = EVENTS.find(x => x.object_id === id); return e ? { name: e.name } : null; };
+function focusEvent(id){
+  const e = EVENTS.find(x => x.id === id); if (!e) return;
+  state.focus = id; tlReveal(Date.parse(e.epoch)); drawTimeline();
+  $("demo-focus").textContent = `Focused: ${e.name} · ${evKind(e).n} · ${fmtZ(e.epoch)}. In the app the plot and inspector follow.`;
+  $("demo-unfocus").hidden = false; tick("focus");
+}
+$("demo-unfocus").addEventListener("click", () => {
+  state.focus = null; drawTimeline(); $("demo-focus").textContent = "Nothing focused."; $("demo-unfocus").hidden = true;
+});
+
+/* -- the prototype timeline, copied verbatim from the patched index.html -- */
+/* @@TIMELINE-BEGIN@@ */
+// -- timeline: zoomable, pannable, clustered (1.7.4 prototype) -----------
+// Four days of events is too many glyphs for one strip: a busy hour put a
+// dozen markers on the same pixels and their names on top of each other.
+// So the strip is a WINDOW onto the four days, with an overview beneath it.
+// Scroll to zoom about the pointer, drag to pan, double-click to reset, or
+// use the span buttons. Glyphs closer than one glyph-width merge into a count
+// bubble; clicking one zooms to it. A name is drawn only where it fits, and
+// the number that did not fit is stated, never silently lost.
+const TL_MIN_SPAN=2*3600000,TL_GAP=18,TL_X0=124,TL_GY=44,TL_AXIS=58,TL_MAP0=78,TL_MAP1=92;
+const TL={t0:null,t1:null,live:true,drag:null,hits:[],pin:null};
+const TL_STEPS=[864e5,432e5,216e5,108e5,36e5,18e5];
+function tlFull(){const t1=Date.now();return [t1-EV_LOOKBACK_MS,t1];}
+function tlWindow(){
+  const [f0,f1]=tlFull();
+  if(TL.t0===null){return [f0,f1];}
+  const span=Math.min(TL.t1-TL.t0,f1-f0);
+  if(TL.live){return [f1-span,f1];}
+  const t0=clamp(TL.t0,f0,f1-span);
+  return [t0,t0+span];}
+function tlSet(t0,t1){
+  const [f0,f1]=tlFull(),span=clamp(t1-t0,TL_MIN_SPAN,f1-f0);
+  if(span>=f1-f0-6e4){TL.t0=null;TL.t1=null;TL.live=true;return;}
+  const s=clamp(t0,f0,f1-span);TL.t0=s;TL.t1=s+span;TL.live=s+span>=f1-6e4;}
+function tlZoomAt(tm,k){const [t0,t1]=tlWindow(),span=(t1-t0)*k,f=(tm-t0)/(t1-t0);
+  if(TL.live&&f>0.5){tlSet(t1-span,t1);return;}
+  tlSet(tm-f*span,tm-f*span+span);}
+function tlReveal(ms){const [t0,t1]=tlWindow();if(ms>=t0&&ms<=t1){return;}const half=(t1-t0)/2;tlSet(ms-half,ms+half);}
+function tlGeom(c){const box=c.getBoundingClientRect(),[t0,t1]=tlWindow(),x1=box.width-18;
+  return {box,t0,t1,x1,tx:t=>TL_X0+(t-t0)/(t1-t0)*(x1-TL_X0),xt:x=>t0+(x-TL_X0)/(x1-TL_X0)*(t1-t0)};}
+function tlClusters(evs){
+  const out=[];
+  evs.forEach(e=>{const last=out[out.length-1];
+    if(last&&e.x-last.xs<TL_GAP){last.members.push(e);last.xe=e.x;}else{out.push({xs:e.x,xe:e.x,members:[e]});}});
+  out.forEach(cl=>{cl.x=(cl.xs+cl.xe)/2;});
+  return out;}
+function tlTickStep(span,px){return TL_STEPS.slice().reverse().find(s=>s/span*px>=70)||TL_STEPS[0];}
+function tlTickLabel(t){const iso=new Date(t).toISOString();
+  return iso.slice(11,16)==="00:00"?iso.slice(5,10).replace("-","/"):iso.slice(11,16)+"Z";}
+function tlAxis(g,G){
+  g.strokeStyle="#2b3d63";g.lineWidth=1;g.beginPath();g.moveTo(TL_X0,TL_AXIS);g.lineTo(G.x1,TL_AXIS);g.stroke();
+  const step=tlTickStep(G.t1-G.t0,G.x1-TL_X0);
+  g.fillStyle="#5b7093";g.font="9.5px "+MONO;g.textAlign="center";
+  for(let t=Math.ceil(G.t0/step)*step;t<=G.t1;t+=step){const x=G.tx(t);
+    g.beginPath();g.moveTo(x,TL_AXIS-3);g.lineTo(x,TL_AXIS+3);g.stroke();g.fillText(tlTickLabel(t),x,TL_AXIS+12);}}
+function tlShadeSince(g,G,h){
+  if(lastLook===null||lastLook>G.t1){return;}
+  const xs=Math.max(TL_X0,G.tx(lastLook));
+  g.fillStyle="#16233d";g.fillRect(xs,3,G.x1+12-xs,TL_AXIS-3);
+  if(lastLook>=G.t0){g.strokeStyle="#F0A52E";g.setLineDash([3,3]);g.beginPath();g.moveTo(xs,3);g.lineTo(xs,h);g.stroke();g.setLineDash([]);}}
+function tlBubble(g,cl){
+  const n=cl.members.length,r=10,x=cl.x;
+  g.fillStyle="#0a1222";g.beginPath();g.arc(x,TL_GY,r,0,7);g.fill();
+  let a=-Math.PI/2;
+  cl.members.forEach(e=>{const sweep=2*Math.PI/n;g.strokeStyle=evKind(e).c;g.lineWidth=2.4;
+    g.beginPath();g.arc(x,TL_GY,r,a+0.06,a+sweep-0.06);g.stroke();a+=sweep;});
+  g.fillStyle="#eaf1fb";g.font="700 10px Segoe UI, sans-serif";g.textAlign="center";g.fillText(String(n),x,TL_GY+3.5);}
+function tlGlyph(g,e,on){
+  const r=on?9:7.5,k=evKind(e);
+  if(on){g.strokeStyle="#ffffff";g.lineWidth=1.5;g.beginPath();g.arc(e.x,TL_GY,r+4,0,7);g.stroke();}
+  g.fillStyle="#0a1222";g.beginPath();g.arc(e.x,TL_GY,r,0,7);g.fill();
+  g.strokeStyle=k.c;g.lineWidth=1.6;g.setLineDash(e.tier==="SUSPECTED"?[2.5,2]:[]);
+  g.beginPath();g.arc(e.x,TL_GY,r,0,7);g.stroke();g.setLineDash([]);
+  g.fillStyle=k.c;g.font=`700 ${on?10.5:9}px Segoe UI, sans-serif`;g.textAlign="center";g.fillText(k.g,e.x,TL_GY+(on?4:3.2));}
+function tlPlaceLabels(g,singles,G){
+  const rows=[[],[]];let hidden=0;
+  singles.sort((a,b)=>(state.focus===b.id)-(state.focus===a.id)).forEach(e=>{
+    g.font=`${state.focus===e.id?700:500} 9.5px Segoe UI, sans-serif`;
+    const w=g.measureText(e.label).width,L=e.x-w/2,R=e.x+w/2;
+    const row=(L<TL_X0-14||R>G.x1+14)?-1:rows.findIndex(rw=>rw.every(q=>R+6<q[0]||L-6>q[1]));
+    if(row<0){e.ly=null;hidden++;return;}
+    rows[row].push([L,R]);e.ly=row===0?13:26;});
+  return hidden;}
+function tlMap(g,all,G){
+  const [f0,f1]=tlFull(),mx=t=>TL_X0+(t-f0)/(f1-f0)*(G.x1-TL_X0);
+  g.fillStyle="#0b1322";g.fillRect(TL_X0,TL_MAP0,G.x1-TL_X0,TL_MAP1-TL_MAP0);
+  all.forEach(e=>{g.fillStyle=evKind(e).c;g.fillRect(mx(Date.parse(e.epoch))-1,TL_MAP0+3,2,TL_MAP1-TL_MAP0-6);});
+  const a=mx(G.t0),b=mx(G.t1);
+  g.strokeStyle=TL.t0===null?"#3b5486":"#F0A52E";g.lineWidth=1.4;g.strokeRect(a+0.5,TL_MAP0+0.5,Math.max(b-a-1,4),TL_MAP1-TL_MAP0-1);
+  TL.map={a,b,mx,f0,f1};}
+function tlSpanText(span){
+  if(span>=47.5){const d=span/24;return d.toFixed(Number.isInteger(d)?0:1)+" days";}
+  return span.toFixed(span<10?1:0)+" h";}
+function tlCursor(h,inMap){
+  if(h){return "pointer";}
+  return inMap?"ew-resize":"grab";}
+function tlKey(g,G,hidden){
+  const span=(G.t1-G.t0)/36e5;
+  g.textAlign="left";g.fillStyle="#F0A52E";g.font="700 9.5px Segoe UI, sans-serif";g.fillText("EVENTS",12,16);
+  g.fillStyle="#8ea3c4";g.font="9.5px Segoe UI, sans-serif";
+  g.fillText(tlSpanText(span)+(TL.live?" to now":" shown"),12,29);
+  g.fillStyle="#f0c27a";g.fillText(lastLook===null?"all new":"▮ since last look",12,TL_MAP0+2);
+  if(hidden){g.fillStyle="#8ea3c4";g.fillText(hidden+" name"+(hidden===1?"":"s")+" hidden",12,TL_MAP1);}}
+function drawTimeline(){
+  const c=document.getElementById("tlcv"),G=tlGeom(c),dpr=Math.min(2,globalThis.devicePixelRatio||1);
+  c.width=Math.round(G.box.width*dpr);c.height=Math.round(G.box.height*dpr);
+  const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,G.box.width,G.box.height);
+  const all=shownEvents().filter(e=>Date.parse(e.epoch)>=tlFull()[0]);
+  const evs=all.filter(e=>{const t=Date.parse(e.epoch);return t>=G.t0&&t<=G.t1;})
+    .map(e=>({...e,x:G.tx(Date.parse(e.epoch)),label:(findObj(e.object_id)||{name:e.name}).name})).sort((a,b)=>a.x-b.x);
+  tlShadeSince(g,G,TL_AXIS+4);tlAxis(g,G);
+  // the focused event never hides inside a bubble: it is lifted out and drawn alone, on top
+  const cls=tlClusters(evs.filter(e=>e.id!==state.focus)),lifted=evs.filter(e=>e.id===state.focus);
+  lifted.forEach(e=>{const i=cls.findIndex(cl=>cl.x>e.x);cls.splice(i<0?cls.length:i,0,{xs:e.x,xe:e.x,x:e.x,members:[e]});});
+  const singles=cls.filter(cl=>cl.members.length===1).map(cl=>cl.members[0]);
+  const hidden=tlPlaceLabels(g,singles,G);
+  cls.slice().sort((m,n)=>(m.members[0].id===state.focus)-(n.members[0].id===state.focus)).forEach(cl=>{
+    if(cl.members.length>1){tlBubble(g,cl);return;}
+    const e=cl.members[0],on=state.focus===e.id;
+    if(e.ly!==null){g.strokeStyle="#2b3d63";g.lineWidth=1;g.beginPath();g.moveTo(e.x,e.ly+3);g.lineTo(e.x,TL_GY-(on?9:7.5));g.stroke();
+      g.fillStyle=on?"#ffffff":"#c7d4ea";g.font=`${on?700:500} 9.5px Segoe UI, sans-serif`;g.textAlign="center";g.fillText(e.label,e.x,e.ly);}
+    tlGlyph(g,e,on);});
+  tlMap(g,all,G);tlKey(g,G,hidden);
+  TL.hits=cls.map(cl=>({x:cl.x,members:cl.members}));
+  const multi=cls.filter(cl=>cl.members.length>1).sort((m,n)=>n.members.length-m.members.length);
+  Object.assign(c.dataset,{glyphs:String(evs.length),clusters:String(multi.length),biggest:multi.length?multi[0].x.toFixed(1):"",
+    hidden:String(hidden),live:String(TL.live),span:((G.t1-G.t0)/36e5).toFixed(1),t0:String(Math.round(G.t0))});
+  document.querySelectorAll("#tlzoom button").forEach(b=>{const h=+b.dataset.tlspan;
+    b.classList.toggle("on",Math.abs((G.t1-G.t0)/36e5-h)<0.05&&Math.abs(G.t1-tlFull()[1])<6e4);});}
+function tlHitAt(mx){let best=null,bd=TL_GAP/2+3;TL.hits.forEach(h=>{const d=Math.abs(h.x-mx);if(d<bd){bd=d;best=h;}});return best;}
+function tlPos(ev){const c=document.getElementById("tlcv"),r=c.getBoundingClientRect();return {c,mx:ev.clientX-r.left,my:ev.clientY-r.top};}
+function tlSpread(h){const ts=h.members.map(e=>Date.parse(e.epoch));return [Math.min(...ts),Math.max(...ts)];}
+function tlPinHTML(h){
+  const [a,b]=tlSpread(h),same=b-a<6e4,iso=t=>esc(fmtZ(new Date(t).toISOString()));
+  const rows=h.members.map(e=>{const k=evKind(e),o=findObj(e.object_id);
+    return `<button type="button" class="tlrow" data-evid="${esc(e.id)}"><b style="color:${k.c}">${k.g}</b> ${esc(o?o.name:e.name)} <span class="m">${esc(k.n)}${e.tier==="SUSPECTED"?" \u00b7 suspected":""}</span></button>`;}).join("");
+  const head=`<div class="m">${h.members.length} events \u00b7 ${same?"one time slot, "+iso(a):iso(a)+" to "+iso(b)}</div>`;
+  const zoom=same?"":`<button type="button" class="tlzoomto">Zoom to these</button>`;
+  return head+rows+zoom;}
+function tlTipHTML(h){
+  const rows=h.members.slice(0,6).map(e=>{const k=evKind(e),o=findObj(e.object_id);
+    return `<div><b style="color:${k.c}">${k.g}</b> ${esc(o?o.name:e.name)} <span class="m">${esc(k.n)} · ${esc(fmtZ(e.epoch))}</span></div>`;}).join("");
+  const more=h.members.length>6?`<div class="m">+${h.members.length-6} more \u00b7 click to list them</div>`:"";
+  const hint=h.members.length>1&&h.members.length<=6?`<div class="m">click to list them</div>`:"";
+  return rows+more+hint;}
+function tlShowTip(h,mx){const tip=document.getElementById("tltip");
+  if(TL.pin!==null){return;}
+  if(h===null){tip.hidden=true;return;}
+  tip.classList.remove("pinned");tip.innerHTML=tlTipHTML(h);tip.hidden=false;
+  tip.style.left=Math.min(mx+12,document.getElementById("tline").clientWidth-260)+"px";}
+function tlInMap(my){return my>=TL_MAP0-3&&my<=TL_MAP1+3;}
+const tlcv=document.getElementById("tlcv");
+tlcv.addEventListener("wheel",ev=>{ev.preventDefault();const {c,mx}=tlPos(ev);
+  tlZoomAt(tlGeom(c).xt(clamp(mx,TL_X0,c.clientWidth-18)),ev.deltaY<0?0.75:1/0.75);drawTimeline();},{passive:false});
+tlcv.addEventListener("mousedown",ev=>{const {c,mx,my}=tlPos(ev),[t0,t1]=tlWindow();
+  if(tlInMap(my)&&TL.map){const m=TL.map,inside=mx>=m.a&&mx<=m.b;
+    if(!inside){const tm=m.f0+(mx-TL_X0)/(c.clientWidth-18-TL_X0)*(m.f1-m.f0),half=(t1-t0)/2;tlSet(tm-half,tm+half);drawTimeline();}
+    TL.drag={map:true,x:mx,w:tlWindow(),moved:false};return;}
+  TL.drag={map:false,x:mx,w:[t0,t1],moved:false};});
+globalThis.addEventListener("mousemove",ev=>{
+  if(TL.drag===null){return;}
+  const {c,mx}=tlPos(ev),d=TL.drag,dx=mx-d.x;
+  if(Math.abs(dx)>3){d.moved=true;}
+  if(!d.moved){return;}
+  const span=d.w[1]-d.w[0],px=c.clientWidth-18-TL_X0;
+  const dt=d.map?dx/px*(TL.map.f1-TL.map.f0):-dx/px*span;
+  tlSet(d.w[0]+dt,d.w[1]+dt);drawTimeline();});
+globalThis.addEventListener("mouseup",ev=>{
+  const d=TL.drag;TL.drag=null;
+  if(d===null||d.moved||d.map){return;}
+  const {mx}=tlPos(ev),h=tlHitAt(mx);
+  if(h===null){return;}
+  if(h.members.length===1){tlUnpin();focusEvent(h.members[0].id);return;}
+  tlPin(h,mx);});
+function tlPin(h,mx){const tip=document.getElementById("tltip");
+  TL.pin=h;tip.innerHTML=tlPinHTML(h);tip.classList.add("pinned");tip.hidden=false;
+  tip.style.left=Math.min(mx+12,document.getElementById("tline").clientWidth-330)+"px";
+  document.getElementById("tline").dataset.pinned=String(h.members.length);}
+function tlUnpin(){TL.pin=null;const tip=document.getElementById("tltip");tip.hidden=true;tip.classList.remove("pinned");
+  document.getElementById("tline").dataset.pinned="0";}
+document.getElementById("tltip").addEventListener("click",ev=>{
+  const row=ev.target.closest("[data-evid]");
+  if(row!==null){const id=row.dataset.evid;tlUnpin();focusEvent(id);return;}
+  if(ev.target.closest(".tlzoomto")!==null&&TL.pin!==null){const [a,b]=tlSpread(TL.pin),pad=Math.max((b-a)*0.6,45*6e4);
+    tlUnpin();tlSet(a-pad,b+pad);drawTimeline();}});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&TL.pin!==null){tlUnpin();}});
+document.addEventListener("mousedown",ev=>{if(TL.pin!==null&&!ev.target.closest("#tltip")&&ev.target.id!=="tlcv"){tlUnpin();}});
+tlcv.addEventListener("mousemove",ev=>{const {mx,my}=tlPos(ev);
+  const h=tlInMap(my)?null:tlHitAt(mx);
+  tlcv.style.cursor=tlCursor(h,tlInMap(my));tlShowTip(h,mx);});
+tlcv.addEventListener("mouseleave",()=>tlShowTip(null,0));
+tlcv.addEventListener("dblclick",()=>{tlUnpin();TL.t0=null;TL.t1=null;TL.live=true;drawTimeline();});
+document.getElementById("tlzoom").addEventListener("click",ev=>{const b=ev.target.closest("[data-tlspan]");if(b===null){return;}
+  const h=+b.dataset.tlspan,t1=Date.now();tlSet(t1-h*36e5,t1);drawTimeline();});
+/* @@TIMELINE-END@@ */
+
+/* -- readout and the try-this list ---------------------------------------- */
+const DONE = new Set(store.get("psi-prop-tl-checks") || []);
+function tick(k){ DONE.add(k); store.set("psi-prop-tl-checks", [...DONE]); paintChecks(); }
+function paintChecks(){ document.querySelectorAll("#checks li").forEach(li => li.classList.toggle("done", DONE.has(li.dataset.check))); }
+function readout(){
+  const d = $("tlcv").dataset;
+  $("ro-span").textContent = d.span + " h"; $("ro-glyphs").textContent = d.glyphs;
+  $("ro-clusters").textContent = d.clusters; $("ro-hidden").textContent = d.hidden;
+  $("ro-live").textContent = d.live === "true" ? "yes" : "no";
+  if (d.live === "false") tick("pan");
+  if ($("tline").dataset.pinned && $("tline").dataset.pinned !== "0") tick("list");
+}
+new MutationObserver(readout).observe($("tlcv"), { attributes: true });
+new MutationObserver(readout).observe($("tline"), { attributes: true });
+$("tlzoom").addEventListener("click", ev => { if (ev.target.closest("[data-tlspan]")) tick("preset"); });
+$("tlcv").addEventListener("dblclick", () => tick("reset"));
+$("tlcv").addEventListener("wheel", () => tick("zoom"), { passive: true });
+new ResizeObserver(() => drawTimeline()).observe($("tline"));
+paintChecks(); drawTimeline();
+
+/* decisions */
+(function decisions(){
+  const form = $("decide-form"), KEY = "psi-prop-timeline";
+  const saved = store.get(KEY) || {};
+  Object.entries(saved).forEach(([k, v]) => {
+    if (k === "notes") { $("notes").value = v; return; }
+    const i = form.querySelector(`input[name="${k}"][value="${CSS.escape(v)}"]`); if (i) i.checked = true;
+  });
+  const LABELS = { q1: "Go or no-go", q2: "Clicking a bubble", q3: "Strip height", q4: "One line or lanes", q5: "The 3-hour event grid", q6: "Which build" };
+  function render(){
+    const data = {};
+    Object.keys(LABELS).forEach(k => { const c = form.querySelector(`input[name="${k}"]:checked`); if (c) data[k] = c.value; });
+    const notes = $("notes").value.trim(); if (notes) data.notes = notes;
+    store.set(KEY, data);
+    const lines = ["Event timeline proposal (17 November 2026): decisions", ""];
+    Object.entries(LABELS).forEach(([k, l], i) => lines.push(`${i + 1}. ${l}: ${data[k] || "(not answered)"}`));
+    if (notes) lines.push("", "Notes: " + notes);
+    $("decide-out").textContent = lines.join("\n");
+  }
+  form.addEventListener("input", render);
+  $("copy").addEventListener("click", async () => {
+    const t = $("decide-out").textContent;
+    try { await navigator.clipboard.writeText(t); $("copy-msg").textContent = "Copied. Paste it back into the session."; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($("decide-out")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copy-msg").textContent = "Selected. Press Ctrl+C to copy."; }
+  });
+  $("clear").addEventListener("click", () => { form.reset(); render(); });
+  render();
+})();
+</script>
+</body>
+</html>
