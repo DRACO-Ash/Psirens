@@ -51,7 +51,15 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.4; DEPLOYED 1.7.3, Active)
+## Current state (repo 1.7.5; DEPLOYED 1.7.3, Active)
+
+1.7.5, built 17 November 2026 on Ash's "Build it", is the rest of the audit:
+ONE PROVIDER PER TRACK chosen by an agreement check (outlier set aside,
+no majority = DISPUTED), drift withheld above 1 deg rms, old element sets aged
+out of selection, and the approach projection removed. Every consumer reads one
+resolved view (`agreement.py`). `prove.py` against it: no offline finding
+reproduces. See the 1.7.5 entry in Open items. Upload 1.7.5, not 1.7.4: it
+carries 1.7.4 too.
 
 FACT, Ash, 17 November 2026: the deployed build is 1.7.3, it STAYS (no rollback),
 and the provenance fixes ship as 1.7.4. DEMO_MODE is NOT set in the deployed
@@ -138,8 +146,8 @@ Shipped features:
   events at the top of the rail split at the previous visit (localStorage,
   judged on `detectable_from`, not the burn epoch), draws them on a four-day
   timeline above the plot and as halos on it, and focuses one on click, timeline
-  glyph or `j`/`k`/`Enter` (`Esc` back): framed view, trail split at the burn, a
-  projection to the high-interest object it is closing on, and an Event evidence
+  glyph or `j`/`k`/`Enter` (`Esc` back): framed view, trail split at the burn,
+  and an Event evidence
   chart in the inspector. Priority mix, Fleet health and By country now sit
   below the watchlist, folded. THRESHOLDS ARE STARTING POINTS pending live
   calibration, overridable by env (`EVENT_EW_FLOOR_DEG_PER_DAY`,
@@ -385,7 +393,10 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   overall, and `elset_candidates`, newest per provider).
 - `tle.py` — native line validation (checksum and satNo cross-check), source
   classification (SAFRAN commercial from 1.7.4), the selection policy (REAL
-  element sets before any other mode, 1.7.4), the copy-out gate (an unmarked
+  element sets before any other mode, 1.7.4; a set more than
+  `ELSET_MAX_LAG_HOURS` (48) older than the newest of its mode is aged out,
+  1.7.5, relative to the newest held and never to the clock), the copy-out
+  gate (an unmarked
   record is never "U" and never copyable, 1.7.4), and `propagation_refusal`:
   an element set is propagated only when its record states an SGP4 ephemeris
   type (`ephemType`, else column 63 of its own line 1) and carries its own B*.
@@ -396,12 +407,23 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   to the id as absent. `_normalise_names` guarantees a `name` key at cache load
   because the cache is otherwise read verbatim and the bundled snapshot and a
   raw JCO record disagree on the key.
+- `agreement.py` (1.7.5) — ONE PROVIDER PER OBJECT. `assess` ages out old
+  sets, propagates each provider's own newest set to one instant (`lon_at`) and
+  `judge`s: within `PROVIDER_AGREE_DEG` (1) of at least half the others agrees,
+  otherwise set aside; no majority is DISPUTED. An unpropagatable set is
+  UNVERIFIED, never judged, never preferred over a checked one. `resolve` hands
+  back the object with `samples`, `elset` and `elset_candidates` replaced by
+  the chosen provider's, plus `mode_streams`, `mode_elsets`, `agreement` (per
+  mode, with every provider's status and own fit) and `heard` (every epoch from
+  any provider not set aside, which QUIET is judged on). `Resolver` caches the
+  resolved store on the file signature and duck-types the store for
+  `EventEngine`, so the plot, TLE, co-planar, screen and Shift Brief read the
+  SAME provider. Untagged (pre-1.7.4) samples are never mixed with tagged ones.
 - `coplanar.py` — coplanar angle from inclination and RAAN, the longitude-
-  difference wrap, and `coplanar_for` (the neighbourhood payload). The HEAD of
-  every track reads the plane from `elset`, the newest fix overall, which is
-  what the plot head and RA needle use; it deliberately does NOT go through the
-  TLE selection policy, so changing `TLE_SOURCE_PRIORITY` cannot move the plot
-  and the chart apart. The TRAIL behind it (1.6.17) is built from the stored
+  difference wrap, and `coplanar_for` (the neighbourhood payload). Routes hand
+  it the RESOLVED store (1.7.5), so the head plane is the track provider's
+  element set and the trail is that provider's samples, the same provider the
+  plot head and RA needle use. The TRAIL behind it (1.6.17) is built from the stored
   SAMPLES instead: `_plane_rows` takes every sample that carries `raan_deg`,
   and `_nearest_row` pairs each neighbour reading with the primary reading
   closest in time, giving up rather than pairing across more than
@@ -411,7 +433,10 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   current value: a shorter honest trail beats a long invented one.
 - `events.py` — the Shift Brief's detectors (1.7.0), `detect`, `latest_splits`
   (object -> newest confirmed E-W event, which cuts the drift fit) and
-  `EventEngine` (cache keyed on the store's mtime and size and the HRR ranks).
+  `EventEngine` (cache keyed on the store's mtime and size). From 1.7.5 it
+  reads the resolved view: one provider's samples, no events for a DISPUTED or
+  untagged-only object, fits over `DRIFT_MAX_RESIDUAL_DEG` refused, QUIET
+  judged on `heard`, and NO projection.
 - `conjunction.py` — SGP4 closest-approach screen; `tle_for` (native lines or
   none, with provenance; no reconstruction from 1.7.4). The element set that is
   served is also the one propagated, so the displayed line always produces the
@@ -444,7 +469,8 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drawHead` (+ `raNeedle`), the inspector modal, view/window/range controls.
 
 Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
-`test_coplanar.py`, `test_drift.py`, `test_events.py`, `test_hrr.py`, `test_logging.py`, `test_sources.py`,
+`test_agreement.py`, `test_coplanar.py`, `test_drift.py`, `test_events.py`, `test_hrr.py`, `test_logging.py`,
+`test_provenance.py`, `test_sources.py`,
 `test_store.py`, `test_tle.py`.
 Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
 by the exporter, never hand-typed, so every "valid" line genuinely checksums.
@@ -510,13 +536,22 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   every sample's `p` indexes), `classification_markings` (every distinct
   marking verbatim; `classification_marking` is them joined with " | ", or
   null) and serves ONLY samples whose own tagged mode is in the view.
+  CHANGED in 1.7.5: a track is ONE provider's samples in ONE mode (REAL before
+  any other). `providers` is now provider -> {count, status, note,
+  newest_epoch, lon_at_common_deg, drift_deg_per_day, drift_residual_deg,
+  drift_withheld}, status one of track, agrees, set aside, disputed,
+  unverified, aged out, not used, excluded (untagged). `agreement` carries
+  mode, status (agreed, single, disputed, unchecked), primary,
+  samples_untagged, common_epoch, positions, set_aside, unverified, aged_out.
+  `drift_withheld_reason` explains every null rate; a poor fit keeps its
+  residual, baseline and fix count with the rate null.
   From 1.7.0 `drift_since_event` too: the epoch of the newest CONFIRMED E-W
   event, after which alone the rate is fitted, or null.
 - `GET /api/events?view=&modes=&ranks=` (1.7.0) — events newest first, filtered
   exactly as `/api/tracks` is; each carries `id, object_id, type, tier, epoch,
   detectable_from, data_mode, name, rank, country`, the type's numbers
-  (`rate_before/rate_after`, `delta_inc_deg`, `age_hours`), an optional
-  `projection` and an `evidence` block (series, split, the two fitted lines,
+  (`rate_before/rate_after`, `delta_inc_deg`, `age_hours`) and an `evidence`
+  block (NO `projection` from 1.7.5) (series, split, the two fitted lines,
   method). Payload also carries `reference_epoch`, `belt_current`,
   `lookback_hours`, `thresholds`, `compute_seconds`. ETag/304.
 - `GET /api/hrr` — the HRR object map. Each entry carries `affiliation`
@@ -1333,6 +1368,31 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- PROVIDER AGREEMENT: BUILT in 1.7.5, 17 November 2026, on Ash's "Build it"
+  for the five items left by 1.7.4. One provider per track, chosen by the
+  agreement check; drift withheld over 1 deg rms with the reason; age-out at
+  48 h relative to the newest held; projection removed (server, SPA, guide,
+  tests). Thresholds `PROVIDER_AGREE_DEG`, `DRIFT_MAX_RESIDUAL_DEG`,
+  `ELSET_MAX_LAG_HOURS`. PROVEN: `tests/test_agreement.py` (21 tests, COSMOS
+  2589 rebuilt through the real ingest path); `audits/.../redcases_1_7_5.py`,
+  11 of 11 old behaviours go red; its first run found TWO vacuous tests
+  (QUALITY-LEDGER D15). The layout probe asserts DEMO-P1 (two demo providers
+  agree, DEMO-OUTLIER set aside, drift on station) and fails when the status
+  is hidden (red case run). `prove.py` now measures the SERVED view: 1.7.4
+  from git reproduces F1, F3, F5, F6, F12; 1.7.5 reproduces none. CORRECTION
+  found on the way (D14): the F12 proof was vacuous until now (its fresh fetch
+  was an empty window). Guide: new "When providers disagree" and "One
+  provider, and a ceiling on the fit" sections, rows, glossary, reference
+  card, two self-check questions (16 now), figures recaptured, hotspots
+  re-measured; the guide seed gives TIANLIAN-3 01 three providers so the
+  inspector figure shows "set aside".
+  OPEN FOR ASH: (1) a DISPUTED object still draws the policy's choice as its
+  marker (no rate, no events); the alternative is no marker. (2) The check
+  needs the element set to state SGP4 (`ephemType` or line 1 column 63); if
+  live rows carry neither, nothing can be set aside. Run
+  `tools/udl_elset_probe.py`. (3) First day after deploy: untagged history is
+  excluded wherever tagged samples exist, so rates return after 24 h of fixes
+  or after the backfill. Run the backfill straight after deploying.
 - PROVENANCE RULES: BUILT in 1.7.4, 17 November 2026, at Ash's instruction
   ("build these") from the audit's three floor rules. (1) Every position is
   tagged with its provider, data mode and marking, de-duplicated on (provider,

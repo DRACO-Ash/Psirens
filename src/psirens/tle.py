@@ -294,7 +294,7 @@ def _elements_present(el: dict) -> bool:
     try:
         for key in _REQUIRED_ELSET_KEYS[1:]:
             float(el[key])  # raises on absent, None, or non-numeric
-        datetime.fromisoformat(str(el["epoch"]).replace("Z", "+00:00"))
+        _parse_iso(el["epoch"])
     except (KeyError, TypeError, ValueError):
         return False
     return True
@@ -326,14 +326,39 @@ def _is_usable(el: object) -> bool:
             and bool(str(el.get("classification") or "").strip()))
 
 
-def candidates_of(obj: dict) -> list[dict]:
-    """Every usable retained element set for an object, newest first.
+# A provider's element set more than this many hours older than the newest
+# one held for the same object and mode is AGED OUT (1.7.5): it is neither
+# selected nor compared. Relative to the newest held, not to the clock, so a
+# feed outage ages nothing out and never blanks every TLE at once. Until 1.7.5
+# a provider that stopped reporting kept winning selection by class for the
+# whole 90-day retention window (audit finding F12).
+ELSET_MAX_LAG_HOURS = 48.0
 
-    Falls back to the single legacy `elset` for records written before
-    per-source retention existed. Propagation is decided separately
-    (`propagation_refusal`), so an element set that cannot be screened can
-    still have its provider's own line displayed, with the reason stated.
-    """
+
+def mode_of(el: dict) -> str:
+    """The data mode an element set states. A candidate stored before 1.7.4
+    carries none; it was filed under the REAL key, so it is read as REAL."""
+    return str(el.get("data_mode") or "REAL")
+
+
+def _parse_iso(raw: object) -> datetime:
+    """An ISO epoch, a trailing Z read as UTC, a naive value as UTC. Raises
+    ValueError on anything unparseable. The single parser in this module."""
+    dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def epoch_of(el: dict) -> datetime | None:
+    try:
+        return _parse_iso(el.get("epoch"))
+    except (TypeError, ValueError):
+        return None
+
+
+def usable_candidates(obj: dict) -> list[dict]:
+    """Every usable retained element set for an object, newest first, before
+    any ageing. Falls back to the single legacy `elset` for records written
+    before per-source retention existed."""
     by_source = obj.get("elset_candidates")
     items: list[dict] = []
     if isinstance(by_source, dict):
@@ -343,29 +368,74 @@ def candidates_of(obj: dict) -> list[dict]:
     return sorted(items, key=_epoch_key, reverse=True)
 
 
+def split_aged(items: list[dict],
+               max_lag_hours: float | None = ELSET_MAX_LAG_HOURS) -> tuple[list[dict], list[dict]]:
+    """(fresh, aged) element sets, judged PER MODE against the newest of that
+    mode, so a newer SIMULATED set can never age a REAL one out."""
+    if max_lag_hours is None:
+        return list(items), []
+    newest: dict[str, datetime] = {}
+    for el in items:
+        when = epoch_of(el)
+        mode = mode_of(el)
+        if when is not None and (mode not in newest or when > newest[mode]):
+            newest[mode] = when
+    fresh, aged = [], []
+    for el in items:
+        when, top = epoch_of(el), newest.get(mode_of(el))
+        lag = None if when is None or top is None else (top - when).total_seconds() / 3600.0
+        (aged if lag is None or lag > max_lag_hours else fresh).append(el)
+    return fresh, aged
+
+
+def candidates_of(obj: dict,
+                  max_lag_hours: float | None = ELSET_MAX_LAG_HOURS) -> list[dict]:
+    """Every usable, current element set for an object, newest first.
+
+    Propagation is decided separately (`propagation_refusal`), so an element
+    set that cannot be screened can still have its provider's own line
+    displayed, with the reason stated. Aged-out sets are dropped here.
+    """
+    return split_aged(usable_candidates(obj), max_lag_hours)[0]
+
+
 def _is_real(el: dict) -> bool:
-    return (el.get("data_mode") or "REAL") == "REAL"
+    return mode_of(el) == "REAL"
 
 
-def select_elset(obj: dict, priority: tuple[str, ...] = DEFAULT_PRIORITY) -> dict | None:
+def policy_rank(source: str | None, priority: tuple[str, ...]) -> int:
+    """Position of a provider's class in the selection policy; lower wins.
+    An empty policy (`any`) ranks every class equal, so newest wins."""
+    cls = classify_source(source)
+    return priority.index(cls) if cls in priority else len(priority)
+
+
+def by_policy(items: list[dict], priority: tuple[str, ...]) -> list[dict]:
+    """Element sets in selection order: policy class, then newest first."""
+    newest_first = sorted(items, key=_epoch_key, reverse=True)
+    return sorted(newest_first, key=lambda el: policy_rank(el.get("source"), priority))
+
+
+def select_elset(obj: dict, priority: tuple[str, ...] = DEFAULT_PRIORITY,
+                 max_lag_hours: float | None = ELSET_MAX_LAG_HOURS) -> dict | None:
     """Pick the element set to publish for this object.
 
     REAL element sets first, whenever the object holds any (1.7.4): an
     EXERCISE or SIMULATED set filed under a real catalogue number must not
     become that object's TLE. Then the first class in `priority` that holds
     any candidate wins, newest epoch within it. An empty priority means no
-    class ranking, so the newest candidate wins outright.
+    class ranking, so the newest candidate wins outright. A set more than
+    `max_lag_hours` older than the newest of its mode is never chosen (1.7.5).
+
+    The served path goes through `agreement.resolve`, which applies this same
+    order AFTER setting aside a provider the others contradict.
     """
-    ranked = candidates_of(obj)
+    ranked = candidates_of(obj, max_lag_hours)
     if not ranked:
         return None
     real = [el for el in ranked if _is_real(el)]
-    ranked = real or ranked
-    for cls in priority:
-        for el in ranked:
-            if classify_source(el.get("source")) == cls:
-                return el
-    return ranked[0]
+    ordered = by_policy(real or ranked, priority)
+    return ordered[0]
 
 
 def provenance_of(el: dict, *, native: bool) -> dict:
@@ -400,10 +470,8 @@ def age_hours(el: dict, now: datetime | None = None) -> float | None:
     if not raw:
         return None
     try:
-        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        dt = _parse_iso(raw)
     except ValueError:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
     ref = now or datetime.now(timezone.utc)
     return round((ref - dt).total_seconds() / 3600.0, 2)

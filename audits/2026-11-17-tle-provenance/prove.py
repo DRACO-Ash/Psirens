@@ -10,7 +10,14 @@ PSIRENS: every number comes from the shipped modules.
 
 Each finding prints REPRODUCES or FIXED against the code it runs on. Against
 1.7.3 every offline finding reproduced; 1.7.4 (Ash's three rules) closes F2,
-F7, F8, F9, F10, F11 and F13 and leaves the rest for the next change.
+F7, F8, F9, F10, F11 and F13; 1.7.5 (one provider per track, the agreement
+check, the residual ceiling, age-out) closes F1, F3, F5, F6 and F12.
+
+From 1.7.5 the findings are measured on what is SERVED (`_tracks_payload`, and
+`tle_for` over `agreement.resolve_data`), not on the raw store. The store is
+archive-not-delete and still holds every provider's fixes by design; the
+defect was that the served view blended them, so the served view is where the
+fix has to show.
 
 Usage: PYTHONPATH=src python audits/2026-11-17-tle-provenance/prove.py
 
@@ -66,7 +73,10 @@ def rows_for(provider: str, l1: str, l2: str, start: datetime, end: datetime,
                "inclination": float(l2[8:16]), "raan": float(l2[17:25]),
                "eccentricity": float("0." + l2[26:33]), "argOfPerigee": float(l2[34:42]),
                "meanAnomaly": (float(l2[43:51]) + 360.0 * n * days) % 360.0,
-               "meanMotion": n, "bStar": 0.0, "source": provider, "dataMode": mode}
+               "meanMotion": n, "bStar": 0.0, "source": provider, "dataMode": mode,
+               # Read from column 63 of the provider's OWN line 1: both lines
+               # Ash supplied state type 0. Nothing is assumed.
+               "ephemType": int(l1[62])}
         if marking is not None:
             row["classificationMarking"] = marking
         out.append(row)
@@ -98,11 +108,15 @@ def main() -> int:
     da = tempfile.mkdtemp(prefix="psirens-audit-")
     rows = rows_for(*GOOD, REF - timedelta(days=4), REF)
     rows += rows_for(*BAD, REF - timedelta(days=2) + timedelta(minutes=37), REF)
-    obj = ingest(rows, da).load()["objects"][SAT]
-    lons = sorted({round(s["sub_lon_deg"]) for s in obj["samples"]})
+    store_a = ingest(rows, da)
+    obj = store_a.load()["objects"][SAT]
+    served_a = _tracks_payload(_cfg(da), store_a, "real", {DataMode.REAL})["tracks"][0]
+    lons = sorted({round(s["sub_lon_deg"]) for s in served_a["samples"]})
     check("F1 two providers are merged into ONE track",
           min(lons) < 70 and max(lons) > 120,
-          f"{len(obj['samples'])} samples under {SAT}, longitudes from {min(lons)} to {max(lons)} deg")
+          f"served track: {len(served_a['samples'])} of {len(obj['samples'])} stored samples, "
+          f"longitudes {min(lons)} to {max(lons)} deg, head from {served_a['head_source']}; "
+          f"agreement {served_a.get('agreement', {}).get('status', 'not checked')}")
     untagged = [s for s in obj["samples"] if sample_provenance(obj, s) is None]
     check("F2 samples carry no provider",
           len(untagged) == len(obj["samples"]),
@@ -110,20 +124,31 @@ def main() -> int:
     pairs = [(datetime.fromisoformat(s["epoch"]), s["sub_lon_deg"]) for s in obj["samples"]]
     blk = _drift_block(pairs, None)
     shown = (f"{blk['drift_deg_per_day']:+.2f} deg/day at {blk['drift_residual_deg']:.1f} deg rms"
-             if blk["drift_deg_per_day"] is not None else "null")
+             if blk["drift_deg_per_day"] is not None else f"withheld ({blk.get('drift_withheld_reason')})")
+    served_rate = served_a["drift_deg_per_day"]
     check("F3 a drift rate is published from the blend, its residual never checked",
-          blk["drift_deg_per_day"] is not None and blk["drift_residual_deg"] > 1.0,
-          f"drift {shown} (the 127.9E line alone: -0.03 deg/day)")
+          (blk["drift_deg_per_day"] is not None and blk["drift_residual_deg"] > 1.0)
+          or (served_rate is not None and served_a["drift_residual_deg"] > 1.0),
+          f"blend fitted directly: {shown}; served: "
+          f"{served_rate if served_rate is not None else 'withheld (' + str(served_a.get('drift_withheld_reason')) + ')'}")
     print("OBSERVED   F4 the blend is reported as a CONFIRMED manoeuvre: live export, "
           "64467 STARTED CONFIRMED z 9.7, -0.01 -> -16.32 deg/day (not reproduced offline)")
     # Scenario B: timing as the live export shows it (F5, F6). The 127.9E source
     # reports until 16 Nov ~20:00Z; NorthStar runs on to its 17 Nov 08:36Z epoch.
     d = tempfile.mkdtemp(prefix="psirens-audit-")
+    # The vendor comparison of 17 November: five sources agree at 127.9E. The
+    # agreeing providers here carry Ash's UDL line under each name, ending at
+    # the times that comparison shows (18 SPCS 16T20:03Z, KBR and EXO 16T19:24Z).
     rows = rows_for(*GOOD, REF - timedelta(days=4), datetime(2026, 11, 16, 20, 3, tzinfo=timezone.utc))
+    for name, end in (("18 SPCS", datetime(2026, 11, 16, 20, 3, tzinfo=timezone.utc)),
+                      ("KBR", datetime(2026, 11, 16, 19, 24, tzinfo=timezone.utc)),
+                      ("EXO", datetime(2026, 11, 16, 19, 24, tzinfo=timezone.utc))):
+        rows += rows_for(name, GOOD[1], GOOD[2], REF - timedelta(days=4), end)
     rows += rows_for(*BAD, datetime(2026, 11, 15, 10, 0, tzinfo=timezone.utc),
                      datetime(2026, 11, 17, 8, 36, tzinfo=timezone.utc))
     store = ingest(rows, d)
-    obj = store.load()["objects"][SAT]
+    raw = store.load()["objects"][SAT]
+    obj = _served(store.load())["objects"][SAT]
     head = _tracks_payload(_cfg(d), store, "real",
                            {DataMode.REAL})["tracks"][0]["samples"][-1]
     check("F5 the plot head is whichever provider published last",
@@ -133,7 +158,8 @@ def main() -> int:
     check("F6 commercial-first selection serves the outlier provider",
           prov["source"] == "NorthStar",
           f"served {prov['source']} ({prov['source_class']}); SAFRAN classed "
-          f"{provenance_of(obj['elset_candidates']['SAFRAN'], native=False)['source_class']}")
+          f"{provenance_of(raw['elset_candidates']['SAFRAN'], native=False)['source_class']}; "
+          f"set aside {sorted((obj.get('agreement') or {}).get('REAL', {}).get('set_aside', {}))}")
     # F7: an element set with NO marking is labelled U and offered for copy.
     d2 = tempfile.mkdtemp(prefix="psirens-audit-")
     s2 = ingest(rows_for(*GOOD, REF - timedelta(hours=6), REF, marking=None), d2)
@@ -171,7 +197,7 @@ def main() -> int:
           f"the Real World track serves {len(real4['samples'])} of {len(mix)} samples, "
           f"providers {real4.get('providers')}, labelled {real4['data_mode']}")
     # F11: the screen ignores the provider's ephemeris type and drag terms.
-    el11 = dict(obj["elset_candidates"]["SAFRAN"], ephem_type=4, bstar=-6.3e-5)
+    el11 = dict(raw["elset_candidates"]["SAFRAN"], ephem_type=4, bstar=-6.3e-5)
     refusal = propagation_refusal(el11)
     check("F11 an element set of another theory is propagated as SGP4",
           refusal is None,
@@ -187,18 +213,40 @@ def main() -> int:
     old = rows_for("NorthStar", GOOD[1], GOOD[2], REF - timedelta(days=60), REF - timedelta(days=60))
     store5 = ingest(old, d5)
     fresh = rows_for("18 SDS", GOOD[1], GOOD[2], REF, REF)
-    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=fresh)))
-    store5.merge_samples(UDLElsetSource(_cfg(d5), client=client).fetch(REF, REF), retention_days=90,
-                         max_samples=2000, now=REF)
-    _, _, p5 = tle_for(store5.load()["objects"][SAT])
-    check("F12 a 60-day-old commercial fix outranks a fresh government one",
-          p5["source"] == "NorthStar",
-          f"served {p5['source']} epoch {p5['epoch'][:10]} over 18 SDS epoch {REF:%Y-%m-%d}")
+    # Ingested the same way as every other scenario. Until 1.7.5 this fetched
+    # the window [REF, REF], which is empty, so no request was made, 18 SDS
+    # was never stored, and the check "reproduced" against a store holding
+    # NorthStar alone. Found by the 1.7.5 run; the scenario now refuses to
+    # judge unless both providers are held.
+    store5 = ingest(fresh, d5)
+    held = set((store5.load()["objects"][SAT].get("elset_candidates") or {}))
+    if held != {"NorthStar", "18 SDS"}:
+        print(f"INVALID     F12 scenario: the store holds {sorted(held)}, not both providers")
+    else:
+        try:
+            from psirens.agreement import Policy as _P, resolve_data as _rd
+            served = _rd(store5.load(), _P())["objects"][SAT]
+        except ImportError:       # 1.7.4 and earlier serve the raw store
+            served = store5.load()["objects"][SAT]
+        _, _, p5 = tle_for(served)
+        check("F12 a 60-day-old commercial fix outranks a fresh government one",
+              p5["source"] == "NorthStar",
+              f"served {p5['source']} epoch {p5['epoch'][:10]}; held {sorted(held)}")
     still = [r[0].split()[0] for r in RESULTS if r[1]]
     fixed = [r[0].split()[0] for r in RESULTS if not r[1]]
     print(f"\nstill reproduce: {', '.join(still) or 'none'}")
     print(f"fixed:           {', '.join(fixed) or 'none'}")
     return 0
+
+
+def _served(data: dict) -> dict:
+    """The view PSIRENS serves: resolved from 1.7.5, the raw store before.
+    Lets this script run unchanged against an older tree for comparison."""
+    try:
+        from psirens.agreement import Policy, resolve_data
+    except ImportError:
+        return data
+    return resolve_data(data, Policy())
 
 
 def _cfg13(d: str) -> Config:

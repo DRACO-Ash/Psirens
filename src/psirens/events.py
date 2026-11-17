@@ -45,7 +45,7 @@ import os
 import statistics
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -71,9 +71,6 @@ EARLY_DEV_FLOOR = 0.03  # deg: below this a departure is inside provider scatter
 QUIET_CADENCE_DIVISOR = 3.0   # "normally reports often": median step <= quiet/3
 QUIET_CADENCE_MIN = 6
 EVIDENCE_MAX_POINTS = 240
-PROJECTION_HALF_WIDTH = 30.0  # deg ahead of a drifter considered for "reaches X"
-PROJECTION_MAX_DAYS = 30.0
-PROJECTION_RANKS = (1, 2, 3)
 
 KIND_EW = ("STARTED", "STOPPED", "EW")
 CONFIRMED = "CONFIRMED"
@@ -86,6 +83,9 @@ class Thresholds:
     ns_floor: float = 0.008    # deg
     sigma: float = 6.0
     quiet_hours: float = 12.0
+    # A fit missing its data by more than this (deg rms) says nothing about a
+    # rate, so it can neither confirm nor rule out a burn (1.7.5).
+    max_residual: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -139,6 +139,8 @@ def _ew_candidate(lon: list[tuple[datetime, float]], keys: list[datetime],
     fb = drift_fit(_between(lon, keys, t - win, t), window_days=WIN_H / 24.0)
     fa = drift_fit(_between(lon, keys, t, t + win), window_days=WIN_H / 24.0)
     if fb is None or fa is None or fa.span_hours < EW_MIN_AFTER_H:
+        return None
+    if max(fb.residual_deg, fa.residual_deg) > th.max_residual:
         return None
     delta = fa.rate_deg_per_day - fb.rate_deg_per_day
     sig = math.hypot(rate_sigma(fb), rate_sigma(fa)) or 1e-9
@@ -290,10 +292,17 @@ def _line(fit: DriftFit, lo: datetime, hi: datetime) -> dict:
 
 @dataclass(frozen=True)
 class _Object:
+    """One object as the detectors see it: the samples of the ONE provider
+    the agreement check chose (1.7.5), never a blend. `heard` is every epoch
+    at which any provider not set aside reported it, which is what silence
+    is judged on. `trusted` is False when the providers disagree or the
+    samples have no provider; such an object raises no manoeuvre event."""
     oid: str
     rec: dict
     lon: list[tuple[datetime, float]]
     inc: list[tuple[datetime, float]]
+    heard: list[datetime] = field(default_factory=list)
+    trusted: bool = True
 
 
 def _base(obj: _Object, kind: str, tier: str, when: datetime,
@@ -367,13 +376,14 @@ def _leaving_event(obj: _Object, when: datetime, ref: datetime) -> dict:
 
 
 def _quiet_event(obj: _Object, belt_ref: datetime, th: Thresholds) -> dict | None:
-    if not obj.lon:
+    heard = obj.heard or [p[0] for p in obj.lon]
+    if not heard:
         return None
-    last = obj.lon[-1][0]
+    last = heard[-1]
     gap = _hours(last, belt_ref)
     if gap < th.quiet_hours or gap > LOOKBACK_H:
         return None
-    cadence = _cadence_hours([p for p in obj.lon if p[0] >= last - timedelta(hours=72)])
+    cadence = _cadence_hours([(w, 0.0) for w in heard if w >= last - timedelta(hours=72)])
     if cadence is None or cadence > th.quiet_hours / QUIET_CADENCE_DIVISOR:
         return None
     ev = _base(obj, "QUIET", CONFIRMED, last, last + timedelta(hours=th.quiet_hours))
@@ -383,6 +393,8 @@ def _quiet_event(obj: _Object, belt_ref: datetime, th: Thresholds) -> dict | Non
 
 def _object_events(obj: _Object, ref: datetime, th: Thresholds) -> list[dict]:
     out: list[dict] = []
+    if not obj.trusted:
+        return out
     split = ew_split(obj.lon, ref, th)
     confirmed = split if split is not None and not split.edge else None
     if confirmed is not None:
@@ -397,53 +409,9 @@ def _object_events(obj: _Object, ref: datetime, th: Thresholds) -> list[dict]:
     return out
 
 
-@dataclass(frozen=True)
-class _Head:
-    oid: str
-    lon: float
-    rate: float
-
-
-def _heads(objs: list[_Object], hrr_map: dict) -> list[_Head]:
-    """Latest longitude and drift of every object that could be a projection
-    target: high-interest ranks only, so the projection names an object an
-    operator cares about rather than the nearest piece of debris."""
-    out = []
-    for obj in objs:
-        rank = (hrr_map.get(obj.oid) or {}).get("rank")
-        if rank is None or int(rank) not in PROJECTION_RANKS or not obj.lon:
-            continue
-        fit = drift_fit(obj.lon)
-        out.append(_Head(obj.oid, obj.lon[-1][1], fit.rate_deg_per_day if fit else 0.0))
-    return out
-
-
-def _wrap(d: float) -> float:
-    return (d + 180.0) % 360.0 - 180.0
-
-
-def projection(oid: str, lon: float, rate: float, heads: list[_Head],
-               floor: float) -> dict | None:
-    """The nearest high-interest object AHEAD of a drifter that it closes on,
-    at current rates: arithmetic, not a statement of intent."""
-    if abs(rate) < floor:
-        return None
-    best: dict | None = None
-    for h in heads:
-        if h.oid == oid:
-            continue
-        gap = _wrap(h.lon - lon)
-        closing = rate - h.rate
-        # No `gap == 0` test: an object at exactly the same longitude gives a
-        # product of zero and is skipped by the closing test anyway, and a float
-        # equality check is python:S1244, raised by Code Quality on 1.7.1.
-        if abs(gap) > PROJECTION_HALF_WIDTH or gap * closing <= 0.0:
-            continue
-        days = gap / closing
-        if days <= PROJECTION_MAX_DAYS and (best is None or days < best["days"]):
-            best = {"object_id": h.oid, "days": round(days, 2),
-                    "gap_deg": round(abs(gap), 3), "closing_deg_per_day": round(closing, 4)}
-    return best
+def _trusted(rec: dict) -> bool:
+    block = (rec.get("agreement") or {}).get(rec.get("data_mode")) or {}
+    return block.get("status") != "disputed" and not block.get("samples_untagged")
 
 
 def _objects(data: dict, ref: datetime) -> list[_Object]:
@@ -452,21 +420,25 @@ def _objects(data: dict, ref: datetime) -> list[_Object]:
     for oid, rec in (data.get("objects") or {}).items():
         samples = rec.get("samples") or []
         lon = unwrap(series(samples, "sub_lon_deg", since))
-        out.append(_Object(oid, rec, lon, series(samples, "inclination_deg", since)))
+        heard = [w for w in (_parse(e) for e in rec.get("heard") or []) if w >= since]
+        out.append(_Object(oid, rec, lon, series(samples, "inclination_deg", since),
+                           heard, _trusted(rec)))
     return out
 
 
 def _belt_reference(data: dict) -> datetime | None:
+    """The newest fix held from any provider not set aside."""
     newest: datetime | None = None
     for rec in (data.get("objects") or {}).values():
-        for s in rec.get("samples") or []:
-            when = _parse(s["epoch"]) if "epoch" in s else None
-            if when is not None and (newest is None or when > newest):
+        epochs = rec.get("heard") or [s["epoch"] for s in rec.get("samples") or [] if "epoch" in s]
+        if epochs:
+            when = _parse(max(epochs))
+            if newest is None or when > newest:
                 newest = when
     return newest
 
 
-def detect(data: dict, hrr_map: dict, th: Thresholds, *,
+def detect(data: dict, th: Thresholds, *,
            now: datetime, stale_after_hours: float) -> dict:
     """Every event in the store, newest first, with the context to read them."""
     ref = _belt_reference(data)
@@ -474,22 +446,19 @@ def detect(data: dict, hrr_map: dict, th: Thresholds, *,
                      "lookback_hours": LOOKBACK_H,
                      "thresholds": {"ew_floor_deg_per_day": th.ew_floor,
                                     "ns_floor_deg": th.ns_floor, "sigma": th.sigma,
-                                    "quiet_hours": th.quiet_hours},
+                                    "quiet_hours": th.quiet_hours,
+                                    "max_residual_deg": th.max_residual},
                      "belt_current": False, "events": []}
     if ref is None:
         return payload
     belt_current = _hours(ref, now) <= stale_after_hours
     payload["belt_current"] = belt_current
-    objs = _objects(data, ref)
-    heads = _heads(objs, hrr_map)
     events: list[dict] = []
-    for obj in objs:
-        found = _object_events(obj, ref, th)
-        for ev in found:
-            if ev["type"] in ("STARTED", "EW"):
-                ev["projection"] = projection(obj.oid, obj.lon[-1][1], ev["rate_after"],
-                                              heads, th.ew_floor)
-        events.extend(found)
+    # No "reaches X in N days" projection (removed 1.7.5, owner approval of
+    # 17 November 2026): it extrapolated two fitted rates into a statement of
+    # where an object WOULD be, which no provider issued.
+    for obj in _objects(data, ref):
+        events.extend(_object_events(obj, ref, th))
         quiet = _quiet_event(obj, ref, th) if belt_current else None
         if quiet is not None:
             events.append(quiet)
@@ -531,22 +500,20 @@ class EventEngine:
         self.computations = 0
 
     @staticmethod
-    def _signature(path: str, hrr_map: dict) -> tuple:
+    def _signature(path: str) -> tuple:
         try:
             st = os.stat(path)
-            disk: tuple = (st.st_mtime_ns, st.st_size)
+            return (st.st_mtime_ns, st.st_size)
         except OSError:
-            disk = (None, None)
-        ranks = tuple(sorted((k, (v or {}).get("rank")) for k, v in hrr_map.items()))
-        return disk + (hash(ranks),)
+            return (None, None)
 
-    def current(self, store: Any, hrr_map: dict, now: datetime | None = None) -> dict:
-        key = self._signature(store.path, hrr_map)
+    def current(self, store: Any, now: datetime | None = None) -> dict:
+        key = self._signature(store.path)
         with self._lock:
             if self._result is not None and key == self._key:
                 return self._result
             started = time.perf_counter()
-            result = detect(store.load(), hrr_map, self.th,
+            result = detect(store.load(), self.th,
                             now=now or datetime.now(timezone.utc),
                             stale_after_hours=self.stale_after_hours)
             result["compute_seconds"] = round(time.perf_counter() - started, 3)

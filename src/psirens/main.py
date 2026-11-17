@@ -23,6 +23,8 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
+from .agreement import (MAX_RESIDUAL_DEG, MODE_ORDER, Resolver, drift_withheld,
+                        policy_from, resolve_data)
 from .astro import drift_fit
 from .config import Config, load_config
 from .models import VIEW_MODES, DataMode, ManualElsetIn
@@ -105,8 +107,17 @@ def _rank_of(oid: str, hrr_map: dict) -> int:
     return 5 if rank is None else int(rank)
 
 
+def _empty_drift(stamp: str | None, reason: str) -> dict:
+    return {"drift_deg_per_day": None, "drift_residual_deg": None,
+            "drift_fit_hours": None, "drift_fit_points": None,
+            "drift_fit_harmonic": None, "drift_since_event": stamp,
+            "drift_withheld_reason": reason}
+
+
 def _drift_block(pairs: list[tuple[datetime, float]],
-                 since: datetime | None = None) -> dict:
+                 since: datetime | None = None,
+                 ceiling: float = MAX_RESIDUAL_DEG,
+                 withheld: str | None = None) -> dict:
     """The fitted drift rate with the context needed to read it.
 
     A rate on its own is not interpretable, which is how a 30-minute finite
@@ -120,99 +131,89 @@ def _drift_block(pairs: list[tuple[datetime, float]],
     reports neither: 0.22 deg/day for an object drifting at 0.59 deg/day,
     measured on the scenario store while prototyping the Shift Brief.
     `drift_since_event` says when the fit was cut, so the reader knows.
+
+    NEVER WHEN THE FIT IS POOR (1.7.5). A fit whose RMS residual exceeds
+    `ceiling` does not describe the data it was fitted to, and the rate it
+    returns is an artefact of the fit. COSMOS 2589 published -12.96 deg/day
+    at 19.2 deg rms. The rate is withheld, the residual and baseline are kept
+    so the reader can see why, and `drift_withheld_reason` says so. Every
+    withheld rate carries a reason; a null rate never stands unexplained.
     """
     if since is not None:
         pairs = [p for p in pairs if p[0] >= since]
-    fit = drift_fit(pairs)
     stamp = since.isoformat() if since is not None else None
+    if withheld:
+        return _empty_drift(stamp, withheld)
+    fit = drift_fit(pairs)
     if fit is None:
-        return {"drift_deg_per_day": None, "drift_residual_deg": None,
-                "drift_fit_hours": None, "drift_fit_points": None,
-                "drift_fit_harmonic": None, "drift_since_event": stamp}
+        return _empty_drift(stamp, "no usable baseline: under 24 h of fixes from "
+                                   "the track provider, or an impossible rate")
+    poor = fit.residual_deg > ceiling
     return {
         "drift_since_event": stamp,
-        "drift_deg_per_day": fit.rate_deg_per_day,
+        "drift_deg_per_day": None if poor else fit.rate_deg_per_day,
         "drift_residual_deg": fit.residual_deg,
         "drift_fit_hours": fit.span_hours,
         "drift_fit_points": fit.points,
         "drift_fit_harmonic": fit.harmonic,
+        "drift_withheld_reason": (f"the fit misses its data by {fit.residual_deg:.2f} deg rms, "
+                                  f"over the {ceiling:g} deg ceiling") if poor else None,
     }
 
 
-def _record_mode(rec: dict) -> DataMode | None:
-    """The record-level mode, used only for samples stored before 1.7.4. An
-    absent or unknown mode is None, never REAL."""
-    try:
-        return DataMode(rec.get("data_mode"))
-    except ValueError:
-        return None
+def _stream_for(rec: dict, modes: set[DataMode]) -> tuple[str | None, list[dict]]:
+    """The one stream this view shows: REAL before any other mode, and within
+    a mode only the provider the agreement check chose (1.7.5)."""
+    streams = rec.get("mode_streams") or {}
+    for mode in MODE_ORDER:
+        if streams.get(mode) and DataMode(mode) in modes:
+            return mode, streams[mode]
+    return None, []
 
 
-def _served(rec: dict, modes: set[DataMode]) -> list[tuple[dict, dict | None]]:
-    """The samples this view may show, each with its own provenance.
-
-    The filter is PER SAMPLE (1.7.4). Until then one record held every mode
-    for its catalogue number and the newest row labelled the lot, so an
-    EXERCISE fix could sit on a REAL track or turn it into an EXERCISE one.
-    """
-    legacy = _record_mode(rec)
-    out = []
-    for s in rec.get("samples", []):
+def _markings(rec: dict, samples: list[dict]) -> list[str]:
+    legacy = rec.get("classification_marking")
+    marks = set()
+    for s in samples:
         prov = sample_provenance(rec, s)
-        try:
-            mode = DataMode(prov["data_mode"]) if prov else legacy
-        except ValueError:
-            mode = None
-        if mode is not None and mode in modes:
-            out.append((s, prov))
-    return out
-
-
-def _joined(values: list[str]) -> str:
-    """One value verbatim, or several verbatim, never a merged invention."""
-    return " | ".join(values)
-
-
-def _track_entry(oid: str, rec: dict, modes: set[DataMode],
-                 since: datetime | None) -> dict | None:
-    """One track, built only from samples whose own tags admit them. Its mode,
-    marking and providers are READ from those samples, every distinct value
-    listed verbatim; nothing is summarised into a value no record carried."""
-    served = _served(rec, modes)
-    if not served:
-        return None
-    samples = [s for s, _ in served]
-    legacy_mark = rec.get("classification_marking")
-    providers: dict[str, int] = {}
-    marks, mode_set = set(), set()
-    for s, prov in served:
-        key = prov["source"] if prov else "untagged"
-        providers[key] = providers.get(key, 0) + 1
-        mark = prov["classification_marking"] if prov else legacy_mark
+        mark = prov["classification_marking"] if prov else legacy
         if mark:
             marks.add(mark)
-        mode_set.add(prov["data_mode"] if prov else rec.get("data_mode"))
-    head = max(served, key=lambda sp: sp[0]["epoch"])
+    return sorted(marks)
+
+
+def _track_entry(oid: str, rec: dict, modes: set[DataMode], since: datetime | None,
+                 ceiling: float = MAX_RESIDUAL_DEG) -> dict | None:
+    """One track, from ONE provider's samples (1.7.5). Every provider seen is
+    listed with its status and its own fit; none is blended into the track."""
+    mode, samples = _stream_for(rec, modes)
+    if not samples or mode is None:
+        return None
+    block = (rec.get("agreement") or {}).get(mode) or {}
+    marks = _markings(rec, samples)
+    primary = block.get("primary")
     pairs = [(datetime.fromisoformat(s["epoch"]), s["sub_lon_deg"]) for s in samples]
+    el = (rec.get("mode_elsets") or {}).get(mode) or {}
     return {
         "object_id": oid,
         "name": rec.get("name", oid),
-        "data_mode": _joined(sorted(mode_set)),
-        "classification_marking": _joined(sorted(marks)) if marks else None,
-        "classification_markings": sorted(marks),
-        "source": _joined(sorted(providers)),
-        "providers": providers,
-        "head_source": head[1]["source"] if head[1] else None,
+        "data_mode": mode,
+        "classification_marking": " | ".join(marks) if marks else None,
+        "classification_markings": marks,
+        "source": primary or "untagged",
+        "providers": block.get("providers") or {},
+        "head_source": primary,
+        "agreement": {k: v for k, v in block.items() if k != "providers"},
         "provenance": rec.get("provenance") or [],
         "origin": rec.get("origin", ""),
         "target": rec.get("target"),
         "samples": samples,
-        **_drift_block(pairs, since),
-        "ra_deg": (rec.get("elset") or {}).get("raan_deg"),
+        **_drift_block(pairs, since, ceiling, drift_withheld(block)),
+        "ra_deg": el.get("raan_deg"),
     }
 
 
-def _tracks_payload(cfg: Config, store: Store, view: str,
+def _tracks_payload(cfg: Config, store: Store | Resolver, view: str,
                     modes: set[DataMode],
                     ranks: set[int] | None = None,
                     hrr_map: dict | None = None,
@@ -235,6 +236,8 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
     than the server quietly widening the request.
     """
     data = store.load()
+    if not data.get("resolved"):
+        data = resolve_data(data, policy_from(cfg))
     hrr_map = hrr_map or {}
     splits = splits or {}
     active_ranks = ranks or None
@@ -242,7 +245,8 @@ def _tracks_payload(cfg: Config, store: Store, view: str,
     for oid, rec in data.get("objects", {}).items():
         if active_ranks is not None and _rank_of(oid, hrr_map) not in active_ranks:
             continue
-        track = _track_entry(oid, rec, modes, splits.get(oid))
+        track = _track_entry(oid, rec, modes, splits.get(oid),
+                             cfg.drift_max_residual_deg)
         if track is not None:
             tracks.append(track)
             markings.extend(track["classification_markings"])
@@ -387,8 +391,8 @@ def _tracks(request: Request, view: str = "combined", modes: str = "",
     cfg: Config = request.app.state.cfg
     wanted = _parse_modes(view, modes)
     hrr_map = request.app.state.hrr.map()
-    found = request.app.state.events.current(request.app.state.store, hrr_map)
-    payload = _tracks_payload(cfg, request.app.state.store, view, wanted,
+    found = request.app.state.events.current(request.app.state.resolver)
+    payload = _tracks_payload(cfg, request.app.state.resolver, view, wanted,
                               _parse_ranks(ranks), hrr_map,
                               latest_splits(found["events"]))
     body = json.dumps(payload, separators=(",", ":"))
@@ -418,9 +422,6 @@ def _event_view(ev: dict, names: dict[str, str], hrr_map: dict) -> dict:
     entry = hrr_map.get(oid) or {}
     out = {**ev, "name": names.get(oid) or oid, "rank": _rank_of(oid, hrr_map),
            "country": entry.get("country")}
-    proj = ev.get("projection")
-    if proj:
-        out["projection"] = {**proj, "name": names.get(proj["object_id"]) or proj["object_id"]}
     return out
 
 
@@ -436,7 +437,7 @@ def _events(request: Request, view: str = "combined", modes: str = "",
     wanted = _parse_modes(view, modes)
     rank_set = _parse_ranks(ranks)
     hrr_map = request.app.state.hrr.map()
-    found = request.app.state.events.current(request.app.state.store, hrr_map)
+    found = request.app.state.events.current(request.app.state.resolver)
     names = _hrr_names(request)
     events = []
     for ev in found["events"]:
@@ -572,7 +573,7 @@ def _coplanar(request: Request) -> JSONResponse:
     target = request.query_params.get("target", "").strip()
     if not target:
         return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
-    data = request.app.state.store.load()
+    data = request.app.state.resolver.load()
     payload = coplanar_for(data, target, half_width_deg=cfg.coplanar_half_width_deg,
                            names=_hrr_names(request),
                            max_points=cfg.coplanar_max_points,
@@ -587,7 +588,7 @@ def _conjunctions(request: Request) -> JSONResponse:
     target = request.query_params.get("target", "").strip()
     if not target:
         return _cors(JSONResponse({"detail": "target required"}, status_code=400), cfg)
-    data = request.app.state.store.load()
+    data = request.app.state.resolver.load()
     payload = conjunctions_for(data, target, window_hours=cfg.conj_window_hours,
                                priority=parse_priority(cfg.tle_source_priority),
                                names=_hrr_names(request))
@@ -666,15 +667,21 @@ def create_app(cfg: Config | None = None,
     engine = EventEngine(Thresholds(ew_floor=cfg.event_ew_floor,
                                     ns_floor=cfg.event_ns_floor,
                                     sigma=cfg.event_sigma,
-                                    quiet_hours=cfg.event_quiet_hours),
+                                    quiet_hours=cfg.event_quiet_hours,
+                                    max_residual=cfg.drift_max_residual_deg),
                          cfg.stale_after_hours)
 
+    # ONE resolved view of the store (1.7.5): the plot, the TLE, co-planar,
+    # the conjunction screen and the Shift Brief all read the provider the
+    # agreement check chose, so no two of them can disagree about which.
+    resolver = Resolver(store, policy_from(cfg))
+
     def _warm_events() -> dict:
-        return engine.current(store, hrr.map())
+        return engine.current(resolver)
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="1.7.4", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.7.5", lifespan=_lifespan)
     # Request context for every log line, and one standard request line. The
     # X-Auth-Request-Email header becomes user.email, as the standard requires;
     # LOG_USER_EMAIL=false switches that off (see config.py).
@@ -685,6 +692,7 @@ def create_app(cfg: Config | None = None,
     app.state.refresher = refresher
     app.state.hrr = hrr
     app.state.events = engine
+    app.state.resolver = resolver
     app.state.global_rl = RateLimiter(limit=120, window_s=60.0)
     app.state.strict_rl = RateLimiter(limit=6, window_s=60.0)
 

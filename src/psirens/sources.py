@@ -702,12 +702,42 @@ class DemoElsetSource:
                 oid, head["sub_lon_deg"], head["inclination_deg"],
                 datetime.fromisoformat(head["epoch"]), head["raan_deg"])
             rec["elset"]["data_mode"] = rec["data_mode"]
+        out["DEMO-P1"] = self._providers_demo(now)
         self.last_stats = FetchStats(objects=len(out))
         return out
 
+    # Three synthetic providers for one object (1.7.5): two agree at 30E, the
+    # third puts it 25 deg away and sliding west, the shape COSMOS 2589 took
+    # live. Without this the offline belt has one provider per object, the
+    # agreement check has nothing to judge, and the probe guarding "set
+    # aside" would pass on a page that could not show it.
+    _PROVIDERS = (("DEMO-ALPHA", 30.0, 0.0, 0.0), ("DEMO-BRAVO", 30.02, 0.0, 2.0),
+                  ("DEMO-OUTLIER", 62.0, -1.2, 0.0))
+
+    def _providers_demo(self, now: datetime) -> dict:
+        samples: list[dict] = []
+        cands: dict[str, dict] = {}
+        for source, lon0, rate, stop_h in self._PROVIDERS:
+            pts = self._dense(now, lon0=lon0, inc=0.6, raan=150.0,
+                              burn_h=144.0 if rate else None, rate=rate, stop_h=stop_h)
+            for pt in pts:
+                pt.update({"source": source, "data_mode": "REAL",
+                           "classification_marking": "U"})
+            head = pts[-1]
+            el = self._demo_elset("DEMO-P1", head["sub_lon_deg"], head["inclination_deg"],
+                                  datetime.fromisoformat(head["epoch"]), head["raan_deg"],
+                                  source=source)
+            el["data_mode"] = "REAL"
+            cands[source] = el
+            samples.extend(pts)
+        newest = max(cands.values(), key=lambda el: el["epoch"])
+        return {"name": "PROVIDERS-DEMO", "source": DEMO_PROVIDER, "data_mode": "REAL",
+                "classification_marking": "U", "origin": "DEMO", "target": None,
+                "samples": samples, "elset": newest, "elset_candidates": cands}
+
     @staticmethod
     def _demo_elset(oid: str, lon: float, inc: float, epoch: datetime,
-                    raan: float = 0.0) -> dict:
+                    raan: float = 0.0, source: str = DEMO_PROVIDER) -> dict:
         """Approximate mean elements placing a circular GEO object near `lon`:
         with argp=0 and e~0, right ascension ~= RAAN + mean anomaly, so the
         sub-longitude is RAAN + mean anomaly - GMST. The RAAN is carried in
@@ -724,7 +754,7 @@ class DemoElsetSource:
             raan_deg=raan, argp_deg=0.0, mean_anomaly_deg=mean_anom,
             mean_motion_rev_per_day=DemoElsetSource._GEO_MM, bstar=0.0,
             classification="U", intl_desig="",
-            provenance=ElsetProvenance(source=DEMO_PROVIDER, ephem_type=0))
+            provenance=ElsetProvenance(source=source, ephem_type=0))
 
     def _span(self, now: datetime, days: int, lon0: float, inc: float,
               rate: float, raan: float = 0.0) -> list[dict]:

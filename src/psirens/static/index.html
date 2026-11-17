@@ -131,6 +131,10 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .ins-nm{font-size:14.5px;font-weight:600}.ins-id{font-family:var(--mono);font-size:11px;color:var(--dim)}
 .ins-dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:10px 0 0;font-size:12px}
 .ins-dl dt{color:var(--faint)}.ins-dl dd{margin:0;font-family:var(--mono);text-align:right}
+.pvlist{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.pv{font-size:11px;color:var(--faint)}.pv b{font-weight:600}
+.pv-track{color:#eaf1fb}.pv-agrees{color:#9fd3b0}.pv-set-aside,.pv-disputed{color:#F0A52E}
+.agree-bad{color:#F0A52E}
 .agebar{display:inline-block;width:48px;height:6px;background:#141d2b;border-radius:3px;overflow:hidden;margin-left:6px;vertical-align:1px}.agebar i{display:block;height:100%;background:#fff}
 .ins-nb-h{margin-top:12px;font-size:9.5px;letter-spacing:.14em;color:var(--accent);text-transform:uppercase}
   .tgttle{margin:8px 0 2px}
@@ -219,7 +223,6 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .bage{margin-left:auto;flex:none;font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:400}
 .bd{font-size:11px;color:var(--dim);line-height:1.4;margin-top:1px}
 .bd b{font-weight:600}
-.bproj{font-size:10.5px;color:#F0C27A;margin-top:2px;line-height:1.35}
 .btier{display:inline-block;margin-top:4px;font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;padding:1px 5px;border-radius:3px;border:1px solid currentColor}
 .btier.conf{color:#3fd27b}
 .btier.sus{color:#F0A52E;border-style:dashed}
@@ -410,7 +413,8 @@ function transform(tracks){
       tr:ss.map(s=>[s.sub_lon_deg,s.inclination_deg,Date.parse(s.epoch)]),
       ra:(t.ra_deg==null?null:t.ra_deg),
       mode:t.data_mode,mark:t.classification_marking,origin:t.origin,source:t.source,target:t.target,
-      provs:t.providers||{},headSrc:t.head_source||null});
+      provs:t.providers||{},headSrc:t.head_source||null,
+      agree:t.agreement||{},dwhy:t.drift_withheld_reason||null});
   });
   return out;
 }
@@ -607,25 +611,46 @@ function findObj(id){return OBJECTS.find(o=>o.id===id)||null;}
 // how -3.82 deg/day sat beside a 5.9 deg total excursion without contradicting
 // itself out loud. Both travel with the number now.
 function driftText(o){
-  if(!o.dknown){return "no usable baseline";}
+  // 1.7.5: a withheld rate says it was withheld. "No usable baseline" is a
+  // different statement and is kept for exactly that case.
+  if(!o.dknown){return o.dwhy&&!o.dwhy.startsWith("no usable")?"withheld":"no usable baseline";}
   if(Math.abs(o.drift)<=0.05){return "on station";}
   const dir=o.drift>0?"E":"W";
   return `${o.drift.toFixed(2)}\u00b0/day ${dir}`;
 }
 function driftFitText(o){
-  if(!o.dknown){return "under 24h of fixes";}
+  if(!o.dknown){return o.dwhy?esc(o.dwhy):"under 24h of fixes";}
   const model=o.dharm?"libration modelled":"plain line";
   // 1.7.0: never fitted across a manoeuvre. Say where the fit was cut.
   const cut=o.dsince?` \u00b7 after the event of ${fmtZ(o.dsince)}`:"";
   return `\u00b1${o.dres.toFixed(3)}\u00b0 rms \u00b7 ${o.dh.toFixed(0)}h \u00b7 ${o.dn} fixes \u00b7 ${model}${cut}`;
 }
-// Every position names the provider whose element set produced it (1.7.4).
-// Untagged positions were stored before tagging existed and are counted as such,
-// never attributed to a provider by guesswork.
+// Every position names the provider whose element set produced it (1.7.4),
+// and ONE provider drives the track (1.7.5). Each provider is listed with its
+// own status: the track provider, one that agrees, one set aside because the
+// others contradict it, one that could not be checked, or one aged out.
+const PV_ORDER={"track":0,"agrees":1,"disputed":2,"set aside":3,"unverified":4,"aged out":5,"not used":6,"excluded":7};
+function providerRow([name,r]){
+  const st=r.status||"not used",cls=st.replace(/\s+/g,"-");
+  // The track provider's rate is the Drift row, cut at any confirmed event; its
+  // whole-window fit here would put a second, different number beside it.
+  const fit=st==="track"||r.drift_deg_per_day==null?"":` · ${r.drift_deg_per_day.toFixed(3)}°/day`;
+  return `<span class="pv pv-${cls}" title="${esc(r.note||"")}"><b>${esc(name)}</b> ${r.count||0} · ${esc(st)}${fit}</span>`;}
 function providersText(o){
-  const rows=Object.entries(o.provs||{}).sort((a,b)=>b[1]-a[1]);
+  const rows=Object.entries(o.provs||{}).sort((a,b)=>(PV_ORDER[a[1].status]??9)-(PV_ORDER[b[1].status]??9)||(b[1].count||0)-(a[1].count||0));
   if(!rows.length){return "none recorded";}
-  return rows.map(([k,n])=>`${esc(k)} ${n}`).join(" \u00b7 ");
+  return rows.map(providerRow).join("");
+}
+const AGREE_TEXT={
+  agreed:a=>`agreed: ${Object.keys(a.positions||{}).length-Object.keys(a.set_aside||{}).length} of ${Object.keys(a.positions||{}).length} within ${a.agree_deg}°`,
+  single:()=>"one provider could be checked; nothing to compare",
+  disputed:()=>"DISPUTED: the providers disagree, so no drift and no events",
+  unchecked:()=>"not checked: no element set states SGP4 with its own B*"};
+function agreeText(o){
+  const a=o.agree||{};
+  if(a.samples_untagged){return "positions stored before 1.7.4; provider unknown";}
+  const f=AGREE_TEXT[a.status];
+  return f?esc(f(a)):"—";
 }
 function inspectHTML(o){if(!o)return"";
   const dr=driftText(o);
@@ -636,8 +661,9 @@ function inspectHTML(o){if(!o)return"";
   return `${evidenceHTML(o)}<div class="ins-h">${rkChip}<div><div class="ins-nm">${esc(o.name)}</div><div class="ins-id">${esc(o.id)}${o.cc?" \u00b7 "+esc(o.cc):""}</div></div></div>
     <dl class="ins-dl">${pr}<dt>Data mode</dt><dd>${esc(o.mode||"—")}</dd>
     <dt>Classification</dt><dd>${esc(o.mark||"not marked")}</dd>
-    <dt>Providers</dt><dd id="insprov">${providersText(o)}</dd>
-    <dt>Head from</dt><dd>${esc(o.headSrc||"untagged (stored before 1.7.4)")}</dd>
+    <dt>Track from</dt><dd id="inshead">${esc(o.headSrc||"untagged (stored before 1.7.4)")}</dd>
+    <dt>Agreement</dt><dd id="insagree" class="${(o.agree||{}).status==="disputed"?"agree-bad":""}">${agreeText(o)}</dd>
+    <dt>Providers</dt><dd id="insprov" class="pvlist">${providersText(o)}</dd>
     <dt>Longitude</dt><dd>${o.lon.toFixed(2)}\u00b0E</dd><dt>Inclination</dt><dd>${o.inc.toFixed(2)}\u00b0</dd>
     <dt>Affiliation</dt><dd style="color:${affil(o).c}">${affil(o).n}</dd>
     <dt>Drift</dt><dd>${dr}</dd><dt>Drift fit</dt><dd>${driftFitText(o)}</dd>
@@ -1381,16 +1407,13 @@ function shownEvents(){const ids=new Set(visible().map(o=>o.id));return EVENTS.f
 // The newest event per object: the one a halo or the inspector speaks for.
 function eventFor(id){return EVENTS.find(e=>e.object_id===id)||null;}
 function evById(id){return EVENTS.find(e=>e.id===id)||null;}
-function projText(e){
-  const p=e.projection;if(!p){return "";}
-  return `<div class="bproj">↳ on current rates, reaches ${esc(p.name)}’s longitude in ~${p.days.toFixed(1)} d</div>`;}
 function briefRow(e){
   const k=evKind(e),o=findObj(e.object_id),sus=e.tier==="SUSPECTED";
   const cls=["bev",isNew(e)?"new":"",state.focus===e.id?"foc":"",BRIEF_ORDER[state.briefIdx]===e.id?"cur":""].join(" ");
   const rank=o?o.rank:5,name=o?o.name:e.name;
   return `<button type="button" class="${cls}" data-ev="${esc(e.id)}"><span class="bg${sus?" sus":""}" style="color:${k.c}">${k.g}</span>`
     +`<span><span class="bt"><span class="brk" style="background:${rankCol(rank)}">${rank}</span><span class="bn">${esc(name)}</span><span class="bage">${evAge(e)}</span></span>`
-    +`<div class="bd"><b style="color:${k.c}">${k.n}</b> · ${k.d(e,o)}</div>${projText(e)}`
+    +`<div class="bd"><b style="color:${k.c}">${k.n}</b> · ${k.d(e,o)}</div>`
     +`<span class="btier ${sus?"sus":"conf"}">${e.tier}</span></span></button>`;}
 function briefEmpty(){
   if(EV_ERR){return `<div class="bnone">Events unavailable: ${esc(EV_ERR)}.</div>`;}
@@ -1470,17 +1493,14 @@ function drawHalos(ctx,S,inView){
     ctx.fillStyle=k.c;ctx.font="700 9px Segoe UI, sans-serif";ctx.textAlign="center";ctx.fillText(k.g,bx,by+3.2);
     ctx.restore();});}
 // -- focus mode ------------------------------------------------------------
-function projTarget(e){return e&&e.projection?findObj(e.projection.object_id):null;}
 function frameAxis(vals,minSpan,padFrac,lo,hi){
   let a=Math.min(...vals),b=Math.max(...vals);
   const pad=Math.max((b-a)*padFrac,minSpan/2);a-=pad;b+=pad;
   const w=clamp(b-a,minSpan,hi-lo),m=clamp((a+b)/2,lo+w/2,hi-w/2);
   return [m-w/2,m+w/2];}
-function frameEvent(e,o){
+function frameEvent(o){
   const since=Date.now()-EV_LOOKBACK_MS,pts=(o.tr||[]).filter(p=>p[2]>=since);
   const lons=pts.map(p=>o.lon+wrap(p[0]-o.lon)).concat([o.lon]),incs=pts.map(p=>p[1]).concat([o.inc]);
-  const t=projTarget(e);
-  if(t){lons.push(o.lon+wrap(t.lon-o.lon));incs.push(t.inc);}
   const [lo,hi]=frameAxis(lons,1,0.18,-180,180),[incMin,incMax]=frameAxis(incs,0.2,0.6,0,15);
   // The inspector floats over the right of the plot. Widen the window to the
   // right by the share it covers, so the framed event lands in the part of the
@@ -1496,7 +1516,7 @@ function focusEvent(id){
   if(o===null){return;}
   if(state.focus===null){state.preFocus={...view};}
   state.focus=id;state.sel=o.id;state.briefIdx=BRIEF_ORDER.indexOf(id);
-  frameEvent(e,o);paint();}
+  frameEvent(o);paint();}
 function exitFocus(restore){
   if(state.focus===null){return;}
   state.focus=null;
@@ -1513,23 +1533,11 @@ function focusTrail(ctx,S,o,splitMs){
 function focusLabel(ctx,t,x,y,c,bold){
   ctx.font=(bold?"700 ":"600 ")+"11.5px "+MONO;ctx.textAlign="center";ctx.lineJoin="round";
   ctx.strokeStyle="rgba(3,7,14,.95)";ctx.lineWidth=3.4;ctx.strokeText(t,x,y);ctx.fillStyle=c;ctx.fillText(t,x,y);}
-function focusProjection(ctx,S,o,e){
-  const t=projTarget(e);if(t===null){return;}
-  const tx=S.x(o.lon+wrap(t.lon-o.lon)),px=S.x(o.lon),py=S.y(o.inc),dir=tx<px?1:-1;
-  ctx.save();ctx.strokeStyle="#F0A52E";ctx.lineWidth=1.6;ctx.setLineDash([6,5]);
-  ctx.beginPath();ctx.moveTo(px-dir*10,py);ctx.lineTo(tx+dir*12,py);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle="#F0A52E";ctx.beginPath();ctx.moveTo(tx+dir*6,py);ctx.lineTo(tx+dir*13,py-4);ctx.lineTo(tx+dir*13,py+4);ctx.closePath();ctx.fill();
-  ctx.restore();
-  drawHead(ctx,S,t);
-  ctx.strokeStyle="#E9863A";ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(S.x(t.lon),S.y(t.inc),headSize(t)+6,0,7);ctx.stroke();
-  focusLabel(ctx,t.name,S.x(t.lon),S.y(t.inc)-headSize(t)-11,"#eaf1fb",true);
-  focusLabel(ctx,`reaches ${t.name}’s longitude in ~${e.projection.days.toFixed(1)} d at current rates`,(px+tx)/2,py+20,"#F0C27A",false);}
 const FOCUS_TAG={STARTED:"burn",EW:"burn",STOPPED:"burn",NS:"step",LEAVING:"departure flagged",QUIET:"last fix"};
 function drawFocus(ctx,S,e){
   const o=findObj(e.object_id);if(o===null){return;}
   ctx.fillStyle="rgba(5,7,14,0.8)";ctx.fillRect(S.padL,S.padT,S.W-S.padL-S.padR,S.H-S.padT-S.padB);
   const at=focusTrail(ctx,S,o,Date.parse(e.epoch));
-  focusProjection(ctx,S,o,e);
   drawHead(ctx,S,o);
   ctx.strokeStyle="#F0A52E";ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(S.x(o.lon),S.y(o.inc),headSize(o)+9,0,7);ctx.stroke();
   if(at!==null){const bx=S.x(at[0]),by=S.y(at[1]);
@@ -1554,7 +1562,6 @@ function evidenceText(e){
   if(e.type==="NS"){lines.push(`inclination ${e.delta_inc_deg>0?"+":""}${e.delta_inc_deg.toFixed(3)}°`);}
   lines.push(`${FOCUS_TAG[e.type]||"event"} ${fmtZ(e.epoch)}`);
   if(ev.method){lines.push(ev.method);}
-  if(e.projection){lines.push(`on current rates, reaches ${e.projection.name}’s longitude in ~${e.projection.days.toFixed(1)} d`);}
   return lines.map(esc).join("<br>");}
 function evidenceHTML(o){
   const e=eventFor(o.id);if(e===null){return "";}

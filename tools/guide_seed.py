@@ -153,7 +153,35 @@ def build(snapshot: str, end: datetime, age_hours: float, events: bool = True) -
                               "classification_marking": rec["classification_marking"]}]
         for s in rec["samples"]:
             s["p"] = 0
+    if "100172" in out:
+        _illustrate_providers(out["100172"], head)
     return {"objects": out}
+
+
+def _illustrate_providers(rec: dict, head: datetime) -> None:
+    """Two more providers for TIANLIAN-3 01, the inspector figure's object
+    (1.7.5): one agrees, one puts it 25 deg away. Without this every seeded
+    object has one provider and the figure cannot show "set aside". Each
+    extra element set is issued an hour before the track provider's, with its
+    mean anomaly wound back by one hour of motion, so propagated to the common
+    instant the agreeing one lands within a hundredth of a degree and the
+    outlier 25 degrees off."""
+    base = rec["elset"]
+    wind = 360.0 * float(base["mean_motion_rev_per_day"]) / 24.0
+    rec["elset_candidates"] = {"ILLUSTRATIVE": base}
+    for source, shift in (("ILLUSTRATIVE-B", 0.01), ("ILLUSTRATIVE-C", 25.0)):
+        el = {**base, "source": source,
+              "epoch": (head - timedelta(hours=1)).isoformat(),
+              "mean_anomaly_deg": round((base["mean_anomaly_deg"] - wind + shift) % 360.0, 4)}
+        rec["elset_candidates"][source] = el
+        rec["provenance"].append({"source": source, "data_mode": "REAL",
+                                  "classification_marking": rec["classification_marking"]})
+        idx = len(rec["provenance"]) - 1
+        rec["samples"] += [{**smp, "p": idx,
+                            "epoch": (datetime.fromisoformat(smp["epoch"]) - timedelta(hours=1)).isoformat(),
+                            "sub_lon_deg": round((smp["sub_lon_deg"] + shift + 180.0) % 360.0 - 180.0, 4)}
+                           for smp in rec["samples"] if smp["p"] == 0]
+    rec["samples"].sort(key=lambda smp: smp["epoch"])
 
 
 def main(argv: list[str] | None = None) -> int:

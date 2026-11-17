@@ -131,20 +131,32 @@ def test_the_real_view_serves_only_samples_tagged_real(tmp_path):
     cfg = _cfg(tmp_path)
     real = _tracks_payload(cfg, store, "real", {DataMode.REAL})["tracks"][0]
     assert real["data_mode"] == "REAL"
-    assert real["providers"] == {"SAFRAN": 1}
+    assert set(real["providers"]) == {"SAFRAN"}
+    # 1.7.5: one stream per track. REAL before any other mode, so the combined
+    # view no longer stacks an EXERCISE fix on a REAL object.
     combined = _tracks_payload(cfg, store, "combined", set(DataMode))["tracks"][0]
-    assert combined["data_mode"] == "EXERCISE | REAL"
-    assert combined["providers"] == {"SAFRAN": 1, "EXERCISE-CELL": 1}
-    assert combined["head_source"] == "EXERCISE-CELL"
+    assert combined["data_mode"] == "REAL" and combined["head_source"] == "SAFRAN"
+    exercise = _tracks_payload(cfg, store, "combined", {DataMode.EXERCISE})["tracks"][0]
+    assert exercise["data_mode"] == "EXERCISE"
+    assert exercise["head_source"] == "EXERCISE-CELL"
 
 
 def test_a_tracks_markings_are_read_from_its_samples_verbatim(tmp_path):
-    store = _ingest(tmp_path, [_row(epoch=NOW - timedelta(hours=1)),
-                               _row(source="NorthStar", marking="U//PR-NORTHSTAR-ELSET")])
+    # The same orbit from two providers an hour apart: the earlier mean
+    # anomaly is wound back by one hour of mean motion, and both state SGP4,
+    # so the agreement check can propagate and compare them.
+    store = _ingest(tmp_path, [_row(epoch=NOW - timedelta(hours=1), ephemType=0,
+                                    mean_anomaly=208.6412 - 360.0 * 1.00265344 / 24.0),
+                               _row(source="NorthStar", marking="U//PR-NORTHSTAR-ELSET",
+                                    ephemType=0)])
     t = _tracks_payload(_cfg(tmp_path), store, "real", {DataMode.REAL})["tracks"][0]
-    assert t["classification_markings"] == ["U//PR-NORTHSTAR-ELSET", "U//PR-SAFRAN"]
-    assert t["classification_marking"] == "U//PR-NORTHSTAR-ELSET | U//PR-SAFRAN"
+    # One provider drives (1.7.5), so the track carries that provider's
+    # marking verbatim and nothing from the other.
     assert t["head_source"] == "NorthStar"
+    assert t["classification_markings"] == ["U//PR-NORTHSTAR-ELSET"]
+    assert t["classification_marking"] == "U//PR-NORTHSTAR-ELSET"
+    assert t["providers"]["SAFRAN"]["status"] == "agrees"
+    assert t["agreement"]["status"] == "agreed"
 
 
 # -- 2. nothing is filled in --------------------------------------------
@@ -235,7 +247,22 @@ def test_no_demo_identifier_can_be_a_catalogue_number():
     recs = DemoElsetSource().fetch(NOW - timedelta(days=30), NOW)
     assert recs and all(oid.startswith(DEMO_ID_PREFIX) for oid in recs)
     assert all(not oid.isdigit() for oid in recs)
-    assert all(s["source"] == "DEMO" for r in recs.values() for s in r["samples"])
+    # DEMO, or one of the 1.7.5 agreement demo's synthetic providers.
+    assert all(s["source"] == "DEMO" or s["source"].startswith(DEMO_ID_PREFIX)
+               for r in recs.values() for s in r["samples"])
+
+
+def test_the_live_purge_removes_the_synthetic_providers_too(tmp_path):
+    """The agreement demo's providers are DEMO-ALPHA and kin, not DEMO. Filed
+    under a real number, the purge must still find every one of them."""
+    from psirens.store import Store
+    recs = DemoElsetSource().fetch(NOW - timedelta(days=30), NOW)
+    real = {"64467": {**recs["DEMO-P1"], "origin": "UDL"}}
+    store = Store(str(tmp_path))
+    store.merge_samples(real, retention_days=90, max_samples=5000, now=NOW)
+    assert store.load()["objects"]["64467"]["samples"]
+    assert store.purge_synthetic() > 0
+    assert "64467" not in store.load()["objects"]
     assert all(r["target"] is None or r["target"].startswith(DEMO_ID_PREFIX)
                for r in recs.values())
 

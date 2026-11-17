@@ -104,6 +104,14 @@ def sub_longitude_deg(
         _log.debug("sgp4 propagation error code %s for epoch %s", err, epoch)
         return None
 
+    return earth_fixed_lon_deg(r, jd, fr)
+
+
+def earth_fixed_lon_deg(r: tuple[float, float, float] | list[float],
+                        jd: float, fr: float) -> float:
+    """Longitude of a TEME position vector, rotated into an Earth-fixed frame
+    by GMST, range [-180, 180). Shared by the per-record sample longitude and
+    the provider agreement check (1.7.5), so both read longitude the same way."""
     theta = gmst_rad(jd + fr)
     cos_t, sin_t = math.cos(theta), math.sin(theta)
     x_ecef = r[0] * cos_t + r[1] * sin_t

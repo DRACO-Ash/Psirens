@@ -87,17 +87,24 @@ def _copy_meta(existing: dict, rec: dict) -> None:
             existing[key] = val
 
 
+def _is_demo_source(source: object) -> bool:
+    """The demo provider, or one of the synthetic providers of the 1.7.5
+    agreement demo (DEMO-ALPHA and kin)."""
+    text = str(source or "")
+    return text == "DEMO" or text.startswith("DEMO-")
+
+
 def _drop_demo_parts(rec: dict) -> int:
     """Strip DEMO-tagged samples and element sets from one real object."""
     keep = [s for s in rec.get("samples") or []
-            if (sample_provenance(rec, s) or {}).get("source") != "DEMO"]
+            if not _is_demo_source((sample_provenance(rec, s) or {}).get("source"))]
     removed = len(rec.get("samples") or []) - len(keep)
     rec["samples"] = keep
     cands = rec.get("elset_candidates") or {}
-    for key in [k for k, el in cands.items() if (el or {}).get("source") == "DEMO"]:
+    for key in [k for k, el in cands.items() if _is_demo_source((el or {}).get("source"))]:
         del cands[key]
         removed += 1
-    if (rec.get("elset") or {}).get("source") == "DEMO":
+    if _is_demo_source((rec.get("elset") or {}).get("source")):
         rec.pop("elset")
         removed += 1
     return removed

@@ -178,3 +178,44 @@ Ash's answers, the same day:
 
 Every one of the new guards is proved by revert: `redcases_1_7_4.py` puts the 1.7.3 behaviour back one rule at a time, and each of the ten makes its test fail.
 
+## 9. Status after 1.7.5 (17 November 2026)
+
+Ash approved the remaining work the same day ("Build it"): tracks and fits per
+provider; a check that providers agree, with an outlier set aside; no drift
+rate when the fit is poor; no projected approaches; old element sets aged out.
+
+What 1.7.5 does (`src/psirens/agreement.py`, served through one cached
+resolved view of the store):
+● **One provider per object.** Each provider's newest element set is propagated with SGP4 to one instant and the longitudes compared. A provider within 1 deg of at least half the others agrees; one that is not is set aside, with the distance stated. No majority means DISPUTED: no provider is chosen as the truth, no drift is published, no event is raised.
+● **That provider drives everything.** The plotted track, drift fit, head, needle, TLE, co-planar plane, conjunction screen and Shift Brief all read the same provider. Every other provider is listed with its status and its own fit.
+● **Drift withheld above 1 deg rms**, with the reason; the E-W detector refuses such fits too.
+● **Age-out.** A set more than 48 h older than the newest held, per mode, is neither selected nor compared. Relative to the newest held, not to the clock.
+● **Projection removed** from the server, the SPA and the guide.
+● **Untagged (pre-1.7.4) samples** are never mixed with tagged ones; shown only when an object has nothing else, with drift withheld and no events.
+● Thresholds are environment-overridable: `PROVIDER_AGREE_DEG`, `DRIFT_MAX_RESIDUAL_DEG`, `ELSET_MAX_LAG_HOURS`.
+
+`prove.py`, now measured on the SERVED view, against both trees:
+● **1.7.4 (`d0f6470`, from git):** still reproduce F1, F3, F5, F6, F12.
+● **1.7.5:** none reproduce. F4 remains OBSERVED live only.
+
+CORRECTION to sections 4 and 8: the F12 offline proof was vacuous until now
+(QUALITY-LEDGER D14). Its fresh fetch used an empty window and never stored the
+government fix, so "REPRODUCES" against 1.7.3 and 1.7.4 was reported against a
+store holding NorthStar alone. The finding itself stood on the code. The
+scenario is fixed, asserts its own preconditions, and genuinely reproduces on
+1.7.4.
+
+Guards: `tests/test_agreement.py` (21 tests). `redcases_1_7_5.py` reinstates
+eleven old behaviours one at a time and all eleven go red; its first run found
+two vacuous tests (D15), now fixed. The layout probe asserts the set-aside
+provider, the track provider, the agreement row and the drift on a three-
+provider demo object, and fails when the status is hidden from the page.
+`redcases_1_7_4.py` is kept as the 1.7.4 record; one of its anchors (the
+per-sample mode filter in `main._served`) no longer exists in 1.7.5, where that
+rule lives in `agreement.streams_of` and `main._stream_for`.
+
+Still open, for Ash:
+● **A disputed object's marker.** With no majority, PSIRENS still draws the marker from the policy's choice (it is one provider's real fix, flagged DISPUTED, with no rate and no events). The alternative is to draw no marker at all. Decision TBC, owner Ash.
+● **Does the live feed state the ephemeris type?** The agreement check can only compare element sets that state SGP4 (field `ephemType`, or column 63 of a native line 1). If live rows carry neither, every provider is "unverified" and no outlier can be set aside. Both lines Ash supplied state type 0 in column 63. Confirm with `tools/udl_elset_probe.py` on a networked workstation; owner Ash.
+● **First day after deploy.** Untagged history is excluded from tracks wherever tagged samples exist, so drift rates need 24 h of new fixes, or the backfill (`tools/backfill_pull.py`, which re-tags held history), before they reappear.
+

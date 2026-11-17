@@ -459,6 +459,29 @@ and prints the hotspot table. **A check that skips on missing input is a check
 that can be renamed out of existence; positions copied from a measurement beat
 positions estimated from a picture.**
 
+### D14. An audit proof that "reproduced" a scenario it never built (audit, found in 1.7.5)
+`prove.py` F12 ("a 60-day-old commercial fix outranks a fresh government
+one") fetched the fresh 18 SDS fix over the window `[REF, REF]`. That window
+is empty, so the source made NO request, 18 SDS was never stored, and the
+check reported REPRODUCES against a store that held NorthStar alone. It said
+so against 1.7.3 and 1.7.4. The FINDING stood on reading the code (no age
+limit, commercial first), but its offline proof was vacuous. Found when 1.7.5,
+which ages old sets out, still "reproduced" it. Now ingested like every other
+scenario, the check refuses to judge unless both providers are held, and
+re-run against 1.7.4 from git it genuinely reproduces. **A reproduction must
+assert its own preconditions; "the bad thing happened" proves nothing if the
+good thing was never there.**
+
+### D15. Two new tests that could not fail (1.7.5)
+`redcases_1_7_5.py` put eleven pre-1.7.5 behaviours back one at a time. Two
+tests stayed green. The QUIET test held one object, so the belt's reference
+time moved with it and a 20-hour silence measured as zero. The conjunction
+test gave every provider the same newest epoch, so the raw store and the
+resolved view chose the same provider by dictionary order. Both fixtures now
+carry what makes the difference observable (a second, current object; the
+outlier newest, as it was live), and all eleven go red. **Write the red case
+before believing the green; a fixture with a tie in it tests the tie-break.**
+
 ### D6. A false positive in our own checker
 The zero-fraction pattern `\d+\.0` matched `127.0.0.1`. Found by running the
 checker over our own tree before publishing it. Fixed with a trailing negative
@@ -631,6 +654,12 @@ Ordered by return on effort, from this project's evidence.
     {"id": "D9", "title": "a red case masked by the test's own fixture",
      "fixed_in": "1.7.1", "cost": "a guard that claimed to bite and did not",
      "guard": "every red case is run, never asserted"},
+    {"id": "D15", "title": "two new tests passed against the behaviour they guard (single-object belt; tied epochs)",
+     "fixed_in": "1.7.5", "cost": "two guards that could not fail",
+     "guard": "redcases_1_7_5.py reinstates each old behaviour; 11 of 11 go red"},
+    {"id": "D14", "title": "audit proof reproduced F12 against a store missing the provider it compared",
+     "fixed_in": "1.7.5", "cost": "a finding reported as reproduced on evidence that did not exist",
+     "guard": "scenario asserts its own preconditions; re-run against 1.7.4 from git"},
     {"id": "D13", "title": "probe skipped a missing id; guide hotspots pointed at rows the capture did not show",
      "fixed_in": "1.7.4", "cost": "a check that could be renamed away; a guide figure wrong since it was drawn",
      "guard": "fail on missing input; hotspots measured by the capture script"},

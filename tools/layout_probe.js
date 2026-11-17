@@ -456,11 +456,48 @@ function checkBodyFits(m, label) {
         const dts = Array.from(document.querySelectorAll(".ins-dl dt"));
         const row = (n) => { const dt = dts.find((d) => d.textContent.trim() === n);
           return dt && dt.nextElementSibling ? dt.nextElementSibling.textContent.trim() : ""; };
-        return { providers: row("Providers"), head: row("Head from") };
+        return { providers: row("Providers"), head: row("Track from") };
       });
       console.log(`  provenance rows: ${JSON.stringify(prov)}`);
-      if (!/^DEMO \d+$/.test(prov.providers) || prov.head !== "DEMO") {
+      if (!/^DEMO \d+ · track/.test(prov.providers) || prov.head !== "DEMO") {
         fail(`the inspector does not name the provider of its positions: ${JSON.stringify(prov)}`);
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Provider agreement (1.7.5). PROVIDERS-DEMO is seen by three synthetic
+    // providers: two agree at 30E, the third is 25 deg away and drifting.
+    // The page must say the third was SET ASIDE, plot the track from one of
+    // the two that agree, and publish their drift, not the outlier's
+    // -1.2 deg/day and not a blend of the two.
+    // ---------------------------------------------------------------------
+    {
+      if (!ids.includes("DEMO-P1")) {
+        fail("object DEMO-P1 is not in the watchlist, so provider agreement was not checked");
+      } else {
+        await page.locator('[data-id="DEMO-P1"]').first().click();
+        await page.waitForSelector("#insagree", { timeout: 10000 });
+        const ag = await page.evaluate(() => {
+          const dts = Array.from(document.querySelectorAll(".ins-dl dt"));
+          const row = (n) => { const dt = dts.find((d) => d.textContent.trim() === n);
+            return dt && dt.nextElementSibling ? dt.nextElementSibling.textContent.trim() : ""; };
+          const pv = Array.from(document.querySelectorAll("#insprov .pv")).map((e) => e.textContent.trim());
+          return { head: row("Track from"), agree: row("Agreement"), drift: row("Drift"), pv };
+        });
+        console.log(`  agreement rows: ${JSON.stringify(ag)}`);
+        const outlier = ag.pv.find((t) => t.startsWith("DEMO-OUTLIER")) || "";
+        if (!/set aside/.test(outlier)) {
+          fail(`the outlying provider is not shown as set aside: ${JSON.stringify(ag.pv)}`);
+        }
+        if (ag.head !== "DEMO-ALPHA") {
+          fail(`the track is driven by ${JSON.stringify(ag.head)}, expected DEMO-ALPHA, the newest provider in agreement`);
+        }
+        if (!/^agreed: 2 of 3/.test(ag.agree)) {
+          fail(`the agreement row reads ${JSON.stringify(ag.agree)}, expected "agreed: 2 of 3 ..."`);
+        }
+        if (ag.drift !== "on station") {
+          fail(`DEMO-P1 drift reads ${JSON.stringify(ag.drift)}; the providers that agree are on station, so the outlier leaked into the fit`);
+        }
       }
     }
 
@@ -654,9 +691,9 @@ function checkBodyFits(m, label) {
     if (pctBefore === pctAfter) {
       fail(`marking a section as read left the progress ring at ${pctBefore}.`);
     }
-    // The self-check: fourteen questions, and answering one must score it.
+    // The self-check: sixteen questions, and answering one must score it.
     const qCount = await guide.locator(".quiz").count();
-    if (qCount < 14) { fail(`the self-check built ${qCount} questions, expected 14.`); }
+    if (qCount < 16) { fail(`the self-check built ${qCount} questions, expected 16.`); }
     await guide.locator(".quiz .opts button").first().click();
     const score = await guide.textContent("#quizscore");
     if (!/1 of 1|0 of 1/.test(score || "")) {

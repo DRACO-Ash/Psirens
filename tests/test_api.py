@@ -100,7 +100,8 @@ def test_manual_elset_roundtrip_no_token(client):
     combined = client.get("/api/tracks?view=combined").json()
     mz1 = next(t for t in combined["tracks"] if t["object_id"] == "MZ1")
     # The operator is the provider, whatever they typed as the source.
-    assert mz1["providers"] == {"MANUAL": 1}
+    assert {k: v["count"] for k, v in mz1["providers"].items()} == {"MANUAL": 1}
+    assert mz1["providers"]["MANUAL"]["status"] == "track"
     assert client.delete("/api/manual-elset/MZ1").status_code == 200
     assert client.delete("/api/manual-elset/MZ1").status_code == 404
 
@@ -233,7 +234,7 @@ def test_conjunctions_respect_the_configured_source_policy(tmp_path):
     with TestClient(app) as c:
         assert c.get("/api/conjunctions?target=DEMO-A1").status_code == 200
     obj = {"elset_candidates": {
-        "18SDS": {"sat_no": "1", "epoch": "2026-08-01T00:00:00+00:00",
+        "18SDS": {"sat_no": "1", "epoch": "2026-08-08T00:00:00+00:00",
                   "source": "18SDS", "classification": "U",
                   "inclination_deg": 0.05, "eccentricity": 0.0002,
                   "raan_deg": 80.0, "argp_deg": 90.0, "mean_anomaly_deg": 10.0,

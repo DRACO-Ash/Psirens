@@ -159,6 +159,14 @@ class Config:
     event_ns_floor: float = 0.008    # deg: a smaller inclination step is noise
     event_sigma: float = 6.0         # standard errors required on top of the floor
     event_quiet_hours: float = 12.0  # no fix for this long while the belt is current
+    # Provider agreement (1.7.5, owner approval 17 November 2026). Each
+    # provider's own element set is propagated to one instant; one further
+    # than this from the majority is set aside. A drift fit missing its data
+    # by more than the residual ceiling is withheld, never published. An
+    # element set this many hours older than the newest held is aged out.
+    provider_agree_deg: float = 1.0
+    drift_max_residual_deg: float = 1.0
+    elset_max_lag_hours: float = 48.0
     # Log X-Auth-Request-Email as user.email. ON by default from 1.7.3: the
     # platform Logging check names it as a finding ("Request logs do not name
     # the user", 17 November 2026) and starts blocking on 1 December 2026, and
@@ -223,5 +231,8 @@ def load_config() -> Config:
         event_ns_floor=_env_float("EVENT_NS_FLOOR_DEG", 0.008),
         event_sigma=_env_float("EVENT_SIGMA", 6),
         event_quiet_hours=_env_float("EVENT_QUIET_HOURS", 12),
+        provider_agree_deg=_env_float("PROVIDER_AGREE_DEG", 1),
+        drift_max_residual_deg=_env_float("DRIFT_MAX_RESIDUAL_DEG", 1),
+        elset_max_lag_hours=_env_float("ELSET_MAX_LAG_HOURS", 48),
         log_user_email=_env_bool("LOG_USER_EMAIL", default=True),
     )

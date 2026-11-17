@@ -378,8 +378,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <figure>
     <div class="fig" id="fig-focus" data-fig="focus">
       <img src="guide-focus.png" alt="Focus mode on an E-W manoeuvre: the plot framed on the object,
-        its trail split at the burn, a projection to the neighbour it is closing on, and the
-        inspector's event evidence chart.">
+        its trail split at the burn, and the inspector's event evidence chart.">
     </div>
     <div class="figcap" id="cap-focus"><div class="n">&middot;</div>
       <div class="t"><b>Select a hotspot</b>What focus mode draws, and why.</div></div>
@@ -403,8 +402,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <h3>Vertical: orbital inclination</h3>
   <p>From 0&deg; at the bottom to 15&deg; at the top. A true geostationary satellite sits at 0&deg;
   and stays over one longitude. Inclination builds up naturally if a satellite stops correcting
-  it, at roughly 0.8&deg; per year, so a high inclination often means an old or retired object
-  &mdash; or one deliberately placed in an inclined orbit.</p>
+  it, at roughly 0.8&deg; per year, so a high inclination often means an old or retired object,
+  or one deliberately placed in an inclined orbit.</p>
 
   <table>
     <thead><tr><th>What you see</th><th>What it usually means</th></tr></thead>
@@ -609,7 +608,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">on station</td><td>Under 0.05&deg;/day. Holding its slot.</td></tr>
       <tr><td class="k">&minus;1.20&deg;/day W</td><td>Moving west at 1.2&deg; a day. About 27 days to cross 30&deg;.</td></tr>
       <tr><td class="k">+0.40&deg;/day E</td><td>Moving east. A slow relocation, or an uncorrected orbit.</td></tr>
-      <tr><td class="k">no usable baseline</td><td>Under 24 hours of fixes. The honest answer, not a zero.</td></tr>
+      <tr><td class="k">no usable baseline</td><td>Under 24 hours of fixes from the track provider. The honest answer, not a zero.</td></tr>
+      <tr><td class="k">withheld</td><td>A rate could be computed and is deliberately not shown. The Drift fit row says why: the fit misses its own data by more than 1&deg; rms, or the providers disagree, or the positions predate provider tagging.</td></tr>
     </tbody>
   </table>
 
@@ -617,8 +617,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <p>A geostationary orbit with even slight eccentricity swings east and west once per sidereal
   day without going anywhere. At an eccentricity of 0.0022, that swing is 0.25&deg; wide and
   reaches 1.58&deg;/day at its fastest. Take two fixes thirty minutes apart and you divide by one
-  forty-eighth of a day, so that swing &mdash; and any disagreement between two providers' element
-  sets &mdash; is multiplied by 48. A perfectly stationary object can read several degrees a day.</p>
+  forty-eighth of a day, so that swing, and any disagreement between two providers' element
+  sets, is multiplied by 48. A perfectly stationary object can read several degrees a day.</p>
   <p>So the rate is <b>fitted by least squares over a trailing three-day window</b>, and where the
   sampling is dense enough the fit includes a sine and cosine at the sidereal frequency, which
   removes the swing rather than averaging it.</p>
@@ -655,6 +655,16 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <p>Where the object has a confirmed E-W manoeuvre, the fit starts at the manoeuvre, never across
   it, and the Drift fit row ends &ldquo;after the event of&rdquo; with its time. See
   <a href="#brief">the Shift Brief</a>.</p>
+
+  <h3>One provider, and a ceiling on the fit</h3>
+  <p>The rate is fitted to <b>one provider's</b> fixes, the provider named in Track from. Two
+  providers' views of the same object are never fitted together, because a difference between
+  providers is not motion. In November 2026 one provider's element sets put COSMOS 2589 at 64&deg;E
+  while five others, and that provider's own state vectors, put it at 127.9&deg;E. Fitted together,
+  that read &minus;12.96&deg;/day at 19&deg; rms and raised a manoeuvre that never happened.</p>
+  <p>And a fit that misses its own data by more than <b>1&deg; rms</b> is not published at all.
+  Drift then reads <i>withheld</i> and the Drift fit row says why. A rate whose fit does not describe
+  the data is a number produced by arithmetic, not by the object.</p>
 </section>
 
 <section id="trails">
@@ -752,13 +762,14 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">Priority</td><td>The HRR rank in words. Matches the marker colour.</td></tr>
       <tr><td class="k">Data mode</td><td>REAL, SIMULATED, EXERCISE or TEST. Anything but REAL draws hollow.</td></tr>
       <tr><td class="k">Classification</td><td>The markings carried by the records behind the positions shown, every distinct one listed. A record with no marking is never shown as Unclassified: it is not stored at all.</td></tr>
-      <tr><td class="k">Providers</td><td>Who supplied the positions on this track, with a count each. Every position names the provider whose element set produced it; positions stored before that tagging existed are counted as untagged rather than credited to anyone.</td></tr>
-      <tr><td class="k">Head from</td><td>The provider of the newest position, which is where the marker is drawn. If it differs from the others listed, compare before you trust the marker.</td></tr>
+      <tr><td class="k">Track from</td><td>The ONE provider whose positions are plotted. Its fixes are the trail, its fit is the drift rate, and its element set is the marker, the needle, the TLE and the screen. No track mixes two providers.</td></tr>
+      <tr><td class="k">Agreement</td><td>Whether the providers agree on where the object is. Each provider's own element set is propagated to the same instant and compared. <i>agreed</i> says how many are within 1&deg; of each other; <i>DISPUTED</i> means there is no majority, so no drift is published and no event is raised.</td></tr>
+      <tr><td class="k">Providers</td><td>Every provider seen for this object, each with its fix count, its status and its own drift fit: <i>track</i>, <i>agrees</i>, <i>set aside</i> (the others contradict it; hover for by how much), <i>unverified</i> (its element set cannot be propagated as issued), <i>aged out</i> (more than 48 hours older than the newest), and <i>excluded</i> for positions stored before provider tagging, which are never mixed in.</td></tr>
       <tr><td class="k">Longitude</td><td>Sub-satellite longitude at the newest fix.</td></tr>
       <tr><td class="k">Inclination</td><td>Orbital inclination at the newest fix.</td></tr>
       <tr><td class="k">Affiliation</td><td>Red, Blue, Other or Unknown. The same value that colours the needle.</td></tr>
-      <tr><td class="k">Drift</td><td>The fitted longitude rate, with direction, or &ldquo;on station&rdquo;.</td></tr>
-      <tr><td class="k">Drift fit</td><td>Scatter, baseline, fix count, and whether the libration was modelled.</td></tr>
+      <tr><td class="k">Drift</td><td>The fitted longitude rate, with direction, or &ldquo;on station&rdquo;, or &ldquo;withheld&rdquo;.</td></tr>
+      <tr><td class="k">Drift fit</td><td>Scatter, baseline, fix count, and whether the libration was modelled. When the rate is withheld, the reason instead.</td></tr>
       <tr><td class="k">Track span</td><td>Total longitude excursion across every stored fix. The sanity check on Drift.</td></tr>
       <tr><td class="k">Data age</td><td>Age of the newest fix, with a bar. Under an hour is a healthy feed.</td></tr>
       <tr><td class="k">Element set</td><td>The two-line element, with a provenance badge and the epoch it was issued for.</td></tr>
@@ -781,6 +792,26 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       commercial line is displayed with the control withheld and the reason given. That gate fails
       closed on any caveat.</li>
   </ul>
+
+  <h3>When providers disagree</h3>
+  <p>Several providers often report the same object. PSIRENS takes each provider's newest element
+  set, propagates every one of them to the same instant, and compares where they put the object.</p>
+  <ul>
+    <li>A provider within 1&deg; of at least half of the others <b>agrees</b>. One that is not is
+      <b>set aside</b>: listed, with how far it sits from the rest, and used for nothing.</li>
+    <li>Where there is no majority, two providers that disagree or two camps of equal size, the
+      object is <b>DISPUTED</b>. PSIRENS does not choose which one is right. The marker is still
+      drawn from the policy's choice, but no drift rate is published and no event is raised.</li>
+    <li>Among the providers left, commercial comes first and the newest wins within a class. That
+      provider drives the whole object, so the plot, the TLE, the co-planar chart, the screen and
+      the Shift Brief can never be reading different providers.</li>
+    <li>A provider whose newest element set is more than <b>48 hours</b> older than the newest held
+      is <b>aged out</b>. The comparison is against the newest held, not the clock, so a feed
+      outage never blanks every TLE at once.</li>
+  </ul>
+  <div class="note"><b>Why a provider disagrees is the provider's to answer.</b> PSIRENS only refuses to
+  publish a calculation across the disagreement. Hover a set-aside provider in the Providers row for
+  the distance, and raise it with the provider.</div>
 </section>
 
 <section id="coplanar">
@@ -922,9 +953,9 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
     <li>Read the <b>Shift Brief</b>. Everything above <i>Earlier</i> is new since your last visit.</li>
     <li>Press <kbd>j</kbd> to step to an entry and <kbd>Enter</kbd> to focus it. Read the evidence
       chart: two fitted lines that disagree, and where.</li>
-    <li>For an E-W manoeuvre, read the projection: which high-interest object it is closing on, and
-      how soon at current rates. Then open <b>Co-Planar view</b> to see whether it shares that
-      object's plane.</li>
+    <li>For an E-W manoeuvre, check the inspector's <b>Agreement</b> row first: an event is only
+      raised on an object whose providers agree, from one provider's fixes. Then open
+      <b>Co-Planar view</b> to see what it shares a plane with.</li>
     <li>Treat <b>Suspected</b> as a reason to look again in a few hours, not as a finding.</li>
     <li><kbd>Esc</kbd> back to the belt, <b>Mark read</b> when you have been through it.</li>
   </ol>
@@ -981,7 +1012,9 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   <table>
     <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
     <tbody>
+      <tr><td class="k">Aged out</td><td>A provider whose newest element set is more than 48 hours older than the newest held for the object. Neither selected nor compared.</td></tr>
       <tr><td class="k">Confirmed, Suspected</td><td>The two tiers of a Shift Brief event. Confirmed: two independent fits disagree beyond the floor and six standard errors. Suspected: an early warning, or evidence at the edge of the data.</td></tr>
+      <tr><td class="k">Disputed</td><td>The providers disagree on where an object is and none has a majority. No drift rate, no events, no provider chosen as the truth.</td></tr>
       <tr><td class="k">Coplanar angle</td><td>The mutual tilt between two orbital planes. Zero means the same plane.</td></tr>
       <tr><td class="k">Drift</td><td>Rate of change of sub-satellite longitude, degrees per day, fitted over a trailing three-day span of fixes.</td></tr>
       <tr><td class="k">Element set, elset</td><td>The mean orbital elements for one object at one epoch. The input to every number here.</td></tr>
@@ -993,6 +1026,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">Libration</td><td>The once-per-sidereal-day east-west swing caused by orbital eccentricity. Not drift.</td></tr>
       <tr><td class="k">RA, RAAN</td><td>Right ascension of the ascending node: which way the orbital plane points.</td></tr>
       <tr><td class="k">RPO</td><td>Rendezvous and proximity operations: deliberate close approach between two objects.</td></tr>
+      <tr><td class="k">Set aside</td><td>A provider that puts an object more than 1&deg; from where most of the other providers put it, at the same instant. Listed, and used for nothing.</td></tr>
       <tr><td class="k">Shift Brief</td><td>The list at the top of the rail of what changed in the last four days, split at your previous visit.</td></tr>
       <tr><td class="k">SGP4</td><td>The standard propagator used to turn an element set into a position.</td></tr>
       <tr><td class="k">Sidereal day</td><td>23h 56m 04s, one rotation of the Earth against the stars. The orbital period at GEO.</td></tr>
@@ -1022,6 +1056,9 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">48h each side</td><td>The two independent fits that confirm an E-W manoeuvre.</td></tr>
       <tr><td class="k">12h</td><td>No fix for this long, from an object that usually reports often: Gone quiet.</td></tr>
       <tr><td class="k">4 days</td><td>How far back the Shift Brief and its timeline look.</td></tr>
+      <tr><td class="k">1&deg;</td><td>Two providers further apart than this, at the same instant, disagree.</td></tr>
+      <tr><td class="k">1&deg; rms</td><td>A drift fit missing its data by more than this is withheld.</td></tr>
+      <tr><td class="k">48h</td><td>A provider's element set this much older than the newest held is aged out.</td></tr>
       <tr><td class="k">&plusmn;10&deg;</td><td>Neighbourhood half-width in the inspector.</td></tr>
       <tr><td class="k">&plusmn;20&deg;</td><td>Half-width of the co-planar neighbourhood.</td></tr>
       <tr><td class="k">0.05&deg; / 0.01&deg;</td><td>Deepest zoom, in longitude and inclination.</td></tr>
@@ -1126,38 +1163,37 @@ const HOTSPOTS={
     [2,8.5,96,5,"Since you last looked","The split. Above it, events that became detectable after your previous visit. Below Earlier, the rest of the four days."],
     [2,13.8,96,16,"A Suspected entry","Leaving its track: the newest fixes depart from the fitted track. An early warning only, so the tier is dashed and says Suspected."],
     [2,29.8,96,13.4,"Gone quiet","No fix for 20 hours from an object that usually reports every 2. The rest of the belt is current, so this is the object, not the feed."],
-    [2,43.1,96,18.5,"A manoeuvre, with its consequence","The new rate, and the high-interest object it is closing on at current rates. Arithmetic, not a statement of intent."],
+    [2,43.1,96,18.5,"A manoeuvre","The rate before and after, from one provider's fixes. No projection of where it will be: that would be a position no provider issued."],
     [2,61.7,96,13.4,"Drift stopped","Was drifting, now on station, and where."],
     [2,76.6,96,16,"Earlier","Events detectable before your previous visit. Still in the four-day window, no longer news."],
     [2,93.5,96,5.5,"Keyboard","j and k step through the entries, Enter focuses, Esc returns to the belt."]],
   focus:[
-    [1.8,42.3,13,11.6,"The focused entry","Highlighted in the brief, and on the timeline above the plot."],
+    [1.8,42.3,13,8.6,"The focused entry","Highlighted in the brief, and on the timeline above the plot."],
     [72.6,16,4,5,"On the timeline","The selected glyph is ringed. Clicking any glyph focuses its event."],
     [20.6,24.5,26,3.5,"Focus bar","Which event is in focus. Back to belt, or Esc, restores the view you came from."],
-    [64.5,78.5,6,6,"The burn","The trail splits at the event: grey before, amber after, a diamond where it happened."],
-    [33,80,22,6,"The projection","A dashed line to the high-interest object it is closing on, with the time at current rates."],
-    [26,79,5,7,"Context","The neighbour that matters is drawn and ringed; everything else is veiled."],
-    [81.2,29.6,16.9,28,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
-    [81,74.5,17.5,7.5,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
+    [51.7,79.2,6,6,"The burn","The trail splits at the event: grey before, amber after, a diamond where it happened."],
+    [81.2,29.6,16.9,24.8,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
+    [81,80.4,17.5,9,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
   inspector:[
     // Positions MEASURED by tools/guide_shots.js from the capture (1.7.4),
     // not estimated: the earlier table pointed at rows the scrolled capture
     // did not even show.
     [2,0.3,96,4,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
-    [3,5.7,94,24.1,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track and the split, so you can see why the event was raised."],
-    [3,30.8,94,3.2,"Identity","Rank chip, common name, NORAD number and country code."],
-    [3,35,94,5.4,"State","Priority, data mode, and every distinct classification marking among the records behind the positions shown."],
-    [3,40.7,94,3.6,"Providers and head","Who supplied the positions on this track, with a count each, and who supplied the newest one, where the marker is drawn. Untagged positions predate provider tagging and are counted as such."],
-    [3,44.5,94,3.6,"Position","Sub-satellite longitude and inclination at the newest fix."],
-    [3,48.3,94,1.9,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
-    [3,50.2,94,1.9,"Drift","The fitted longitude rate with direction, or “on station”, or “no usable baseline”."],
-    [3,52.1,94,4.6,"Drift fit","Scatter about the fitted line, the baseline, the number of fixes, and whether the once-a-day libration was modelled."],
-    [3,56.9,94,1.9,"Track span","Total longitude excursion across every stored fix. Use it to sanity-check Drift."],
-    [3,58.8,94,1.9,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
-    [3,61.4,38,3,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
-    [3,65.4,94,6.9,"Element set","The provider's own two lines, labelled NATIVE, with the copy control only for a plain unclassified, caveat-free marking. Where the provider issued no lines it reads NO TLE ISSUED: PSIRENS never builds one. This illustrative store has none."],
-    [3,73.5,94,2.3,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days. Objects whose element set cannot be propagated as issued are counted, not screened."],
-    [3,76.3,94,15.7,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
+    [3,5.3,94,22.4,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track and the split, so you can see why the event was raised."],
+    [3,28.7,94,2.9,"Identity","Rank chip, common name, NORAD number and country code."],
+    [3,32.6,94,5,"State","Priority, data mode, and the classification marking of the track provider's records."],
+    [3,37.9,94,3.3,"Track from and agreement","The ONE provider whose positions are plotted, and whether the providers agree on where the object is, compared at the same instant."],
+    [3,41.5,94,6.6,"Providers","Every provider seen, with its fix count, its status and its own fit. Here one agrees and one is set aside: it puts the object 25 degrees from the other two. Hover a row for the reason."],
+    [3,48.3,94,3.3,"Position","Sub-satellite longitude and inclination at the newest fix."],
+    [3,51.9,94,1.5,"Affiliation","Red, Blue, Other or Unknown. The same value that colours the bearing needle."],
+    [3,53.6,94,1.5,"Drift","The fitted longitude rate with direction, or “on station”, “no usable baseline” or “withheld”."],
+    [3,55.4,94,4.1,"Drift fit","Scatter about the fitted line, the baseline, the number of fixes, and whether the once-a-day libration was modelled. When the rate is withheld, the reason."],
+    [3,59.8,94,1.5,"Track span","Total longitude excursion across the track provider's stored fixes. Use it to sanity-check Drift."],
+    [3,61.6,94,1.5,"Data age","Age of the newest element set, with a bar. Under an hour is a healthy feed."],
+    [3,64,38,2.8,"Co-Planar view","Opens the plane-geometry chart for everything within 20 degrees."],
+    [3,67.8,94,6.4,"Element set","The track provider's own two lines, labelled NATIVE, with the copy control only for a plain unclassified, caveat-free marking. Where the provider issued no lines it reads NO TLE ISSUED: PSIRENS never builds one. This illustrative store has none."],
+    [3,75.3,94,2.2,"Neighbourhood","Everything within 10 degrees of longitude, with the closest approach over seven days. Objects whose element set cannot be propagated as issued are counted, not screened."],
+    [3,77.9,94,14.6,"A neighbour","Current range, closest approach and when, and that neighbour's own element set."]],
   coplanar:[
     [2,1,96,5,"Title bar","The primary object and how many objects are in its neighbourhood. Drag to move, drag the corner to resize."],
     [10,12,82,70,"The field","Each point is one nearby object. Both axes are logarithmic."],
@@ -1415,6 +1451,14 @@ const QUESTIONS=[
    a:["The object is not moving","Under 24 hours of fixes, so no rate is claimed",
       "The feed is down","The object has no element set"],right:1,
    why:"Below one full sidereal day a rate would be measuring libration, not drift. Withholding it is the honest answer."},
+  {q:"The Providers row lists one provider as “set aside”. That means:",
+   a:["Its data is classified","At the same instant it puts the object more than 1° from where most other providers do, so nothing uses it",
+      "It is the newest provider","It is the track provider"],right:1,
+   why:"Each provider's own element set is propagated to one instant and compared. One the majority contradicts is listed, with the distance, and used for nothing."},
+  {q:"Drift reads “withheld” and the Agreement row reads DISPUTED. You should:",
+   a:["Average the providers yourself","Take the marker as the truth and carry on",
+      "Treat the position as unresolved and raise it with the providers","Re-pull the window"],right:2,
+   why:"No provider has a majority, so PSIRENS chooses none as the truth and publishes no rate. Which one is right is the providers' to answer."},
   {q:"A drift fit line ends “plain line” rather than “libration modelled”. You should:",
    a:["Trust it more, it is simpler","Treat a small rate with more caution",
       "Ignore the object","Re-pull the window"],right:1,

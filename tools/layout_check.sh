@@ -25,7 +25,8 @@ cat > "$DATA/hrr.json" <<'JSON'
             "DEMO-A4":{"name":"ANCHOR-E105","country":"USA","rank":1},
             "DEMO-D1":{"name":"DRIFTER-1","country":"CHN","rank":4},
             "DEMO-M1":{"name":"MANOEUVRE-DEMO","country":"CHN","rank":3},
-            "DEMO-Q1":{"name":"SILENT-DEMO","country":"FRA","rank":3}}}
+            "DEMO-Q1":{"name":"SILENT-DEMO","country":"FRA","rank":3},
+            "DEMO-P1":{"name":"PROVIDERS-DEMO","country":"GBR","rank":2}}}
 JSON
 # Demo mode: UDL_BASE_URL unset, so the offline synthetic belt populates the
 # store. SCHEDULER_ENABLED=0 keeps the background loop out of the probe.
