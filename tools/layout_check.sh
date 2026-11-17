@@ -26,6 +26,7 @@ cat > "$DATA/hrr.json" <<'JSON'
             "DEMO-D1":{"name":"DRIFTER-1","country":"CHN","rank":4},
             "DEMO-M1":{"name":"MANOEUVRE-DEMO","country":"CHN","rank":3},
             "DEMO-Q1":{"name":"SILENT-DEMO","country":"FRA","rank":3},
+            "DEMO-M2":{"name":"MANOEUVRE-DEMO-2","country":"CHN","rank":3},
             "DEMO-P1":{"name":"PROVIDERS-DEMO","country":"GBR","rank":2}}}
 JSON
 # Demo mode: UDL_BASE_URL unset, so the offline synthetic belt populates the

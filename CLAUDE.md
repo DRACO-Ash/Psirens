@@ -39,6 +39,12 @@ Universal rules, non-negotiable:
   visible MOCKUP banner, and draw from prototype output, not hand-typed data.
   Render the page headless (desktop light and dark, and phone) and look at it
   before sending.
+  A PROPOSAL WAITING ON ASH IS AN OPEN ITEM, NOT A FOOTNOTE. Lesson of 17
+  November 2026: the timeline proposal sat for a day as one line at the foot
+  of two long replies, and from Ash's side the request looked ignored ("what
+  part of that did you just decide to ignore?"). Lead the reply with any
+  proposal still awaiting a decision, say what is blocked on it, and ask for
+  the decision in plain words every time until it is given.
 
 ## What PSIRENS is
 
@@ -51,7 +57,12 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.6; DEPLOYED 1.7.3, Active)
+## Current state (repo 1.7.7; DEPLOYED 1.7.3, Active)
+
+1.7.7, 17 November 2026: the DYNAMIC EVENT TIMELINE, built on Ash's challenge
+that the request had been ignored, with the proposal's recommended answers
+taken. Upload 1.7.7: it carries 1.7.6 (the Code Quality fix) and everything
+before it. See the timeline entry in Open items.
 
 1.7.6, 17 November 2026: 1.7.5 FAILED Code Quality on eight smells from four
 rules never met before (`python:S7517` x4, `S8517`, `S7508` x2, `S7504`;
@@ -1511,7 +1522,25 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   production detector): splits hang from `ref` (newest fix in the store), so
   advancing `ref` 1 h gives every N-S and E-W event a new epoch and id; only a
   whole 3 h restores them. QUIET and LEAVING ids are stable.
-- EVENT TIMELINE REWORK: PROPOSED 17 November 2026, NOT BUILT, awaiting Ash.
+- EVENT TIMELINE: BUILT in 1.7.7, 17 November 2026. The proposal below sat
+  unanswered; Ash's "what part of that did you just decide to ignore?" was
+  taken as the go, with the RECOMMENDED answer to each decision: a bubble
+  opens a list; 100 px strip with the overview; one line, types mixed;
+  detector left alone with the slot stated in the list. Merged from
+  `prototype/timeline.patch` (one conflict, `frameEvent(o)` kept) plus the
+  build items the proposal listed: pointer events with capture so touch and
+  pen drag, two-finger pinch zoom, a focusable strip (arrows pan, + and -
+  zoom, 0 resets), Esc closes the innermost layer first (one handler, not
+  two), and the list says "one 3-hour detection slot ... not a coordinated
+  burn". `DemoElsetSource` gained DEMO-M2, a second burner in M1's slot, so
+  the offline belt forms a real bubble. PROVEN: the layout probe drives wheel,
+  drag, keys, presets, a synthetic pinch, the bubble list and Esc twice; two
+  red cases (the prototype's double Esc handler; pinch removed) fail with the
+  exact messages. Guide: new "The timeline: move it, zoom it, open it"
+  section, figures recaptured, overview and focus hotspots re-placed and
+  checked by eye. NOT VERIFIED on a real touch device: pinch is proven only
+  with synthetic pointer events. Decision 5 (finer E-W timing) remains open.
+  ORIGINAL ENTRY: PROPOSED 17 November 2026, NOT BUILT, awaiting Ash.
   `proposals/2026-11-17-timeline/PROPOSAL.html`. Ash, from a live screenshot:
   "needs to be more dynamic, I need to be able to move it around, zoom in to
   fully see what's there, the icons are overlapping". The prototype is

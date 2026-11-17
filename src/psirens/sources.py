@@ -692,6 +692,13 @@ class DemoElsetSource:
         out["DEMO-M1"] = self._track("DEMO-M1", "MANOEUVRE-DEMO", "REAL", "DEMO", None,
                                    self._dense(now, lon0=150.4, inc=0.8, raan=230.0,
                                                burn_h=40.0, rate=-0.5))
+        # A second burner on the same schedule (1.7.7): two manoeuvres in one
+        # detection slot form a BUBBLE on the timeline, which is the case the
+        # timeline's list, its slot wording and Esc-closes-innermost exist for.
+        # One burner alone would leave the probe checking a list it never opens.
+        out["DEMO-M2"] = self._track("DEMO-M2", "MANOEUVRE-DEMO-2", "REAL", "DEMO", None,
+                                   self._dense(now, lon0=154.2, inc=1.1, raan=236.0,
+                                               burn_h=40.0, rate=-0.5))
         out["DEMO-Q1"] = self._track("DEMO-Q1", "SILENT-DEMO", "REAL", "DEMO", None,
                                    self._dense(now, lon0=-20.0, inc=0.3, raan=80.0,
                                                stop_h=16.0))

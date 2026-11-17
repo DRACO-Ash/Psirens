@@ -72,7 +72,7 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .rail{display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:2px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
 .card h2{margin:0 0 9px;font-size:9.5px;letter-spacing:.15em;color:var(--accent);text-transform:uppercase}
-  .imodal{position:fixed;top:218px;right:16px;width:300px;max-height:calc(100vh - 236px);display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:8px;box-shadow:0 14px 44px rgba(0,0,0,.6);z-index:20}
+  .imodal{position:fixed;top:244px;right:16px;width:300px;max-height:calc(100vh - 262px);display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:8px;box-shadow:0 14px 44px rgba(0,0,0,.6);z-index:20}
   .imodal.show{display:flex}
   .imodal-hd{display:flex;align-items:center;gap:8px;padding:9px 8px 9px 12px;cursor:move;user-select:none;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(56,95,175,.22),rgba(56,95,175,.04));border-radius:8px 8px 0 0}
   .imodal-ttl{flex:1;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -235,8 +235,19 @@ details.fold>summary h2{margin:0}
 details.fold>summary::after{content:"\25B8";margin-left:auto;color:var(--faint);font-size:10px}
 details.fold[open]>summary::after{content:"\25BE"}
 details.fold[open]>summary{margin-bottom:9px}
-.tline{flex:none;height:74px;position:relative;margin-bottom:6px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
-.tline canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.tline{flex:none;height:100px;position:relative;margin-bottom:6px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.tline canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.tline canvas:focus-visible{outline:2px solid #F0A52E;outline-offset:-2px}
+.tlzoom{position:absolute;left:10px;top:37px;display:flex;gap:3px;z-index:2}
+.tlzoom button{font-size:10px;padding:1px 6px;border:1px solid var(--line2);border-radius:9px;color:var(--dim);background:#0b1220}
+.tlzoom button:hover{color:var(--ink);border-color:var(--accent)}
+.tlzoom button.on{color:#05070e;background:#F0A52E;border-color:#F0A52E;font-weight:600}
+.tltip{position:absolute;top:100px;z-index:30;max-width:300px;background:#080e1c;border:1px solid #F0A52E;border-radius:5px;padding:6px 9px;font-size:11.5px;color:var(--ink);line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.6);pointer-events:none}
+.tltip .m{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.tltip.pinned{pointer-events:auto;max-height:260px;overflow:auto;max-width:330px}
+.tltip .tlrow{display:block;width:100%;text-align:left;background:none;border:0;border-radius:3px;color:var(--ink);font-size:11.5px;padding:3px 4px;cursor:pointer}
+.tltip .tlrow:hover,.tltip .tlrow:focus-visible{background:#16233d}
+.tltip .tlzoomto{margin-top:4px;font-size:10.5px;padding:2px 8px;border:1px solid var(--line2);border-radius:9px;color:var(--dim);background:#0b1220;cursor:pointer}
 .focusbar{position:absolute;top:10px;left:62px;z-index:6;display:none;align-items:center;gap:10px;background:#0e1524;border:1px solid #F0A52E;border-radius:6px;padding:5px 6px 5px 10px;font-size:11.5px;color:var(--ink)}
 .focusbar.show{display:flex}
 .focusbar button{border:1px solid var(--line2);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--dim)}
@@ -297,7 +308,9 @@ details.fold[open]>summary{margin-bottom:9px}
     <details class="card fold" id="foldcountry"><summary><h2>By country (HRR, in view)</h2></summary><div id="country"></div></details>
   </aside>
   <section class="stage">
-    <div class="tline" id="tline"><canvas id="tlcv" data-glyphs="0">Event timeline for the last four days: each event in the Shift Brief, by time.</canvas></div>
+    <div class="tline" id="tline"><canvas id="tlcv" tabindex="0" data-glyphs="0">Event timeline for the last four days: each event in the Shift Brief, by time. Scroll or pinch to zoom, drag to pan, double-click to reset. With the strip focused, arrow keys pan, plus and minus zoom, and 0 resets.</canvas>
+      <div class="tlzoom" id="tlzoom"><button type="button" data-tlspan="96" title="All four days">4d</button><button type="button" data-tlspan="24" title="The last 24 hours">24h</button><button type="button" data-tlspan="6" title="The last 6 hours">6h</button></div>
+      <div class="tltip" id="tltip" hidden></div></div>
     <div class="plot" id="plot">
       <canvas id="cv" data-focus=""></canvas>
       <div class="focusbar" id="focusbar"><span id="focustxt"></span><button type="button" id="focusexit">Back to belt <kbd>Esc</kbd></button></div>
@@ -1390,7 +1403,7 @@ const EVK={
   LEAVING:{g:"?",n:"Leaving its track",c:"#F0A52E",d:()=>"departing its fitted track · confirms after 24 h of fixes"},
   QUIET:{g:"○",n:"Gone quiet",c:"#9AA7BC",d:e=>`no fix for ${Math.round(e.age_hours)} h · usually every ${e.usual_cadence_hours.toFixed(1)} h`}};
 const evKind=e=>EVK[e.type]||EVK.EW;
-let EVENTS=[],EV_ETAG=null,EV_ERR="",BRIEF_ORDER=[],TL_HITS=[];
+let EVENTS=[],EV_ETAG=null,EV_ERR="",BRIEF_ORDER=[];
 const LAST_KEY="psirens-last-look";
 function readLastLook(){try{const v=localStorage.getItem(LAST_KEY);return v?Date.parse(v):null;}catch{return null;}}
 function writeLastLook(ms){try{localStorage.setItem(LAST_KEY,new Date(ms).toISOString());}catch{/* a locked-down browser is not a reason to break the page */}}
@@ -1431,52 +1444,219 @@ function wBrief(){
   if(fresh.length){html+=`<div class="bsec">${esc(since)}</div>`+fresh.map(briefRow).join("");}
   if(old.length){html+=`<div class="bsec">Earlier</div>`+old.map(briefRow).join("");}
   return html+`<div class="bkeys"><kbd>j</kbd> <kbd>k</kbd> step · <kbd>Enter</kbd> focus · <kbd>Esc</kbd> back to belt</div>`;}
-// -- timeline: four days, one glyph per event, the unread period shaded --
-function tlLabels(g,evs){
-  const rows=[[],[]];
-  evs.forEach(e=>{
-    const w=g.measureText(e.label).width,L=e.x-w/2,R=e.x+w/2;
-    let row=rows.findIndex(r=>r.every(q=>R+6<q[0]||L-6>q[1]));
-    if(row<0){row=1;}
-    rows[row].push([L,R]);e.ly=row===0?13:25;});}
+// -- timeline: zoomable, pannable, clustered (1.7.4 prototype) -----------
+// Four days of events is too many glyphs for one strip: a busy hour put a
+// dozen markers on the same pixels and their names on top of each other.
+// So the strip is a WINDOW onto the four days, with an overview beneath it.
+// Scroll to zoom about the pointer, drag to pan, double-click to reset, or
+// use the span buttons. Glyphs closer than one glyph-width merge into a count
+// bubble; clicking one zooms to it. A name is drawn only where it fits, and
+// the number that did not fit is stated, never silently lost.
+const TL_MIN_SPAN=2*3600000,TL_GAP=18,TL_X0=124,TL_GY=44,TL_AXIS=58,TL_MAP0=78,TL_MAP1=92;
+const TL={t0:null,t1:null,live:true,drag:null,hits:[],pin:null};
+const TL_STEPS=[864e5,432e5,216e5,108e5,36e5,18e5];
+function tlFull(){const t1=Date.now();return [t1-EV_LOOKBACK_MS,t1];}
+function tlWindow(){
+  const [f0,f1]=tlFull();
+  if(TL.t0===null){return [f0,f1];}
+  const span=Math.min(TL.t1-TL.t0,f1-f0);
+  if(TL.live){return [f1-span,f1];}
+  const t0=clamp(TL.t0,f0,f1-span);
+  return [t0,t0+span];}
+function tlSet(t0,t1){
+  const [f0,f1]=tlFull(),span=clamp(t1-t0,TL_MIN_SPAN,f1-f0);
+  if(span>=f1-f0-6e4){TL.t0=null;TL.t1=null;TL.live=true;return;}
+  const s=clamp(t0,f0,f1-span);TL.t0=s;TL.t1=s+span;TL.live=s+span>=f1-6e4;}
+function tlZoomAt(tm,k){const [t0,t1]=tlWindow(),span=(t1-t0)*k,f=(tm-t0)/(t1-t0);
+  if(TL.live&&f>0.5){tlSet(t1-span,t1);return;}
+  tlSet(tm-f*span,tm-f*span+span);}
+function tlReveal(ms){const [t0,t1]=tlWindow();if(ms>=t0&&ms<=t1){return;}const half=(t1-t0)/2;tlSet(ms-half,ms+half);}
+function tlGeom(c){const box=c.getBoundingClientRect(),[t0,t1]=tlWindow(),x1=box.width-18;
+  return {box,t0,t1,x1,tx:t=>TL_X0+(t-t0)/(t1-t0)*(x1-TL_X0),xt:x=>t0+(x-TL_X0)/(x1-TL_X0)*(t1-t0)};}
+function tlClusters(evs){
+  const out=[];
+  evs.forEach(e=>{const last=out[out.length-1];
+    if(last&&e.x-last.xs<TL_GAP){last.members.push(e);last.xe=e.x;}else{out.push({xs:e.x,xe:e.x,members:[e]});}});
+  out.forEach(cl=>{cl.x=(cl.xs+cl.xe)/2;});
+  return out;}
+function tlTickStep(span,px){return TL_STEPS.slice().reverse().find(s=>s/span*px>=70)||TL_STEPS[0];}
+function tlTickLabel(t){const iso=new Date(t).toISOString();
+  return iso.slice(11,16)==="00:00"?iso.slice(5,10).replace("-","/"):iso.slice(11,16)+"Z";}
+function tlAxis(g,G){
+  g.strokeStyle="#2b3d63";g.lineWidth=1;g.beginPath();g.moveTo(TL_X0,TL_AXIS);g.lineTo(G.x1,TL_AXIS);g.stroke();
+  const step=tlTickStep(G.t1-G.t0,G.x1-TL_X0);
+  g.fillStyle="#5b7093";g.font="9.5px "+MONO;g.textAlign="center";
+  for(let t=Math.ceil(G.t0/step)*step;t<=G.t1;t+=step){const x=G.tx(t);
+    g.beginPath();g.moveTo(x,TL_AXIS-3);g.lineTo(x,TL_AXIS+3);g.stroke();g.fillText(tlTickLabel(t),x,TL_AXIS+12);}}
+function tlShadeSince(g,G,h){
+  if(lastLook===null||lastLook>G.t1){return;}
+  const xs=Math.max(TL_X0,G.tx(lastLook));
+  g.fillStyle="#16233d";g.fillRect(xs,3,G.x1+12-xs,TL_AXIS-3);
+  if(lastLook>=G.t0){g.strokeStyle="#F0A52E";g.setLineDash([3,3]);g.beginPath();g.moveTo(xs,3);g.lineTo(xs,h);g.stroke();g.setLineDash([]);}}
+function tlBubble(g,cl){
+  const n=cl.members.length,r=10,x=cl.x;
+  g.fillStyle="#0a1222";g.beginPath();g.arc(x,TL_GY,r,0,7);g.fill();
+  let a=-Math.PI/2;
+  cl.members.forEach(e=>{const sweep=2*Math.PI/n;g.strokeStyle=evKind(e).c;g.lineWidth=2.4;
+    g.beginPath();g.arc(x,TL_GY,r,a+0.06,a+sweep-0.06);g.stroke();a+=sweep;});
+  g.fillStyle="#eaf1fb";g.font="700 10px Segoe UI, sans-serif";g.textAlign="center";g.fillText(String(n),x,TL_GY+3.5);}
 function tlGlyph(g,e,on){
   const r=on?9:7.5,k=evKind(e);
-  if(on){g.strokeStyle="#ffffff";g.lineWidth=1.5;g.beginPath();g.arc(e.x,40,r+4,0,7);g.stroke();}
-  g.fillStyle="#0a1222";g.beginPath();g.arc(e.x,40,r,0,7);g.fill();
+  if(on){g.strokeStyle="#ffffff";g.lineWidth=1.5;g.beginPath();g.arc(e.x,TL_GY,r+4,0,7);g.stroke();}
+  g.fillStyle="#0a1222";g.beginPath();g.arc(e.x,TL_GY,r,0,7);g.fill();
   g.strokeStyle=k.c;g.lineWidth=1.6;g.setLineDash(e.tier==="SUSPECTED"?[2.5,2]:[]);
-  g.beginPath();g.arc(e.x,40,r,0,7);g.stroke();g.setLineDash([]);
-  g.fillStyle=k.c;g.font=`700 ${on?10.5:9}px Segoe UI, sans-serif`;g.textAlign="center";g.fillText(k.g,e.x,40+(on?4:3.2));}
-function tlAxis(g,x0,x1,t0,t1,tx){
-  g.strokeStyle="#2b3d63";g.lineWidth=1;g.beginPath();g.moveTo(x0,56);g.lineTo(x1,56);g.stroke();
-  g.fillStyle="#5b7093";g.font="9.5px "+MONO;g.textAlign="center";
-  for(let t=Math.ceil(t0/864e5)*864e5;t<=t1;t+=864e5){g.fillText(new Date(t).toISOString().slice(5,10).replace("-","/"),tx(t),68);}}
+  g.beginPath();g.arc(e.x,TL_GY,r,0,7);g.stroke();g.setLineDash([]);
+  g.fillStyle=k.c;g.font=`700 ${on?10.5:9}px Segoe UI, sans-serif`;g.textAlign="center";g.fillText(k.g,e.x,TL_GY+(on?4:3.2));}
+function tlPlaceLabels(g,singles,G){
+  const rows=[[],[]];let hidden=0;
+  singles.sort((a,b)=>(state.focus===b.id)-(state.focus===a.id)).forEach(e=>{
+    g.font=`${state.focus===e.id?700:500} 9.5px Segoe UI, sans-serif`;
+    const w=g.measureText(e.label).width,L=e.x-w/2,R=e.x+w/2;
+    const row=(L<TL_X0-14||R>G.x1+14)?-1:rows.findIndex(rw=>rw.every(q=>R+6<q[0]||L-6>q[1]));
+    if(row<0){e.ly=null;hidden++;return;}
+    rows[row].push([L,R]);e.ly=row===0?13:26;});
+  return hidden;}
+function tlMap(g,all,G){
+  const [f0,f1]=tlFull(),mx=t=>TL_X0+(t-f0)/(f1-f0)*(G.x1-TL_X0);
+  g.fillStyle="#0b1322";g.fillRect(TL_X0,TL_MAP0,G.x1-TL_X0,TL_MAP1-TL_MAP0);
+  all.forEach(e=>{g.fillStyle=evKind(e).c;g.fillRect(mx(Date.parse(e.epoch))-1,TL_MAP0+3,2,TL_MAP1-TL_MAP0-6);});
+  const a=mx(G.t0),b=mx(G.t1);
+  g.strokeStyle=TL.t0===null?"#3b5486":"#F0A52E";g.lineWidth=1.4;g.strokeRect(a+0.5,TL_MAP0+0.5,Math.max(b-a-1,4),TL_MAP1-TL_MAP0-1);
+  TL.map={a,b,mx,f0,f1};}
+function tlSpanText(span){
+  if(span>=47.5){const d=span/24;return d.toFixed(Number.isInteger(d)?0:1)+" days";}
+  return span.toFixed(span<10?1:0)+" h";}
+function tlCursor(h,inMap){
+  if(h){return "pointer";}
+  return inMap?"ew-resize":"grab";}
+function tlKey(g,G,hidden){
+  const span=(G.t1-G.t0)/36e5;
+  g.textAlign="left";g.fillStyle="#F0A52E";g.font="700 9.5px Segoe UI, sans-serif";g.fillText("EVENTS",12,16);
+  g.fillStyle="#8ea3c4";g.font="9.5px Segoe UI, sans-serif";
+  g.fillText(tlSpanText(span)+(TL.live?" to now":" shown"),12,29);
+  g.fillStyle="#f0c27a";g.fillText(lastLook===null?"all new":"▮ since last look",12,TL_MAP0+2);
+  if(hidden){g.fillStyle="#8ea3c4";g.fillText(hidden+" name"+(hidden===1?"":"s")+" hidden",12,TL_MAP1);}}
 function drawTimeline(){
-  const c=document.getElementById("tlcv"),box=c.getBoundingClientRect(),dpr=Math.min(2,globalThis.devicePixelRatio||1);
-  c.width=Math.round(box.width*dpr);c.height=Math.round(box.height*dpr);
-  const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,box.width,box.height);
-  const x0=124,x1=box.width-18,t1=Date.now(),t0=t1-EV_LOOKBACK_MS,tx=t=>x0+(t-t0)/(t1-t0)*(x1-x0);
-  if(lastLook!==null&&lastLook>t0){g.fillStyle="#16233d";g.fillRect(tx(lastLook),3,x1+12-tx(lastLook),box.height-6);
-    g.strokeStyle="#F0A52E";g.setLineDash([3,3]);g.beginPath();g.moveTo(tx(lastLook),3);g.lineTo(tx(lastLook),box.height-3);g.stroke();g.setLineDash([]);}
-  g.textAlign="left";g.fillStyle="#F0A52E";g.font="700 9.5px Segoe UI, sans-serif";g.fillText("EVENTS",12,20);
-  g.fillStyle="#8ea3c4";g.font="9.5px Segoe UI, sans-serif";g.fillText("last 4 days",12,33);
-  g.fillStyle="#f0c27a";g.fillText(lastLook===null?"all new":"▮ since last look",12,50);
-  tlAxis(g,x0,x1,t0,t1,tx);
-  const evs=shownEvents().filter(e=>Date.parse(e.epoch)>=t0).map(e=>({...e,x:tx(Date.parse(e.epoch)),label:(findObj(e.object_id)||{name:e.name}).name}))
-    .sort((a,b)=>a.x-b.x);
-  g.font="500 9.5px Segoe UI, sans-serif";tlLabels(g,evs);
-  TL_HITS=evs.map(e=>({id:e.id,x:e.x}));
-  evs.forEach(e=>{const on=state.focus===e.id;
-    g.strokeStyle="#2b3d63";g.lineWidth=1;g.beginPath();g.moveTo(e.x,e.ly+3);g.lineTo(e.x,40-(on?9:7.5));g.stroke();
-    tlGlyph(g,e,on);
-    g.fillStyle=on?"#ffffff":"#c7d4ea";g.font=`${on?700:500} 9.5px Segoe UI, sans-serif`;g.textAlign="center";g.fillText(e.label,e.x,e.ly);});
-  c.dataset.glyphs=String(evs.length);}
-document.getElementById("tlcv").addEventListener("click",ev=>{
-  const r=ev.currentTarget.getBoundingClientRect(),mx=ev.clientX-r.left;
-  let best=null,bd=14;TL_HITS.forEach(h=>{const d=Math.abs(h.x-mx);if(d<bd){bd=d;best=h;}});
-  if(best!==null){focusEvent(best.id);}});
-document.getElementById("tlcv").addEventListener("mousemove",ev=>{
-  const r=ev.currentTarget.getBoundingClientRect(),mx=ev.clientX-r.left;
-  ev.currentTarget.style.cursor=TL_HITS.some(h=>Math.abs(h.x-mx)<14)?"pointer":"default";});
+  const c=document.getElementById("tlcv"),G=tlGeom(c),dpr=Math.min(2,globalThis.devicePixelRatio||1);
+  c.width=Math.round(G.box.width*dpr);c.height=Math.round(G.box.height*dpr);
+  const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,G.box.width,G.box.height);
+  const all=shownEvents().filter(e=>Date.parse(e.epoch)>=tlFull()[0]);
+  const evs=all.filter(e=>{const t=Date.parse(e.epoch);return t>=G.t0&&t<=G.t1;})
+    .map(e=>({...e,x:G.tx(Date.parse(e.epoch)),label:(findObj(e.object_id)||{name:e.name}).name})).sort((a,b)=>a.x-b.x);
+  tlShadeSince(g,G,TL_AXIS+4);tlAxis(g,G);
+  // the focused event never hides inside a bubble: it is lifted out and drawn alone, on top
+  const cls=tlClusters(evs.filter(e=>e.id!==state.focus)),lifted=evs.filter(e=>e.id===state.focus);
+  lifted.forEach(e=>{const i=cls.findIndex(cl=>cl.x>e.x);cls.splice(i<0?cls.length:i,0,{xs:e.x,xe:e.x,x:e.x,members:[e]});});
+  const singles=cls.filter(cl=>cl.members.length===1).map(cl=>cl.members[0]);
+  const hidden=tlPlaceLabels(g,singles,G);
+  cls.slice().sort((m,n)=>(m.members[0].id===state.focus)-(n.members[0].id===state.focus)).forEach(cl=>{
+    if(cl.members.length>1){tlBubble(g,cl);return;}
+    const e=cl.members[0],on=state.focus===e.id;
+    if(e.ly!==null){g.strokeStyle="#2b3d63";g.lineWidth=1;g.beginPath();g.moveTo(e.x,e.ly+3);g.lineTo(e.x,TL_GY-(on?9:7.5));g.stroke();
+      g.fillStyle=on?"#ffffff":"#c7d4ea";g.font=`${on?700:500} 9.5px Segoe UI, sans-serif`;g.textAlign="center";g.fillText(e.label,e.x,e.ly);}
+    tlGlyph(g,e,on);});
+  tlMap(g,all,G);tlKey(g,G,hidden);
+  TL.hits=cls.map(cl=>({x:cl.x,members:cl.members}));
+  const multi=cls.filter(cl=>cl.members.length>1).sort((m,n)=>n.members.length-m.members.length);
+  Object.assign(c.dataset,{glyphs:String(evs.length),clusters:String(multi.length),biggest:multi.length?multi[0].x.toFixed(1):"",
+    hidden:String(hidden),live:String(TL.live),span:((G.t1-G.t0)/36e5).toFixed(1),t0:String(Math.round(G.t0))});
+  document.querySelectorAll("#tlzoom button").forEach(b=>{const h=+b.dataset.tlspan;
+    b.classList.toggle("on",Math.abs((G.t1-G.t0)/36e5-h)<0.05&&Math.abs(G.t1-tlFull()[1])<6e4);});}
+function tlHitAt(mx){let best=null,bd=TL_GAP/2+3;TL.hits.forEach(h=>{const d=Math.abs(h.x-mx);if(d<bd){bd=d;best=h;}});return best;}
+function tlPos(ev){const c=document.getElementById("tlcv"),r=c.getBoundingClientRect();return {c,mx:ev.clientX-r.left,my:ev.clientY-r.top};}
+function tlSpread(h){const ts=h.members.map(e=>Date.parse(e.epoch));return [Math.min(...ts),Math.max(...ts)];}
+function tlPinHTML(h){
+  const [a,b]=tlSpread(h),same=b-a<6e4,iso=t=>esc(fmtZ(new Date(t).toISOString()));
+  const rows=h.members.map(e=>{const k=evKind(e),o=findObj(e.object_id);
+    return `<button type="button" class="tlrow" data-evid="${esc(e.id)}"><b style="color:${k.c}">${k.g}</b> ${esc(o?o.name:e.name)} <span class="m">${esc(k.n)}${e.tier==="SUSPECTED"?" \u00b7 suspected":""}</span></button>`;}).join("");
+  const head=`<div class="m">${h.members.length} events \u00b7 ${same?"one 3-hour detection slot, "+iso(a):iso(a)+" to "+iso(b)}</div>`
+    +(same?`<div class="m">The detector places these to the nearest 3-hour slot, so a shared time is its resolution, not a coordinated burn.</div>`:"");
+  const zoom=same?"":`<button type="button" class="tlzoomto">Zoom to these</button>`;
+  return head+rows+zoom;}
+function tlTipHTML(h){
+  const rows=h.members.slice(0,6).map(e=>{const k=evKind(e),o=findObj(e.object_id);
+    return `<div><b style="color:${k.c}">${k.g}</b> ${esc(o?o.name:e.name)} <span class="m">${esc(k.n)} · ${esc(fmtZ(e.epoch))}</span></div>`;}).join("");
+  const more=h.members.length>6?`<div class="m">+${h.members.length-6} more \u00b7 click to list them</div>`:"";
+  const hint=h.members.length>1&&h.members.length<=6?`<div class="m">click to list them</div>`:"";
+  return rows+more+hint;}
+function tlShowTip(h,mx){const tip=document.getElementById("tltip");
+  if(TL.pin!==null){return;}
+  if(h===null){tip.hidden=true;return;}
+  tip.classList.remove("pinned");tip.innerHTML=tlTipHTML(h);tip.hidden=false;
+  tip.style.left=Math.min(mx+12,document.getElementById("tline").clientWidth-260)+"px";}
+function tlInMap(my){return my>=TL_MAP0-3&&my<=TL_MAP1+3;}
+const tlcv=document.getElementById("tlcv");
+tlcv.addEventListener("wheel",ev=>{ev.preventDefault();const {c,mx}=tlPos(ev);
+  tlZoomAt(tlGeom(c).xt(clamp(mx,TL_X0,c.clientWidth-18)),ev.deltaY<0?0.75:1/0.75);drawTimeline();},{passive:false});
+// Pointer events (1.7.7), so mouse, touch and pen all drag the strip, and two
+// touches pinch-zoom it. Capture keeps a drag alive when the pointer leaves
+// the strip. Synthetic events (the layout probe's pinch) cannot be captured.
+const TL_PTRS=new Map();
+function tlStartDrag(c,mx,my){const [t0,t1]=tlWindow();
+  if(tlInMap(my)&&TL.map){const m=TL.map,inside=mx>=m.a&&mx<=m.b;
+    if(!inside){const tm=m.f0+(mx-TL_X0)/(c.clientWidth-18-TL_X0)*(m.f1-m.f0),half=(t1-t0)/2;tlSet(tm-half,tm+half);drawTimeline();}
+    TL.drag={map:true,x:mx,w:tlWindow(),moved:false};return;}
+  TL.drag={map:false,x:mx,w:[t0,t1],moved:false};}
+function tlPinchState(){const [a,b]=[...TL_PTRS.values()];return {d:Math.max(Math.abs(a-b),8),m:(a+b)/2};}
+function tlPinchMove(c){const p=TL.pinch,now=tlPinchState(),span=(p.w[1]-p.w[0])*p.d/now.d;
+  const G=tlGeom(c),tm=p.w[0]+(p.m-TL_X0)/(G.x1-TL_X0)*(p.w[1]-p.w[0]),f=(now.m-TL_X0)/(G.x1-TL_X0);
+  tlSet(tm-f*span,tm-f*span+span);drawTimeline();}
+function tlDragMove(c,mx){const d=TL.drag,dx=mx-d.x;
+  if(Math.abs(dx)>3){d.moved=true;}
+  if(!d.moved){return;}
+  const span=d.w[1]-d.w[0],px=c.clientWidth-18-TL_X0;
+  const dt=d.map?dx/px*(TL.map.f1-TL.map.f0):-dx/px*span;
+  tlSet(d.w[0]+dt,d.w[1]+dt);drawTimeline();}
+tlcv.addEventListener("pointerdown",ev=>{const {c,mx,my}=tlPos(ev);
+  if(ev.isTrusted){tlcv.setPointerCapture(ev.pointerId);}
+  TL_PTRS.set(ev.pointerId,mx);
+  if(TL_PTRS.size===2){TL.drag=null;TL.pinch={...tlPinchState(),w:tlWindow()};return;}
+  if(TL_PTRS.size===1){tlStartDrag(c,mx,my);}});
+tlcv.addEventListener("pointermove",ev=>{
+  if(!TL_PTRS.has(ev.pointerId)){return;}
+  const {c,mx}=tlPos(ev);TL_PTRS.set(ev.pointerId,mx);
+  if(TL.pinch&&TL_PTRS.size===2){tlPinchMove(c);return;}
+  if(TL.drag!==null){tlDragMove(c,mx);}});
+function tlRelease(ev){TL_PTRS.delete(ev.pointerId);
+  if(TL.pinch){if(TL_PTRS.size===0){TL.pinch=null;}return true;}
+  return false;}
+tlcv.addEventListener("pointercancel",ev=>{tlRelease(ev);TL.drag=null;});
+tlcv.addEventListener("pointerup",ev=>{
+  if(tlRelease(ev)){return;}
+  const d=TL.drag;TL.drag=null;
+  if(d===null||d.moved||d.map){return;}
+  const {mx}=tlPos(ev),h=tlHitAt(mx);
+  if(h===null){return;}
+  if(h.members.length===1){tlUnpin();focusEvent(h.members[0].id);return;}
+  tlPin(h,mx);});
+// Keyboard (1.7.7): the strip is focusable. Arrows pan a quarter of the span,
+// plus and minus zoom about the centre, 0 returns to four days.
+function tlPan(frac){const [t0,t1]=tlWindow(),dt=(t1-t0)*frac;tlSet(t0+dt,t1+dt);}
+function tlZoomCentre(k){const [t0,t1]=tlWindow();tlZoomAt((t0+t1)/2,k);}
+const TL_KEYS={ArrowLeft:()=>tlPan(-0.25),ArrowRight:()=>tlPan(0.25),"+":()=>tlZoomCentre(0.75),
+  "=":()=>tlZoomCentre(0.75),"-":()=>tlZoomCentre(1/0.75),"0":()=>tlSet(...tlFull())};
+tlcv.addEventListener("keydown",ev=>{const act=TL_KEYS[ev.key];
+  if(!act||ev.ctrlKey||ev.metaKey||ev.altKey){return;}
+  ev.preventDefault();act();drawTimeline();});
+function tlPin(h,mx){const tip=document.getElementById("tltip");
+  TL.pin=h;tip.innerHTML=tlPinHTML(h);tip.classList.add("pinned");tip.hidden=false;
+  tip.style.left=Math.min(mx+12,document.getElementById("tline").clientWidth-330)+"px";
+  document.getElementById("tline").dataset.pinned=String(h.members.length);}
+function tlUnpin(){TL.pin=null;const tip=document.getElementById("tltip");tip.hidden=true;tip.classList.remove("pinned");
+  document.getElementById("tline").dataset.pinned="0";}
+document.getElementById("tltip").addEventListener("click",ev=>{
+  const row=ev.target.closest("[data-evid]");
+  if(row!==null){const id=row.dataset.evid;tlUnpin();focusEvent(id);return;}
+  if(ev.target.closest(".tlzoomto")!==null&&TL.pin!==null){const [a,b]=tlSpread(TL.pin),pad=Math.max((b-a)*0.6,45*6e4);
+    tlUnpin();tlSet(a-pad,b+pad);drawTimeline();}});
+document.addEventListener("pointerdown",ev=>{if(TL.pin!==null&&!ev.target.closest("#tltip")&&ev.target.id!=="tlcv"){tlUnpin();}});
+tlcv.addEventListener("mousemove",ev=>{const {mx,my}=tlPos(ev);
+  const h=tlInMap(my)?null:tlHitAt(mx);
+  tlcv.style.cursor=tlCursor(h,tlInMap(my));tlShowTip(h,mx);});
+tlcv.addEventListener("mouseleave",()=>tlShowTip(null,0));
+tlcv.addEventListener("dblclick",()=>{tlUnpin();TL.t0=null;TL.t1=null;TL.live=true;drawTimeline();});
+document.getElementById("tlzoom").addEventListener("click",ev=>{const b=ev.target.closest("[data-tlspan]");if(b===null){return;}
+  const h=+b.dataset.tlspan,t1=Date.now();tlSet(t1-h*36e5,t1);drawTimeline();});
 // -- halos on the plot: the brief and the belt point at the same objects --
 function drawHalos(ctx,S,inView){
   const ids=new Set(shownEvents().map(e=>e.object_id));
@@ -1515,7 +1695,7 @@ function focusEvent(id){
   const e=evById(id),o=e?findObj(e.object_id):null;
   if(o===null){return;}
   if(state.focus===null){state.preFocus={...view};}
-  state.focus=id;state.sel=o.id;state.briefIdx=BRIEF_ORDER.indexOf(id);
+  state.focus=id;state.sel=o.id;state.briefIdx=BRIEF_ORDER.indexOf(id);tlReveal(Date.parse(e.epoch));
   frameEvent(o);paint();}
 function exitFocus(restore){
   if(state.focus===null){return;}
@@ -1595,7 +1775,10 @@ function stepBrief(d){
   const row=document.querySelector(`.bev[data-ev="${CSS.escape(BRIEF_ORDER[i])}"]`);
   if(row){row.scrollIntoView({block:"nearest"});}}
 function focusCurrent(){const id=BRIEF_ORDER[state.briefIdx];if(id){focusEvent(id);}}
-const KEYS={j:()=>stepBrief(1),k:()=>stepBrief(-1),Enter:focusCurrent,Escape:()=>exitFocus()};
+// Esc closes the innermost layer first (1.7.7): an open timeline list, then
+// focus mode. Two listeners used to hear the key and both acted.
+function escInnermost(){if(TL.pin!==null){tlUnpin();return;}exitFocus();}
+const KEYS={j:()=>stepBrief(1),k:()=>stepBrief(-1),Enter:focusCurrent,Escape:escInnermost};
 document.addEventListener("keydown",ev=>{
   if(ev.ctrlKey||ev.metaKey||ev.altKey||ev.target.closest("input,textarea,select")!==null){return;}
   if(ev.key==="Enter"&&ev.target.closest("button,a,summary")!==null){return;}

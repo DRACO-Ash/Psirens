@@ -601,9 +601,103 @@ function checkBodyFits(m, label) {
       fail("sweeping the timeline found no clickable glyph.");
     } else {
       await page.mouse.click(hit, tl.y + 40);
+      // From 1.7.7 the first glyph can be a BUBBLE, which opens a list rather
+      // than focusing: then focus through the list's first row.
+      const opened = Number(await page.$eval("#tline", (e) => e.dataset.pinned || "0"));
+      if (opened > 1) { await page.locator("#tltip [data-evid]").first().click(); }
       const viaTl = await page.$eval("#cv", (e) => e.dataset.focus);
-      if (!viaTl) { fail("clicking a timeline glyph did not focus its event."); }
+      if (!viaTl) { fail("clicking a timeline glyph (or its list) did not focus its event."); }
       await page.keyboard.press("Escape");
+    }
+
+    // ---------------------------------------------------------------------
+    // The dynamic timeline (1.7.7). Owner, 17 November 2026: "I need to be
+    // able to move it around, zoom in to fully see what's there, the icons
+    // are overlapping". Every assertion reads what the strip PUBLISHES
+    // (dataset.span, t0, live, clusters, biggest; #tline dataset.pinned),
+    // after REAL wheel, drag, key and click input. The pinch is synthetic
+    // pointer events, because a browser driver cannot place two fingers.
+    // The offline belt carries two burns in one detection slot (DEMO-M1 and
+    // DEMO-M2), so a bubble exists to open.
+    // ---------------------------------------------------------------------
+    {
+      const tlState = () => page.$eval("#tlcv", (e) => ({
+        span: Number(e.dataset.span), t0: Number(e.dataset.t0), live: e.dataset.live,
+        clusters: Number(e.dataset.clusters), biggest: e.dataset.biggest }));
+      const tlBox = await page.locator("#tlcv").boundingBox();
+      const midY = tlBox.y + 40;
+      await page.focus("#tlcv");
+      await page.keyboard.press("0");
+      const full = await tlState();
+      console.log(`  timeline: span ${full.span} h, ${full.clusters} bubble(s)`);
+      if (Math.abs(full.span - 96) > 0.2) { fail(`the timeline opens on ${full.span} h, not four days.`); }
+      await page.mouse.move(tlBox.x + tlBox.width * 0.6, midY);
+      await page.mouse.wheel(0, -300);
+      const zoomed = await tlState();
+      if (!(zoomed.span < full.span)) { fail(`scrolling over the timeline did not zoom it (${full.span} h -> ${zoomed.span} h).`); }
+      await page.mouse.move(tlBox.x + tlBox.width * 0.5, midY);
+      await page.mouse.down();
+      await page.mouse.move(tlBox.x + tlBox.width * 0.5 + 160, midY, { steps: 6 });
+      await page.mouse.up();
+      const panned = await tlState();
+      if (panned.t0 === zoomed.t0) { fail("dragging the zoomed timeline did not pan it."); }
+      await page.focus("#tlcv");
+      await page.keyboard.press("0");
+      await page.keyboard.press("+");
+      const keyZoom = await tlState();
+      await page.keyboard.press("ArrowLeft");
+      const keyPan = await tlState();
+      if (!(keyZoom.span < 96) || !(keyPan.t0 < keyZoom.t0)) {
+        fail(`the focused strip ignored the keyboard (+ gave ${keyZoom.span} h, ArrowLeft moved t0 by ${keyPan.t0 - keyZoom.t0} ms).`);
+      }
+      await page.click('#tlzoom [data-tlspan="24"]');
+      const day = await tlState();
+      if (Math.abs(day.span - 24) > 0.2 || day.live !== "true") { fail(`the 24h preset gave ${day.span} h, live ${day.live}.`); }
+      await page.focus("#tlcv");
+      await page.keyboard.press("0");
+      await page.evaluate(() => {
+        const c = document.getElementById("tlcv"), r = c.getBoundingClientRect(), y = r.top + 40;
+        const m = r.left + r.width * 0.6;
+        const fire = (type, id, x) => c.dispatchEvent(new PointerEvent(type,
+          { pointerId: id, pointerType: "touch", clientX: x, clientY: y, bubbles: true }));
+        fire("pointerdown", 11, m - 40); fire("pointerdown", 12, m + 40);
+        fire("pointermove", 11, m - 120); fire("pointermove", 12, m + 120);
+        fire("pointerup", 11, m - 120); fire("pointerup", 12, m + 120);
+      });
+      const pinched = await tlState();
+      if (!(pinched.span < 90)) { fail(`a two-finger spread did not zoom the timeline (${pinched.span} h).`); }
+      await page.focus("#tlcv");
+      await page.keyboard.press("0");
+      // The bubble, its list, and Esc closing the innermost layer first.
+      // Focus the SILENT event first, so the two burns stay in their bubble.
+      const quietRow = page.locator("#brief [data-ev]", { hasText: "SILENT-DEMO" }).first();
+      const quiet = (await quietRow.count()) ? await quietRow.evaluate((b) => b.dataset.ev) : null;
+      if (quiet !== null) { await quietRow.click(); }
+      const withFocus = await tlState();
+      if (quiet === null || withFocus.clusters < 1 || withFocus.biggest === "") {
+        fail(`no timeline bubble to open (quiet event ${quiet}, ${withFocus.clusters} bubble(s)); ` +
+             `the two demo burns in one slot should form one.`);
+      } else {
+        await page.mouse.click(tlBox.x + Number(withFocus.biggest), midY);
+        const pinned = Number(await page.$eval("#tline", (e) => e.dataset.pinned || "0"));
+        const tipText = (await page.textContent("#tltip")) || "";
+        if (pinned < 2) { fail(`clicking the bubble did not open its list (pinned ${pinned}).`); }
+        if (!/3-hour detection slot/.test(tipText) || !/not a coordinated burn/.test(tipText)) {
+          fail(`the bubble's list does not state the detection slot: ${JSON.stringify(tipText.slice(0, 160))}`);
+        }
+        await page.keyboard.press("Escape");
+        const afterOne = await page.evaluate(() => ({
+          pinned: document.getElementById("tline").dataset.pinned,
+          focus: document.getElementById("cv").dataset.focus }));
+        if (afterOne.pinned !== "0" || afterOne.focus !== quiet) {
+          fail(`Esc did not close the innermost layer first: list ${afterOne.pinned}, focus ${JSON.stringify(afterOne.focus)}.`);
+        }
+        await page.keyboard.press("Escape");
+        const afterTwo = await page.$eval("#cv", (e) => e.dataset.focus);
+        if (afterTwo !== "") { fail(`the second Esc did not leave focus mode (${JSON.stringify(afterTwo)}).`); }
+        console.log(`  timeline: wheel ${zoomed.span} h, pinch ${pinched.span} h, keys ${keyZoom.span} h, ` +
+                    `bubble of ${pinned}, Esc list then focus`);
+      }
     }
 
     // ---------------------------------------------------------------------

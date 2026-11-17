@@ -371,10 +371,28 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   it <i>became detectable</i>, not from the moment of the burn: a burn just before your last visit,
   confirmed just after it, is new to you. <b>Mark read</b> moves the split to now.</p>
 
+  <h3>The timeline: move it, zoom it, open it</h3>
+  <p>The strip above the plot shows the same events by time. It opens on four days, and you can
+  get in close:</p>
+  <ul>
+    <li><b>Zoom</b> with the scroll wheel over the strip, a two-finger pinch, or the <b>4d</b>,
+      <b>24h</b> and <b>6h</b> buttons. The thin overview beneath shows where you are in the four days.</li>
+    <li><b>Move</b> by dragging the strip, or the box in the overview. While you are looking at the
+      latest hours the right edge stays on now, so a new event never lands off screen.</li>
+    <li><b>Keyboard:</b> click the strip or tab to it, then <kbd>&larr;</kbd> <kbd>&rarr;</kbd> pan,
+      <kbd>+</kbd> <kbd>&minus;</kbd> zoom and <kbd>0</kbd> returns to four days. Double-click does the same.</li>
+    <li>Events too close to separate are drawn as a <b>numbered bubble</b>. Click it for a list, and
+      click a name in the list to focus that event. If the list says <i>one 3-hour detection slot</i>,
+      the shared time is the detector's resolution, not a coordinated burn.</li>
+    <li>Names that would overlap are left off and counted at the right of the strip, rather than
+      drawn on top of each other.</li>
+  </ul>
+
   <h3>Focus mode</h3>
   <p>Click an entry, click its glyph on the timeline above the plot, or step to it with
-  <kbd>j</kbd> and <kbd>k</kbd> and press <kbd>Enter</kbd>. <kbd>Esc</kbd> returns to the belt
-  exactly as you left it.</p>
+  <kbd>j</kbd> and <kbd>k</kbd> and press <kbd>Enter</kbd>. <kbd>Esc</kbd> closes the innermost
+  thing first: an open timeline list, then focus mode, which returns to the belt exactly as you
+  left it.</p>
   <figure>
     <div class="fig" id="fig-focus" data-fig="focus">
       <img src="guide-focus.png" alt="Focus mode on an E-W manoeuvre: the plot framed on the object,
@@ -1142,10 +1160,10 @@ const HOTSPOTS={
     [89,9,11,4.5,"High-interest list","Which list is in force, how many objects it holds, its source and its marking."],
     [1,14.6,15,64,"Shift Brief","What changed since you last looked: manoeuvres, early warnings and silences, newest first. Read it first."],
     [1,79.5,15,19,"R1-R2 watchlist","The highest-priority objects, with country, longitude and fix age. Click a row to open the inspector. Priority mix, Fleet health and By country sit below it, folded."],
-    [16.6,14.6,82.5,8,"Event timeline","The same events across four days, the period since your last visit shaded. Click a glyph to focus that event."],
-    [17.5,24,77,70,"The belt","Longitude left to right, inclination bottom to top. Scroll to zoom, drag to pan."],
+    [16.6,14.6,82.5,10.9,"Event timeline","The same events by time, the period since your last visit shaded. Scroll or pinch to zoom, drag to move, and click a numbered bubble to list what is inside. The overview beneath shows where you are in the four days."],
+    [17.5,26.6,77,67,"The belt","Longitude left to right, inclination bottom to top. Scroll to zoom, drag to pan."],
     [36,70,4.5,7,"Event halo","Each object with an event is ringed on the plot, with its event glyph beside it."],
-    [96,24.5,3.5,10,"Zoom controls","In, out, and reset to the full belt."]],
+    [96,27,3.5,10.8,"Zoom controls","In, out, and reset to the full belt."]],
   bar:[
     [0.5,8,17,70,"View tabs","Switch the data mode. The plot, the rail and the readouts all follow."],
     [18,8,52,70,"Priority chips","Each rank toggles independently. Greyed chips are hidden, not absent."],
@@ -1168,12 +1186,12 @@ const HOTSPOTS={
     [2,76.6,96,16,"Earlier","Events detectable before your previous visit. Still in the four-day window, no longer news."],
     [2,93.5,96,5.5,"Keyboard","j and k step through the entries, Enter focuses, Esc returns to the belt."]],
   focus:[
-    [1.8,42.3,13,8.6,"The focused entry","Highlighted in the brief, and on the timeline above the plot."],
-    [72.6,16,4,5,"On the timeline","The selected glyph is ringed. Clicking any glyph focuses its event."],
-    [20.6,24.5,26,3.5,"Focus bar","Which event is in focus. Back to belt, or Esc, restores the view you came from."],
-    [51.7,79.2,6,6,"The burn","The trail splits at the event: grey before, amber after, a diamond where it happened."],
-    [81.2,29.6,16.9,24.8,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
-    [81,80.4,17.5,9,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
+    [1.8,42.3,13,8.4,"The focused entry","Highlighted in the brief, and on the timeline above the plot."],
+    [72.6,17,4,5,"On the timeline","The focused event is ringed and lifted out of any bubble, so it is never hidden. Clicking a single glyph focuses its event."],
+    [20.6,27.3,26,3.5,"Focus bar","Which event is in focus. Back to belt, or Esc, restores the view you came from."],
+    [51.7,79.4,6,6,"The burn","The trail splits at the event: grey before, amber after, a diamond where it happened."],
+    [81.2,32.4,16.9,24.7,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
+    [81,82.9,17.5,8.6,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
   inspector:[
     // Positions MEASURED by tools/guide_shots.js from the capture (1.7.4),
     // not estimated: the earlier table pointed at rows the scrolled capture
