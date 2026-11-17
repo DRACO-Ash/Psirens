@@ -1297,6 +1297,42 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- COSMOS 2589 (64467): TWO PROVIDERS 64 DEG APART, BLENDED INTO ONE TRACK.
+  Reported by Ash 17 November 2026, the most serious data defect since 1.6.6.
+  The inspector read Drift -12.96 deg/day W, rms 19.224 deg, Track span 63.8
+  deg, and an E-W event CONFIRMED "burn 14 Nov 09:37, -0.01 to -16.32
+  deg/day". FACT, from the live /api/events evidence series: one source holds
+  the object at 127.86-127.97E on every day 13-16 Nov, unmoving; NorthStar
+  appears 15 Nov at 67.7E and slides to 64.3E by 17 Nov; 14 two-hour windows
+  hold BOTH positions, up to 62.7 deg apart. FACT, by propagating both TLEs:
+  Ash's latest UDL line (26321.41066) sits at 127.9E, a = GEO + 3 km, -0.03
+  deg/day; the NorthStar line PSIRENS showed (26321.35849, commercial-first
+  policy) sits at 64.2E, a = GEO + 178 km, -2.28 deg/day. INFERENCE: NorthStar
+  is associating a different, drifting object with 64467. Not ours to rule on;
+  what IS ours: (1) samples carry NO provider (`sources.py` sample dict), so
+  history cannot be partitioned; (2) `drift_fit` guards only |rate| > 18
+  deg/day (`astro.py:342`), never the residual, so a 19 deg rms fit shipped
+  as a rate; (3) the E-W detector fitted across the two bands and CONFIRMED a
+  burn that is a provider arriving. Fix plan put to Ash, NOT BUILT.
+- DEPLOYED BUILD IS 1.7.0 OR LATER (FACT, 17 November 2026): the live app
+  answers `/api/events`, which exists only from 1.7.0. Which exactly is TBC:
+  read `version` on `/api/meta`. The Current-state header above still says
+  1.6.12 and is stale on this point.
+- LIVE EVENT CALIBRATION, from Ash's `/api/events` export (ranks 1-5, 17 Nov):
+  151 events in 4 days (NS 67, QUIET 46, STARTED 15, LEAVING 14, EW 8,
+  STOPPED 1); 52 in the default ranks 1-3 view. FACTS: 11 of 15 STARTED have
+  BOTH rates under the 0.02 floor (station-keeping reversals, e.g. TJS-6
+  +0.013 to -0.012), because `ew_kind` returns STARTED whenever |before| is
+  under the floor, whatever |after| is; 37 of 46 QUIET last reported 15:00-
+  20:59Z 16 Nov, 16 in one hour (one feed stopping, INFERENCE); 58 of 67 N-S
+  share an epoch with another. N-S HYPOTHESIS REFUTED: natural inclination
+  drift alone does NOT fire `ns_step` (0 of 360 trials up to 0.0025 deg/day;
+  4 of 40 at 0.0035 with 0.002 scatter); the live N-S are on station-kept
+  commercial objects (52 of 55 under 0.1 deg) and look like routine N-S
+  station-keeping, real but not news. EVENT IDS CHURN (FACT, measured on the
+  production detector): splits hang from `ref` (newest fix in the store), so
+  advancing `ref` 1 h gives every N-S and E-W event a new epoch and id; only a
+  whole 3 h restores them. QUIET and LEAVING ids are stable.
 - EVENT TIMELINE REWORK: PROPOSED 17 November 2026, NOT BUILT, awaiting Ash.
   `proposals/2026-11-17-timeline/PROPOSAL.html`. Ash, from a live screenshot:
   "needs to be more dynamic, I need to be able to move it around, zoom in to
@@ -1316,9 +1352,10 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   FOUND IN THE PROTOTYPE, kept for the build: zooming about the pointer near
   "now" pushed the newest event off the right edge (live edge added); `Esc`
   with a list open also exits focus mode (both handlers fire).
-  ASKED OF ASH: an `/api/events` export from the live app, to confirm the
-  shared-epoch inference on real data and to calibrate the thresholds (his
-  screenshot suggests about 40 events in four days, many N-S).
+  RECEIVED 17 November: shared epochs CONFIRMED for N-S (live, 58 of 67);
+  CORRECTED for E-W, whose scan starts at each object's first fix inside the
+  window (`events.py:163`), so E-W events do NOT share the grid (0 of 24
+  live). The proposal page was corrected and rebundled the same day.
 - SHIFT BRIEF: BUILT in 1.7.0. Proposed 16 November 2026
   (`proposals/2026-11-16-shift-brief/PROPOSAL.html`), approved by Ash the same
   day ("make it happen with the drift fix too"), so built ahead of the Logging

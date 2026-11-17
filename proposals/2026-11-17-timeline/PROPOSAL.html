@@ -249,11 +249,12 @@ ul.checks li.done::before{background:var(--ok-ink);border-color:var(--ok-ink)}
   <div class="stats">
     <div class="stat"><b>38</b><span>events in the dense scenario</span></div>
     <div class="stat"><b>17</b><span>distinct timestamps among them</span></div>
-    <div class="stat"><b>3 h</b><span>grid every E-W and N-S epoch sits on</span></div>
+    <div class="stat"><b>58 of 67</b><span>live N-S events sharing an epoch with another</span></div>
     <div class="stat"><b>5</b><span>N-S events sharing one second</span></div>
   </div>
-  <p><span class="tag fact">FACT</span> The detector tests candidate splits every three hours from a start of <code>ref − 96 h</code> (<code>events.py</code> lines 163 and 206), and an event is stamped with its winning split. Every object shares that grid. Two objects that manoeuvre in the same three-hour slot therefore get the <strong>same epoch to the second</strong>, and no zoom, however deep, will separate glyphs drawn at the same time.</p>
-  <p><span class="tag inf">INFERENCE</span> Your screenshot's stacks are at least partly this, not only density. I cannot confirm it from a picture; the <code>/api/events</code> export asked for <a href="#ask">below</a> would settle it.</p>
+  <p><span class="tag fact">FACT</span> The detector tests candidate splits every three hours and stamps an event with its winning split. For N-S events the scan starts at <code>ref − 96 h</code> for every object (<code>events.py</code> line 206), so <strong>all N-S events share one grid</strong>, and two objects whose steps fall in the same three-hour slot get the <strong>same epoch to the second</strong>. No zoom, however deep, separates glyphs drawn at the same time.</p>
+  <p><span class="tag fact">FACT</span> <strong>Confirmed on the live export</strong> you sent on 17 November: 58 of the 67 N-S events share an epoch with at least one other, and the largest group is 10 at one second. <strong>Corrected from the first issue of this page:</strong> E-W events do not share the grid. Their scan starts at each object's first fix inside the window (line 163), so each object has its own offset; 0 of the 24 live E-W events sit on the shared grid.</p>
+  <p><span class="tag fact">FACT</span> Measured on the production detector: because the grid hangs from <code>ref</code>, the newest fix in the store, an N-S or E-W event takes a <strong>new epoch and a new id</strong> whenever <code>ref</code> moves by anything other than a whole three hours. That is a defect in its own right, reported separately.</p>
   <div class="callout blue"><strong>So the design has two halves.</strong> Zoom and pan for events that are merely close. A <strong>list</strong> for events that share a moment, because for those a list is the only honest view. The bubble is the hinge: it says how many, and one click says who.</div>
   <p>Whether the detector should place E-W events more finely than its grid is a separate question with a separate cost (it changes what the evidence block reports). It is listed as decision 5 and is <strong>not</strong> part of this change.</p>
 </section>
@@ -344,7 +345,7 @@ ul.checks li.done::before{background:var(--ok-ink);border-color:var(--ok-ink)}
   <h2>What I need from you</h2>
   <div class="callout"><strong>One export from the live app, when convenient.</strong> Open <code>/api/events?view=real&amp;ranks=1,2,3,4,5</code> on the deployed PSIRENS, save the JSON and send it over. It does three jobs at once.</div>
   <ul class="dot">
-    <li>It confirms or refutes the shared-timestamp inference above on real data.</li>
+    <li>It confirms or refutes the shared-timestamp inference above on real data. <strong>Received 17 November: confirmed for N-S, corrected for E-W.</strong></li>
     <li>It is the threshold calibration the 1.7.0 entry left open. Your screenshot suggests about 40 events in four days, many of them N-S. <span class="tag inf">INFERENCE</span> That is more than a quiet belt should produce, and the N-S floor (0.008°) is the first suspect.</li>
     <li>It lets me rerun these figures on the real distribution rather than a built one.</li>
   </ul>
