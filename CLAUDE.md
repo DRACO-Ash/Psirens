@@ -1307,8 +1307,19 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   hold BOTH positions, up to 62.7 deg apart. FACT, by propagating both TLEs:
   Ash's latest UDL line (26321.41066) sits at 127.9E, a = GEO + 3 km, -0.03
   deg/day; the NorthStar line PSIRENS showed (26321.35849, commercial-first
-  policy) sits at 64.2E, a = GEO + 178 km, -2.28 deg/day. INFERENCE: NorthStar
-  is associating a different, drifting object with 64467. Not ours to rule on;
+  policy) sits at 64.2E, a = GEO + 178 km, -2.28 deg/day.
+  VENDOR COMPARISON, screenshot from Ash the same day ("Latest Elset
+  Comparison", states against catalogue): SIX sources, SAFRAN (17T09:51Z),
+  18th SPCS and SPACE_TRACK (16T20:03Z), KBR, NorthStar and EXO (all three
+  16T19:24:22.550Z), put 64467 at 127.86-127.93E, drift -0.022 to -0.026
+  deg/day, inclination 0.328. NORTHSTAR'S OWN STATE AGREES (127.9314E). At the
+  same hour PSIRENS's NorthStar ELSET band sat near 65.3E. So the fault is
+  NorthStar's ELSET product for this object (marking U//PR-NORTHSTAR-ELSET),
+  not NorthStar as a whole, and the earlier inference "NorthStar is tracking a
+  different object" is narrowed to that. Why the elsets are wrong is
+  NorthStar's to answer (TBC, owner Ash). Five agree within 0.1 deg and one is
+  63 deg off: a MEDIAN-CONSENSUS rule over `elset_candidates` (newest per
+  provider, already stored) would have quarantined it. Not ours to rule on;
   what IS ours: (1) samples carry NO provider (`sources.py` sample dict), so
   history cannot be partitioned; (2) `drift_fit` guards only |rate| > 18
   deg/day (`astro.py:342`), never the residual, so a 19 deg rms fit shipped
