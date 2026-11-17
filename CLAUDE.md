@@ -1297,6 +1297,28 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   retention and access posture, but it is personal data and PSIRENS has not
   logged any until now. Confirm it should go in, or say to omit that one field
   and carry the finding.
+- ELEMENT-SET PROVENANCE AUDIT, 17 November 2026: `audits/2026-11-17-tle-provenance/
+  AUDIT.md`, with `prove.py` (11 of 11 offline findings reproduced through the
+  shipped modules; F4 observed live). OWNER RULE it measures against, verbatim:
+  "The UDL is the primary source of information, we need to make calculations
+  based on that information. We are not in the business of making this up."
+  and "It should not INVENT anything from ANY TLE!" VERDICT: no deployed build
+  meets it. Per-record longitude is a sound calculation; everything after is
+  not: providers, modes and epochs pooled per catalogue number (F1, F2, F10);
+  drift published with its residual unchecked (F3); events from the blend (F4);
+  head = newest provider (F5); commercial-first selection with no agreement
+  check and no age limit (F6, F12); "U" INVENTED for an unmarked record and
+  then copyable (F7, fail-open); reconstructed TLEs (F8); missing elements
+  zero-filled (F9); ephemType and n-dot ignored when propagating (F11); demo
+  belt reuses four REAL HRR catalogue numbers labelled REAL whenever DEMO_MODE
+  is on, even with UDL enabled (F13); manual sets merge into UDL objects with
+  "U" default (F14). ROLLBACK FACT (git, 1.6.12 = `9258395`): every defect
+  above except the event layer is present in 1.6.12, so rolling back removes
+  the false manoeuvre alerts and NOTHING ELSE. Ash is rolling back the
+  deployed build (17 Nov). Remediation principles are in AUDIT.md section 5
+  and go to Ash as a proposal before any build. Open: DEMO_MODE in the deployed
+  config, which build is live, NorthStar's elsets, SAFRAN's class, whether the
+  tenant flags uncorrelated or XP element sets (probe).
 - COSMOS 2589 (64467): TWO PROVIDERS 64 DEG APART, BLENDED INTO ONE TRACK.
   Reported by Ash 17 November 2026, the most serious data defect since 1.6.6.
   The inspector read Drift -12.96 deg/day W, rms 19.224 deg, Track span 63.8
