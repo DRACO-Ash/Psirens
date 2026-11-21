@@ -274,10 +274,9 @@ pipeline is evidence about the contract on the day it ran, exactly as a green
 test suite is evidence about the code on the day it ran. **Read the Pipeline
 tab on every upload, not only when something fails.**
 
-**TBC, and do not guess at it:** whether Logging is a TWELFTH pipeline stage or
-an advisory panel hanging off an existing one. The modal has its own "View job
-log" button, which suggests its own job, but the stage list was not visible in
-the same view and has not been re-read since 5 October.
+**RESOLVED, 21 November 2026:** Logging IS a pipeline stage, listed between DAST
+Scan and Container Scan, and it passed. The earlier TBC read: whether Logging is a
+twelfth stage or an advisory panel on an existing one.
 
 ### Pre-flight and the durable fix
 
@@ -285,6 +284,7 @@ the same view and has not been re-read since 5 October.
 ● The grep gates are reactive substitutes, one per rule already learned. The durable fix is a real `sonar-scanner` run against the tenant SonarQube server before upload, which catches all of the above in one pass. The sandbox cannot reach the SonarQube host; a networked workstation can. Standing this up ends the one-rule-per-cycle pattern.
 ● When the gate fails, fix to the exact line it names, then add a local grep gate so that rule cannot recur.
 
+● **The App Store pipeline is TWELVE stages from 21 November 2026.** FACT, 21 November 2026, from the Pipeline tab screenshot Ash sent: "All 12 stages passed". Gates, in order: Dependencies, SAST Scan, SAST Findings, Dependency Scanning, Test, Code Quality, Dockerfile Lint, Container Build, DAST Scan, Logging, Container Scan; then Deploy under Deployment. Three changes from the 5 October reading: LOGGING IS ITS OWN STAGE (the TBC is closed) and it PASSED, so the 1 December blocking date is no longer a risk for this build; SAST FINDINGS is a NEW stage; SECRET DETECTION is NO LONGER LISTED (removed, renamed or folded into SAST Findings: TBC, do not guess). The screenshot does not show the version: INFERENCE that it is 1.7.8, the newest build sent; `GET /api/meta` is the check.
 ● **The App Store pipeline was ELEVEN stages on 5 October 2026**, and a Logging check has appeared since (see the logging section above, which leaves open whether it is a twelfth stage). FACT, 5 October 2026, read from the Pipeline and Versions tab for PSIRENS 1.6.12: ten gates (Secret Detection, Dependencies, SAST Scan, Dependency Scanning, Test, Code Quality, Dockerfile Lint, Container Build, DAST Scan, Container Scan) then Deploy as the eleventh. DAST Scan is DYNAMIC: it runs the built container and probes it, so the unauthenticated 200 on `/`, `/healthz` and `/readyz` is a requirement of that gate as well as of Deploy. It has passed on every PSIRENS build so far, which is why it went unrecorded until now; an always-green gate is still a gate. PSIRENS 1.6.12 passed all eleven, Deploy included, and the app went Active the same moment: on this platform approval and deployment are one milestone, not two.
 ● The platform's "Date Uploaded" column is not reliable. OBSERVED, 5 October 2026: a build uploaded that day was listed as "Jul 28, 2026". Recorded rather than explained; do not date a build from that column.
 

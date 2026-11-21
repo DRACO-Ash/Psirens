@@ -57,7 +57,19 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.8; DEPLOYED 1.7.7, per Ash's live screenshots of 17 November)
+## Current state (repo 1.7.8; DEPLOYED, ALL 12 STAGES GREEN, 21 November 2026)
+
+FACT, 21 November 2026, Pipeline tab screenshot from Ash: "All 12 stages
+passed", Deploy included. INFERENCE: the build is 1.7.8 (the newest sent; the
+screenshot does not show the version; `/api/meta` is the check). The pipeline
+has CHANGED SHAPE: Logging is now its own stage and passed (the 1 December
+blocking risk is closed for this build), SAST Findings is new, and Secret
+Detection is no longer listed (TBC). See the golden-loop section. NEXT, for
+Ash and in this order: confirm the version on `/api/meta`; run the backfill
+(`tools/backfill_pull.py --check`, then `--days 90`), which re-tags the
+untagged history and gives the observed cross-check its 24 h; run
+`tools/udl_elset_probe.py` to confirm live element sets state their
+ephemeris type, which the agreement check and the consensus both depend on.
 
 1.7.8, 17 November 2026: a CONSENSUS DRIFT RATE. Ash, from four live
 inspector panels all reading "no usable baseline": "now we have sorted the
@@ -264,7 +276,8 @@ Shipped features:
 Owner rule, 3 September 2026: once a build has a GREEN DEPLOY on the App Store,
 the repository may be pushed to origin without asking. (The rule was written as
 "ten-gate"; the pipeline is eleven stages, ten gates then Deploy. The milestone
-is the green Deploy, most recently 1.6.12 on 5 October 2026.) Before that
+is the green Deploy, most recently all 12 stages on 21 November 2026, build
+inferred to be 1.7.8; before that 1.6.12 on 5 October 2026.) Before that
 milestone, commit locally and leave the push to Ash.
 
 ## Golden verify loop (run before ANY packaging or upload)
@@ -275,6 +288,12 @@ pip install -r requirements.txt
 sh simulate-pipeline.sh        # MUST print "SIMULATION GREEN"
 ```
 
+THE PIPELINE IS TWELVE STAGES FROM 21 NOVEMBER 2026 (FACT, screenshot): gates
+Dependencies, SAST Scan, SAST Findings, Dependency Scanning, Test, Code
+Quality, Dockerfile Lint, Container Build, DAST Scan, Logging, Container Scan,
+then Deploy. New since 5 October: SAST Findings, and Logging as a stage.
+Missing since 5 October: Secret Detection (removed, renamed or folded in: TBC).
+The history that follows is kept as the record.
 THE PIPELINE WAS ELEVEN STAGES ON 5 OCTOBER 2026, AND A TWELFTH CHECK HAS
 APPEARED SINCE. A **Logging** check, badged Advisory, was read on 11 November
 2026: it does NOT block today and **starts blocking on 1 December 2026**. See
