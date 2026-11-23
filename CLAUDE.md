@@ -1259,7 +1259,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   NON-JSON answer (`JSONDecodeError`), which the script mislabelled "CANNOT
   REACH". INFERENCE, strong: the App Store sign-in redirected the request to a
   login page, which urllib followed silently (requests arrive carrying
-  `X-Auth-Request-Email`, so a sign-in proxy sits in front). PROVEN locally:
+  `X-Auth-Request-Email`, so a sign-in proxy sits in front). CONFIRMED, FACT,
+  same day, by the fixed script: "HTTP 302 redirect to
+  https://appstore.bluestaq.com/api/auth/launch". PROVEN locally:
   the old script against a fake sign-in redirect prints Ash's exact line.
   FIXED in the tool (not the app): redirects are refused and named (query
   never printed, it carries state), a non-JSON page is named with its title,
