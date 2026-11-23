@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>East-West Burn Timing</title>
+<style>
+:root{
+  --navy:#162646;--blue1:#385FAF;--blue2:#739BCF;--amber:#C67C00;--green:#27AE60;
+  --body:#2C3E50;--bg:#F5F7FB;--card:#FFFFFF;--line:#DCE3EE;--muted:#5B6B80;--code:#EEF2F8;
+  --grid:#E3E8EF;--before:#385FAF;--after:#C67C00;--cross:#27AE60;--slot:#5B6B80;--truth:#B03A2E;--dot:#8796AC;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --body:#DCE4F0;--bg:#0E1626;--card:#152036;--line:#26344F;--muted:#9AA9C0;--code:#0B1220;
+    --grid:#1C2A43;--before:#739BCF;--after:#F0A52E;--cross:#3CCB7F;--slot:#9AA9C0;--truth:#E06A5E;--dot:#6F7F99;
+  }
+}
+:root[data-theme="dark"]{
+  --body:#DCE4F0;--bg:#0E1626;--card:#152036;--line:#26344F;--muted:#9AA9C0;--code:#0B1220;
+  --grid:#1C2A43;--before:#739BCF;--after:#F0A52E;--cross:#3CCB7F;--slot:#9AA9C0;--truth:#E06A5E;--dot:#6F7F99;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--body);font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+code{font-family:Consolas,Menlo,monospace;font-size:.88em;background:var(--code);padding:1px 5px;border-radius:4px}
+header{background:#162646;color:#fff;padding:22px 16px}
+.hin,.wrap{max-width:1000px;margin:0 auto}
+.brand{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#B9C8E4}
+h1{margin:6px 0 4px;font-size:28px;font-weight:600}
+.sub{color:#C9D6EC}
+.top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.top button{padding:7px 12px;border-radius:6px;border:1px solid #33476E;background:#22355C;color:#fff;cursor:pointer}
+.wrap{padding:20px 16px 60px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:0 0 18px}
+h2{margin:0 0 10px;font-size:21px;color:var(--blue1)}
+h3{font-size:16px;margin:16px 0 6px}
+.ask{border-left:5px solid var(--amber)}
+ul.dot{list-style:none;padding:0;margin:8px 0}
+ul.dot li{position:relative;padding-left:20px;margin:6px 0}
+ul.dot li::before{content:"●";position:absolute;left:0;top:2px;font-size:11px;color:var(--blue2)}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:1px 7px;border-radius:10px;margin-right:6px;vertical-align:1px}
+.fact{background:#D8F1E3;color:#145A32}.inf{background:#E3ECFA;color:#1F3F7A}.lim{background:#F6E7CC;color:#6B4300}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:12px}
+.stat b{display:block;font-size:26px;color:var(--blue1)}
+.stat span{font-size:13px;color:var(--muted)}
+.cv{width:100%;height:320px;display:block;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.cvs{height:260px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;margin:8px 0;color:var(--muted)}
+.legend label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.sw{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle}
+.readout{font-size:13px;color:var(--muted);min-height:1.4em}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tbl{overflow-x:auto}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+figure{margin:0}
+.fig{position:relative;display:inline-block;width:100%}
+.fig img{width:100%;display:block;border-radius:8px;border:1px solid var(--line)}
+.hs{position:absolute;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:#C67C00;color:#fff;font:700 13px/1 "Segoe UI",sans-serif;cursor:pointer;box-shadow:0 0 0 4px rgba(198,124,0,.35);display:grid;place-items:center;padding:0}
+.hs[aria-pressed="true"]{background:#27AE60;box-shadow:0 0 0 4px rgba(39,174,96,.4)}
+figcaption{font-size:14px;color:var(--muted);margin-top:6px}
+.cap{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px;min-height:3.2em;background:var(--code)}
+form fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:10px 14px}
+legend{font-weight:600;padding:0 6px}
+.opt{display:flex;gap:8px;align-items:flex-start;margin:6px 0;cursor:pointer}
+.opt small{display:block;color:var(--muted)}
+textarea{width:100%;min-height:70px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--body);padding:8px;font:inherit}
+pre.reply{white-space:pre-wrap;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px;font:13px/1.5 Consolas,Menlo,monospace;min-height:4em}
+.btn{padding:8px 14px;border-radius:6px;border:1px solid var(--blue1);background:var(--blue1);color:#fff;cursor:pointer;font:inherit}
+.btn.ghost{background:transparent;color:var(--blue1)}
+footer{max-width:1000px;margin:0 auto;padding:0 16px 30px;font-size:13px;color:var(--muted)}
+@media (max-width:600px){h1{font-size:23px}section{padding:16px}.cv{height:260px}}
+</style>
+</head>
+<body>
+<header><div class="hin top">
+  <div><div class="brand">Bluestaq Limited · PSIRENS change proposal · 23 November 2026</div>
+  <h1>Timing east-west burns where the fits cross</h1>
+  <div class="sub">Decision 5 from the timeline proposal, which you answered yes. Awaiting your go before anything is built.</div></div>
+  <button type="button" id="theme">Theme</button>
+</div></header>
+
+<div class="wrap">
+<section class="ask">
+  <h2>What you are deciding</h2>
+  <p>Today a confirmed east-west burn is stamped at the 3-hour split the detector tested, not at the burn. The proposal is to time it where the two fitted drift lines cross, state the uncertainty beside it, and key the event on that time so it stops changing as new data arrives.</p>
+  <div class="stats">
+    <div class="stat"><b data-k="gain03">.</b><span>closer to the true burn time than the grid, median, for a 0.3 deg/day burn</span></div>
+    <div class="stat"><b data-k="idgrid">.</b><span>of burns changed their event id within 9 hours on the grid stamp</span></div>
+    <div class="stat"><b data-k="idcross">.</b><span>changed it with the crossing, keyed to the nearest hour</span></div>
+  </div>
+  <p>Three decisions, in the form at the foot of the page: go or no-go, how the event id is keyed, and how wide the stated uncertainty is drawn.</p>
+</section>
+
+<section>
+  <h2>The problem, measured</h2>
+  <p><span class="tag fact">FACT</span>The detector tests a candidate split every 3 hours and stamps a confirmed burn with the split that scored highest (<code>events.ew_split</code>). On 393 synthetic burns with known true times, run through the production detector, the stamp is off by a median of <b data-k="g005">.</b> h for a 0.05 deg/day burn and <b data-k="g03">.</b> h for 0.3 deg/day. The worst 5% are off by up to <b data-k="gp95max">.</b> h.</p>
+  <p><span class="tag fact">FACT</span>The stamp moves as data arrives. Advancing the store hour by hour for 9 hours, the same burn took a median of <b data-k="griddist">.</b> and up to <b data-k="griddistmax">.</b> different epochs. Each one is a new event id, so the Shift Brief can show one burn as new more than once. This is the id churn recorded on 17 November.</p>
+</section>
+
+<section>
+  <h2>The method, on a worked burn</h2>
+  <p>A burn changes the drift <em>rate</em>, not the longitude. So the trend line fitted before the burn and the one fitted after it meet at the burn. The fits are the same ones the detector already makes: 48 hours each side, with the daily libration fitted out. The estimate is refined twice by re-fitting about the crossing, and refused (the grid stamp stands) if the lines meet more than two grid steps from the split.</p>
+  <canvas class="cv" id="ex" aria-label="Worked example: longitude against time with both fitted lines, the grid stamp, the crossing and the true burn"></canvas>
+  <div class="legend" id="exlegend">
+    <label><input type="checkbox" data-s="before" checked><span class="sw" style="background:var(--before)"></span>fit before</label>
+    <label><input type="checkbox" data-s="after" checked><span class="sw" style="background:var(--after)"></span>fit after</label>
+    <label><input type="checkbox" data-s="slot" checked><span class="sw" style="background:var(--slot)"></span>grid stamp (today)</label>
+    <label><input type="checkbox" data-s="cross" checked><span class="sw" style="background:var(--cross)"></span>crossing (proposed)</label>
+    <label><input type="checkbox" data-s="truth" checked><span class="sw" style="background:var(--truth)"></span>true burn</label>
+  </div>
+  <div class="readout" id="exread">Hover the chart to read times.</div>
+  <p>On this burn the grid stamp is <b data-k="exgrid">.</b> h from the truth and the crossing <b data-k="excross">.</b> h, with a stated uncertainty of ±<b data-k="exsig">.</b> h (2σ).</p>
+</section>
+
+<section>
+  <h2>Accuracy across 393 burns</h2>
+  <canvas class="cv cvs" id="acc" aria-label="Median timing error by burn size, grid stamp against crossing"></canvas>
+  <div class="legend"><span><span class="sw" style="background:var(--slot)"></span>grid stamp, median</span><span><span class="sw" style="background:var(--cross)"></span>crossing, median</span></div>
+  <div class="tbl"><table id="acctbl"><thead><tr><th>Burn size (deg/day)</th><th>Burns</th><th>Grid median / 95%</th><th>Crossing median / 95%</th><th>Crossed</th><th>Truth within ±2σ</th></tr></thead><tbody></tbody></table></div>
+  <p class="small"><span class="tag inf">INFERENCE</span>Synthetic belt: libration 0.03 to 0.25 deg, provider scatter 0.003 to 0.015 deg, fixes every 30 to 120 minutes. Errors in hours. Live calibration is still owed, as for every detector threshold.</p>
+</section>
+
+<section>
+  <h2>What changes in the interface</h2>
+  <p>The real interface, focused on the worked burn seeded into the app. The right-hand figure paints the proposed result over the same view, from the prototype run against the app's own served data. Click the numbered markers.</p>
+  <div class="figs">
+    <figure><div class="fig"><img src="figures/A-evidence-as-is.jpg" alt="Event evidence as built: the burn stamped at the 3-hour split"></div>
+      <figcaption>As built: stamped at the split, <b data-k="mockslot">.</b></figcaption></figure>
+    <figure><div class="fig" id="figB"><img src="figures/B-evidence-proposed.jpg" alt="Mockup: burn timed at the crossing with its uncertainty, slot kept for audit">
+      <button type="button" class="hs" style="left:47.5%;top:37%" data-c="The crossing, drawn in green where the before and after lines meet. The dotted white line, the 3-hour split, stays for audit.">1</button>
+      <button type="button" class="hs" style="left:3.5%;top:65.5%" data-c="The burn time is the crossing, with its uncertainty stated beside it. On the timeline the glyph moves to this time.">2</button>
+      <button type="button" class="hs" style="left:3.5%;top:73.8%" data-c="The 3-hour slot the detector tested is kept, so anyone checking the evidence can see both and how far apart they are.">3</button>
+    </div><figcaption>Proposed: timed at the crossing, <b data-k="mockcross">.</b> (true burn <b data-k="mocktrue">.</b>)</figcaption></figure>
+  </div>
+  <div class="cap" id="cap">Select a marker to read what it shows.</div>
+</section>
+
+<section>
+  <h2>What changes in the data</h2>
+  <ul class="dot">
+    <li>An east-west event's <code>epoch</code> becomes the crossing whenever one is found within two grid steps, else the grid split as today.</li>
+    <li>Its evidence block gains <code>crossing</code>: the epoch, <code>sigma_hours</code> and the method. <code>split</code> stays.</li>
+    <li>Its <code>id</code> is keyed on the crossing rounded to the nearest hour (decision 2), which is what stops the churn.</li>
+    <li>Unchanged: what counts as a burn (floor, six standard errors, the edge rule), north-south timing, <code>detectable_from</code>, and the drift rate cut at the burn, which moves with the epoch and so is cut at a truer time.</li>
+    <li>Cost: three extra pairs of fits per confirmed burn, a few milliseconds against the 5 seconds a full detection takes.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Limits, stated</h2>
+  <ul class="dot">
+    <li><span class="tag lim">LIMIT</span>Small burns often do not cross near the split: <b data-k="nocross">.</b> of the burns under 0.1 deg/day keep the grid stamp. The list says which method timed each event.</li>
+    <li><span class="tag lim">LIMIT</span>The stated uncertainty is slightly optimistic: <b data-k="cover">.</b> of true times fall within ±2σ, not 95%. Decision 3 is whether to widen it to measured coverage.</li>
+    <li><span class="tag lim">LIMIT</span>Rounded to the hour, the id still changed for <b data-k="idcrossn">.</b> of <b data-k="idn">.</b> burns, where the crossing sat near a half hour. Rare, not nil.</li>
+    <li><span class="tag inf">INFERENCE</span>Measured on a synthetic belt only. Live burns may have messier fits; the fallback to the grid protects against a wild crossing.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Your decision</h2>
+  <form id="decide">
+    <fieldset><legend>1. Go or no-go</legend>
+      <label class="opt"><input type="radio" name="q1" value="Go: build it in the next version (recommended)"><span>Go: build it in the next version (recommended)</span></label>
+      <label class="opt"><input type="radio" name="q1" value="No-go: keep the 3-hour stamp"><span>No-go: keep the 3-hour stamp</span></label>
+    </fieldset>
+    <fieldset><legend>2. How the event id is keyed</legend>
+      <label class="opt"><input type="radio" name="q2" value="Crossing rounded to the nearest hour (recommended)"><span>Crossing rounded to the nearest hour (recommended)<small>Stops the churn in all but rare half-hour cases</small></span></label>
+      <label class="opt"><input type="radio" name="q2" value="Crossing to the minute"><span>Crossing to the minute<small>Most precise; the id can still change by minutes as fits settle</small></span></label>
+    </fieldset>
+    <fieldset><legend>3. Width of the stated uncertainty</legend>
+      <label class="opt"><input type="radio" name="q3" value="Widen to measured 95% coverage (recommended)"><span>Widen to measured 95% coverage (recommended)<small>Factor measured on the synthetic belt at build and recorded</small></span></label>
+      <label class="opt"><input type="radio" name="q3" value="Show 2 sigma as computed"><span>Show ±2σ as computed</span></label>
+    </fieldset>
+    <label for="notes">Notes</label>
+    <textarea id="notes" placeholder="Anything to change, add or question"></textarea>
+  </form>
+  <pre class="reply" id="out" aria-live="polite"></pre>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" id="copy">Copy reply</button><button class="btn ghost" type="button" id="clear">Clear answers</button><span id="copymsg" style="align-self:center;font-size:13px"></span></div>
+</section>
+</div>
+<footer>Bluestaq Limited · Not Classified · Evidence: <code>prototype/crossing.py</code> (production detector, synthetic burns), <code>prototype/capture.sh</code> (real interface, seeded worked burn).</footer>
+
+<!--DATA--><script id="data" type="application/json">{"results":{"accuracy":{"trials":400,"found":393,"crossed":360,"by_delta":{"0.05":{"n":89,"grid_median_h":3.636300208333333,"grid_p95_h":10.594085915277779,"cross_median_h":1.3204028670833334,"cross_p95_h":4.961770162777778,"crossed":68,"within_2_sigma":63},"0.1":{"n":102,"grid_median_h":2.30114105875,"grid_p95_h":7.201639793611111,"cross_median_h":0.7676667090277778,"cross_p95_h":2.422441475,"crossed":90,"within_2_sigma":81},"0.3":{"n":102,"grid_median_h":1.086464711527778,"grid_p95_h":3.7553161502777774,"cross_median_h":0.20875266236111112,"cross_p95_h":0.971395468611111,"crossed":102,"within_2_sigma":91},"1.0":{"n":100,"grid_median_h":0.7980106583333334,"grid_p95_h":1.805011878888889,"cross_median_h":0.06310457027777777,"cross_p95_h":0.2526816363888889,"crossed":100,"within_2_sigma":91}}},"stability":{"trials":60,"hours_advanced":9,"grid_distinct_epochs_median":2.0,"grid_distinct_epochs_max":5,"cross_spread_minutes_median":0.0,"cross_spread_minutes_p95":20.218001633333333,"burns_compared":60,"grid_id_changed":34,"cross_hour_id_changed":2},"example":{"series":[[0.0,99.9691],[0.598,99.959],[1.118,99.9585],[1.97,99.9363],[3.963,99.9063],[5.178,99.9205],[6.636,99.932],[8.438,99.9588],[9.723,99.9742],[10.319,99.9762],[11.956,100.0171],[12.503,100.0301],[14.301,100.0523],[16.119,100.0827],[17.691,100.0871],[19.392,100.0617],[20.559,100.0611],[21.205,100.029],[21.909,100.0247],[23.063,100.0148],[24.503,99.9631],[25.582,99.9547],[26.608,99.9231],[28.465,99.9131],[29.988,99.9345],[31.974,99.9373],[33.481,99.9788],[35.428,100.0252],[37.285,100.0386],[38.102,100.0572],[39.849,100.0742],[40.444,100.0792],[42.225,100.0801],[43.926,100.0564],[45.042,100.0405],[46.695,100.0075],[48.504,99.9745],[49.072,99.9568],[50.649,99.9229],[52.62,99.9311],[53.878,99.9274],[54.494,99.9257],[55.893,99.9483],[57.005,99.964],[58.421,99.9935],[60.223,100.0323],[61.193,100.0641],[62.26,100.0612],[63.451,100.0669],[64.844,100.081],[66.183,100.0638],[67.444,100.0507],[68.59,100.0431],[69.542,100.0202],[71.509,99.9743],[72.026,99.9716],[73.149,99.9501],[74.572,99.9298],[76.021,99.9288],[77.22,99.9222],[78.739,99.9219],[80.346,99.9614],[80.879,99.9723],[82.824,100.0066],[83.701,100.0115],[84.681,100.0434],[85.727,100.0558],[87.12,100.082],[88.071,100.0721],[88.611,100.0911],[89.965,100.0602],[90.799,100.0362],[92.505,99.996],[93.658,99.9634],[95.205,99.9114],[96.205,99.8767],[97.956,99.8071],[98.71,99.8074],[99.715,99.7722],[100.891,99.7516],[101.729,99.7634],[102.515,99.7595],[104.225,99.7583],[105.143,99.7575],[106.854,99.7678],[107.872,99.7746],[108.566,99.7867],[109.473,99.8075],[110.493,99.7893],[111.607,99.7957],[113.488,99.7696],[115.403,99.727],[117.223,99.6795],[119.148,99.606],[121.039,99.5477],[122.794,99.5114],[124.289,99.4657],[125.3,99.4596],[126.141,99.4641],[127.072,99.4576],[128.787,99.4757],[130.328,99.4774],[132.214,99.5018],[133.579,99.4864],[134.099,99.4968],[135.049,99.4907],[136.543,99.4755],[138.451,99.4481],[139.87,99.4093]],"true_h":88.6,"grid_h":87.0,"cross_h":88.537,"sigma_h":0.26,"before":{"at_cross":99.9972,"rate":-0.0034},"after":{"at_cross":99.9993,"rate":-0.2975},"win_h":48.0,"step_h":3.0}},"mock":{"event_id":"EXAMPLE-1:STARTED:2026-11-21T18:11:00+00:00","split":"2026-11-21T18:11:00+00:00","cross":"2026-11-21T19:43:10.939478+00:00","sigma_h":0.26,"series_last":"2026-11-23T23:03:11.049536+00:00","rate_before":-0.0032,"rate_after":-0.295},"seed":{"true_burn":"2026-11-21T19:47:00+00:00","fixes":109}}</script><!--/DATA-->
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("data").textContent);
+  var R = D.results, M = D.mock, A = R.accuracy.by_delta, S = R.stability, X = R.example;
+  var root = document.documentElement, KEY = "psirens-prop-ewtiming";
+  function css(v) { return getComputedStyle(root).getPropertyValue(v).trim(); }
+  function f1(v) { return v.toFixed(1); }
+  function pct(a, b) { return Math.round(100 * a / b) + "%"; }
+  function zt(iso) { var d = new Date(iso); return d.toUTCString().slice(5, 11) + " " + d.toISOString().slice(11, 16) + "Z"; }
+
+  var keys = Object.keys(A).sort(function (a, b) { return a - b; });
+  var p95max = Math.max.apply(null, keys.map(function (k) { return A[k].grid_p95_h; }));
+  var small = keys.filter(function (k) { return +k < 0.2; });
+  var smallN = small.reduce(function (s, k) { return s + A[k].n; }, 0);
+  var smallX = small.reduce(function (s, k) { return s + A[k].crossed; }, 0);
+  var crossedAll = keys.reduce(function (s, k) { return s + A[k].crossed; }, 0);
+  var inside = keys.reduce(function (s, k) { return s + A[k].within_2_sigma; }, 0);
+  var fill = {
+    gain03: f1(A["0.3"].grid_median_h / A["0.3"].cross_median_h) + "×",
+    idgrid: pct(S.grid_id_changed, S.burns_compared), idcross: pct(S.cross_hour_id_changed, S.burns_compared),
+    g005: f1(A["0.05"].grid_median_h), g03: f1(A["0.3"].grid_median_h), gp95max: f1(p95max),
+    griddist: String(S.grid_distinct_epochs_median), griddistmax: String(S.grid_distinct_epochs_max),
+    exgrid: f1(Math.abs(X.grid_h - X.true_h)), excross: Math.abs(X.cross_h - X.true_h).toFixed(2), exsig: f1(2 * X.sigma_h),
+    nocross: (smallN - smallX) + " of " + smallN, cover: pct(inside, crossedAll),
+    idcrossn: String(S.cross_hour_id_changed), idn: String(S.burns_compared),
+    mockslot: zt(M.split), mockcross: zt(M.cross) + " ±" + f1(2 * M.sigma_h) + " h",
+    mocktrue: zt(D.seed.true_burn)
+  };
+  document.querySelectorAll("[data-k]").forEach(function (el) { el.textContent = fill[el.dataset.k]; });
+
+  var tb = document.querySelector("#acctbl tbody");
+  keys.forEach(function (k) {
+    var a = A[k], tr = document.createElement("tr");
+    [k, a.n, f1(a.grid_median_h) + " / " + f1(a.grid_p95_h), f1(a.cross_median_h) + " / " + f1(a.cross_p95_h),
+     a.crossed + " of " + a.n, pct(a.within_2_sigma, a.crossed)].forEach(function (v) {
+      var td = document.createElement("td"); td.textContent = String(v); tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+
+  function sized(c) {
+    var b = c.getBoundingClientRect(), dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+    c.width = Math.round(b.width * dpr); c.height = Math.round(b.height * dpr);
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return { g: g, W: b.width, H: b.height };
+  }
+  var show = { before: true, after: true, slot: true, cross: true, truth: true };
+  var exMap = null;
+  function vline(g, x, top, bot, colour, dash, w) {
+    g.strokeStyle = colour; g.lineWidth = w; g.setLineDash(dash); g.beginPath(); g.moveTo(x, top); g.lineTo(x, bot); g.stroke(); g.setLineDash([]);
+  }
+  function drawEx() {
+    var c = document.getElementById("ex"), s = sized(c), g = s.g, W = s.W, H = s.H, pl = 52, pr = 12, pt = 12, pb = 34;
+    var pts = X.series, t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+    var ys = pts.map(function (p) { return p[1]; }), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys), pad = (y1 - y0) * 0.08;
+    var sx = function (t) { return pl + (t - t0) / (t1 - t0) * (W - pl - pr); };
+    var sy = function (v) { return pt + (1 - (v - y0 + pad) / (y1 - y0 + 2 * pad)) * (H - pt - pb); };
+    exMap = { sx: sx, t0: t0, t1: t1, pl: pl, pr: pr, W: W };
+    g.clearRect(0, 0, W, H); g.font = "12px Segoe UI, sans-serif"; g.fillStyle = css("--muted"); g.strokeStyle = css("--grid"); g.lineWidth = 1;
+    for (var h = Math.ceil(t0 / 24) * 24; h <= t1; h += 24) { var x = sx(h); g.beginPath(); g.moveTo(x, pt); g.lineTo(x, H - pb); g.stroke(); g.fillText("day " + Math.round(h / 24), x + 3, H - pb + 16); }
+    g.textAlign = "right"; for (var k = 0; k <= 4; k++) { var v = y0 - pad + k * (y1 - y0 + 2 * pad) / 4; g.fillText(v.toFixed(2) + "°", pl - 6, sy(v) + 4); }
+    g.textAlign = "left"; g.fillStyle = css("--dot");
+    pts.forEach(function (p) { g.beginPath(); g.arc(sx(p[0]), sy(p[1]), 2.2, 0, 7); g.fill(); });
+    var tc = X.cross_h, w = X.win_h;
+    function trend(side, colour, from, to) {
+      var f = X[side], v = function (t) { return f.at_cross + f.rate * (t - tc) / 24; };
+      g.strokeStyle = colour; g.lineWidth = 2.5; g.beginPath(); g.moveTo(sx(from), sy(v(from))); g.lineTo(sx(to), sy(v(to))); g.stroke();
+    }
+    if (show.before) { trend("before", css("--before"), Math.max(t0, tc - w), tc); }
+    if (show.after) { trend("after", css("--after"), tc, Math.min(t1, tc + w)); }
+    if (show.slot) { vline(g, sx(X.grid_h), pt, H - pb, css("--slot"), [5, 4], 1.5); }
+    if (show.cross) {
+      g.fillStyle = css("--cross"); g.globalAlpha = 0.18;
+      g.fillRect(sx(tc - 2 * X.sigma_h), pt, Math.max(2, sx(tc + 2 * X.sigma_h) - sx(tc - 2 * X.sigma_h)), H - pt - pb); g.globalAlpha = 1;
+      vline(g, sx(tc), pt, H - pb, css("--cross"), [], 2.5);
+    }
+    if (show.truth) { vline(g, sx(X.true_h), pt, H - pb, css("--truth"), [2, 3], 2); }
+  }
+  document.querySelectorAll("#exlegend input").forEach(function (cb) {
+    cb.addEventListener("change", function () { show[cb.dataset.s] = cb.checked; drawEx(); });
+  });
+  document.getElementById("ex").addEventListener("mousemove", function (ev) {
+    if (!exMap) { return; }
+    var r = ev.currentTarget.getBoundingClientRect(), x = ev.clientX - r.left;
+    var t = exMap.t0 + (x - exMap.pl) / (exMap.W - exMap.pl - exMap.pr) * (exMap.t1 - exMap.t0);
+    var rel = function (h) { var d = t - h; return (d >= 0 ? "" : "minus ") + Math.abs(d).toFixed(1) + " h"; };
+    document.getElementById("exread").textContent = "cursor: " + rel(X.true_h) + " from the true burn · grid stamp " +
+      f1(X.grid_h - X.true_h) + " h · crossing " + (X.cross_h - X.true_h).toFixed(2) + " h";
+  });
+
+  function drawAcc() {
+    var c = document.getElementById("acc"), s = sized(c), g = s.g, W = s.W, H = s.H, pl = 44, pb = 40, pt = 14;
+    var top = Math.ceil(Math.max.apply(null, keys.map(function (k) { return A[k].grid_median_h; })));
+    var band = (W - pl - 10) / keys.length, bw = Math.min(46, band / 3);
+    g.clearRect(0, 0, W, H); g.font = "12px Segoe UI, sans-serif";
+    var sy = function (v) { return pt + (1 - v / top) * (H - pt - pb); };
+    g.strokeStyle = css("--grid"); g.fillStyle = css("--muted"); g.textAlign = "right";
+    for (var v = 0; v <= top; v++) { g.beginPath(); g.moveTo(pl, sy(v)); g.lineTo(W - 10, sy(v)); g.stroke(); g.fillText(v + " h", pl - 6, sy(v) + 4); }
+    g.textAlign = "center";
+    keys.forEach(function (k, i) {
+      var cx = pl + band * (i + 0.5);
+      [[A[k].grid_median_h, css("--slot"), -1], [A[k].cross_median_h, css("--cross"), 1]].forEach(function (b) {
+        var x = cx + b[2] * (bw / 2 + 2) - bw / 2; g.fillStyle = b[1]; g.fillRect(x, sy(b[0]), bw, sy(0) - sy(b[0]));
+        g.fillStyle = css("--body"); g.fillText(f1(b[0]), x + bw / 2, sy(b[0]) - 4);
+      });
+      g.fillStyle = css("--muted"); g.fillText(k + " deg/day", cx, H - pb + 18);
+    });
+  }
+
+  var cap = document.getElementById("cap");
+  document.querySelectorAll("#figB .hs").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("#figB .hs").forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      cap.textContent = b.textContent + ". " + b.dataset.c;
+    });
+  });
+
+  try { var th = localStorage.getItem(KEY + "-theme"); if (th) { root.dataset.theme = th; } } catch (e) { /* storage blocked */ }
+  function redraw() { drawEx(); drawAcc(); }
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.dataset.theme ? root.dataset.theme === "dark" : globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem(KEY + "-theme", root.dataset.theme); } catch (e) { /* storage blocked */ }
+    redraw();
+  });
+  globalThis.addEventListener("resize", redraw);
+  redraw();
+
+  var form = document.getElementById("decide"), out = document.getElementById("out");
+  var LABELS = { q1: "Go or no-go", q2: "Event id keyed on", q3: "Width of the stated uncertainty" };
+  function render() {
+    var lines = ["East-west burn timing proposal (23 November 2026): decisions", ""], data = {};
+    Object.keys(LABELS).forEach(function (k, i) {
+      var c = form.querySelector('input[name="' + k + '"]:checked'); data[k] = c ? c.value : "";
+      lines.push((i + 1) + ". " + LABELS[k] + ": " + (data[k] || "(not answered)"));
+    });
+    var notes = document.getElementById("notes").value.trim(); data.notes = notes;
+    if (notes) { lines.push("", "Notes: " + notes); }
+    out.textContent = lines.join("\n");
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* storage blocked */ }
+  }
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    Object.keys(LABELS).forEach(function (k) {
+      if (saved[k]) { var i = form.querySelector('input[name="' + k + '"][value="' + CSS.escape(saved[k]) + '"]'); if (i) { i.checked = true; } }
+    });
+    if (saved.notes) { document.getElementById("notes").value = saved.notes; }
+  } catch (e) { /* storage blocked */ }
+  form.addEventListener("input", render); render();
+  document.getElementById("copy").addEventListener("click", function () {
+    var msg = document.getElementById("copymsg");
+    if (navigator.clipboard) { navigator.clipboard.writeText(out.textContent).then(function () { msg.textContent = "Copied"; }, function () { msg.textContent = "Select the text and copy it"; }); }
+    else { msg.textContent = "Select the text and copy it"; }
+  });
+  document.getElementById("clear").addEventListener("click", function () { form.reset(); document.getElementById("notes").value = ""; render(); });
+})();
+</script>
+</body>
+</html>

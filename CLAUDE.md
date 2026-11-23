@@ -80,6 +80,20 @@ done in 1.7.10; (5) `TEAM_TOKEN` is NOT SET in the deployment, so write
 routes are guarded by the platform sign-in alone and the interface's Pull
 control was working, only blind to its own answer.
 
+PROPOSAL AWAITING ASH, 23 November 2026: EAST-WEST BURN TIMING,
+`proposals/2026-11-23-ew-timing/PROPOSAL.html`. Time a confirmed E-W burn
+where the before and after trend fits cross (refined twice, refused beyond
+two grid steps, grid split kept for audit), state +/-2 sigma, key the id on
+the crossing rounded to the hour. MEASURED by `prototype/crossing.py` on the
+PRODUCTION detector, 393 synthetic burns: median error 0.3 deg/day burn 1.1 h
+(grid) to 0.2 h (crossing), 1.0 deg/day 0.8 h to 0.06 h; id changed within
+9 h of new data for 34 of 60 burns (grid) against 2 of 60 (crossing, hour
+key). LIMITS: 33 of 191 burns under 0.1 deg/day do not cross and keep the
+grid stamp; ~91% of truths inside +/-2 sigma, not 95%. Three decisions on
+its form: go, id keying, uncertainty width. LEAD EVERY REPLY WITH IT until
+answered. Mockup figures from `prototype/capture.sh` (real interface,
+worked burn seeded as EXAMPLE-1, because UDL-enabled starts purge DEMO-*).
+
 1.7.10, 23 November 2026: `UDL_SLICE_HOURS` default 24 -> 1 (a live day is
 ~24 requests fetched once, instead of 33 requests fetching it about five
 times; still overridable by env), guarded by
