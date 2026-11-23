@@ -1271,7 +1271,13 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   sign-in (with and without the cookie) and a real local token-gated instance
   (wrong token, right token). TBC, owner Ash: whether the platform accepts a
   copied session cookie from a non-browser client, and whether it offers a
-  proper machine credential instead.
+  proper machine credential instead. RESOLVED, FACT, same day: a copied
+  session cookie (`_appstore_app_session`) works from the script; `--check`
+  reported 1.7.8. SECURITY LESSON: the first instructions used plain
+  `Read-Host`, which ECHOES, and the live cookie value reached the screen, a
+  screenshot and this conversation. The script now has `--ask-cookie`
+  (getpass, no echo). Never instruct an unmasked prompt for a secret.
+  Ash told to sign out to end the exposed session and sign in fresh.
   FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
   (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
   the response. So either `TEAM_TOKEN` is unset in the deployment (writes are

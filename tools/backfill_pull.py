@@ -38,10 +38,11 @@ the session from a browser that has the app open: developer tools (F12),
 Network, reload, click any `/api/meta` request, Request Headers, and copy the
 whole value of the `Cookie` header into PSIRENS_COOKIE. Treat it like a
 password: it is your signed-in session until it expires. Never paste it on the
-command line. PowerShell:
-    $env:PSIRENS_COOKIE = Read-Host "Cookie"      # paste, then Enter
-    $env:PSIRENS_TOKEN  = Read-Host "Token"       # blank if none is set
-    python backfill_pull.py --base https://<app-url> --check
+command line, and never into `Read-Host` without masking: plain Read-Host
+ECHOES it (FACT, 23 November 2026, a live session cookie ended up on screen
+and in a screenshot that way). Use --ask-cookie, which prompts without echo:
+    python backfill_pull.py --base https://<app-url> --ask-cookie --check
+The token prompts without echo too (press Enter if the deployment sets none).
 
 Usage
     export PSIRENS_TOKEN=...                  # never passed on the command line
@@ -434,6 +435,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="per-call HTTP timeout in seconds")
     ap.add_argument("--check", action="store_true",
                     help="report the deployment's version and ingest health, pull nothing")
+    ap.add_argument("--ask-cookie", action="store_true",
+                    help="prompt for the browser session cookie WITHOUT echo "
+                         "(else it is read from %s)" % COOKIE_ENV)
     ap.add_argument("--json", metavar="PATH", help="write the full report as JSON")
     ap.add_argument("--self-test", action="store_true",
                     help="offline checks of the pure helpers; no network, no token")
@@ -449,6 +453,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     if bool(args.start) != bool(args.end):
         ap.error("--start and --end must both be given, or neither")
 
+    if args.ask_cookie:
+        try:
+            os.environ[COOKIE_ENV] = getpass.getpass(
+                "Browser Cookie header value (not echoed): ").strip()
+        except (EOFError, OSError):
+            print("No terminal to prompt on; set %s instead." % COOKIE_ENV,
+                  file=sys.stderr)
+            return 2
     token = read_token(required=not args.check)
     if args.check:
         return check_build(args.base, token, args.timeout)
