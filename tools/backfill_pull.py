@@ -32,6 +32,17 @@ refuses to start against an older deployment.
 Nothing here is destructive. `/api/pull` merges; the store is anti-shrink and
 never deletes a sample a pull happened not to include.
 
+SIGN-IN (23 November 2026). The App Store puts a sign-in in front of the app,
+so a script without a browser session gets the sign-in page, not PSIRENS. Copy
+the session from a browser that has the app open: developer tools (F12),
+Network, reload, click any `/api/meta` request, Request Headers, and copy the
+whole value of the `Cookie` header into PSIRENS_COOKIE. Treat it like a
+password: it is your signed-in session until it expires. Never paste it on the
+command line. PowerShell:
+    $env:PSIRENS_COOKIE = Read-Host "Cookie"      # paste, then Enter
+    $env:PSIRENS_TOKEN  = Read-Host "Token"       # blank if none is set
+    python backfill_pull.py --base https://<app-url> --check
+
 Usage
     export PSIRENS_TOKEN=...                  # never passed on the command line
     python3 backfill_pull.py --base https://<app-url> --check
@@ -53,6 +64,7 @@ import getpass
 import json
 import logging
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -64,10 +76,18 @@ from typing import Any, Dict, List, Optional, Tuple
 LOG = logging.getLogger("backfill_pull")
 
 TOKEN_ENV = "PSIRENS_TOKEN"
-# Chunk size in hours. Six slices per call at UDL_SLICE_HOURS=24, so ten
-# seconds of deliberate pausing plus six upstream requests: minutes of headroom
-# under a 60-second gateway timeout even on a slow tenant.
-DEFAULT_CHUNK_H = 144
+# The platform puts a sign-in in front of the app. A browser carries the
+# session as a cookie; this script has no browser, so it can carry the same
+# cookie, copied from a signed-in browser (FACT, 23 November 2026: --check
+# against the live host got a non-JSON page back, not PSIRENS). Read from the
+# environment only, never printed, for the same reasons as the token.
+COOKIE_ENV = "PSIRENS_COOKIE"
+# Chunk size in hours: ONE upstream day per call. The old default (144) assumed
+# one request per day; the live /api/meta of 23 November 2026 showed a 24 h
+# refresh costs 33 upstream requests and ~423,000 rows because the truncation
+# guard halves every full response. A 24 h chunk is exactly what the hourly
+# refresh already completes; six of them in one request risks the gateway.
+DEFAULT_CHUNK_H = 24
 # `/api/pull` is behind the strict limiter: 6 calls per 60 seconds, keyed by
 # client. Chunks take far longer than that to run, so this pause exists only to
 # keep a fast failure path (every chunk erroring instantly) from tripping it.
@@ -142,12 +162,78 @@ def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 # --------------------------------------------------------------------------
 # Network
 # --------------------------------------------------------------------------
+class NotPsirens(Exception):
+    """Something answered, and it was not PSIRENS JSON. The message says what
+    did answer, because "cannot reach" for a page that arrived is a lie."""
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects. Followed silently, a sign-in redirect turns into a
+    200 carrying a login page, and the only symptom is a JSON parse error."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def bare_url(url: str) -> str:
+    """scheme://host/path only. A sign-in redirect's query carries state and
+    sometimes tokens, so it is never printed."""
+    parts = urllib.parse.urlsplit(str(url or ""))
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
+def page_title(body: bytes) -> str:
+    """The <title> of an HTML page, or "" : enough to name a sign-in page
+    without printing its body."""
+    match = re.search(rb"<title[^>]*>(.*?)</title>", body[:20000], re.I | re.S)
+    if not match:
+        return ""
+    return " ".join(match.group(1).decode("utf-8", "replace").split())[:80]
+
+
+def explain_http(code: int, location: str) -> str:
+    """One line for an HTTP status, naming the likely fix."""
+    if 300 <= code < 400:
+        return ("HTTP %d redirect to %s: the platform sign-in answered, not "
+                "PSIRENS. Set %s from a signed-in browser (see --help)."
+                % (code, bare_url(location) or "an unstated address", COOKIE_ENV))
+    if code == 401:
+        return ("HTTP 401: refused. If the sign-in is satisfied, the team token "
+                "is wrong or missing (%s)." % TOKEN_ENV)
+    if code == 403:
+        return "HTTP 403: signed in but not permitted (platform entitlement)."
+    if code == 429:
+        return "HTTP 429: rate limited (6 pulls per minute); re-run the window."
+    return "HTTP %d" % code
+
+
 def _request(url: str, token: str, method: str, timeout: float) -> Dict[str, Any]:
     req = urllib.request.Request(url, method=method)
+    req.add_header("Accept", "application/json")
     if token:
         req.add_header("Authorization", "Bearer " + token)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    cookie = os.environ.get(COOKIE_ENV, "").strip()
+    if cookie:
+        req.add_header("Cookie", cookie)
+    try:
+        resp = _OPENER.open(req, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        raise NotPsirens(explain_http(exc.code, exc.headers.get("Location", ""))) from exc
+    with resp:
+        body = resp.read()
+        ctype = resp.headers.get("Content-Type", "")
+        final = resp.geturl()
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        title = page_title(body)
+        raise NotPsirens("HTTP %s %s from %s%s: not PSIRENS JSON. Probably the "
+                         "platform sign-in page; set %s (see --help)."
+                         % (resp.status, ctype or "no content type", bare_url(final),
+                            ' titled "%s"' % title if title else "", COOKIE_ENV)) from exc
 
 
 def fetch_meta(base: str, token: str, timeout: float) -> Dict[str, Any]:
@@ -163,11 +249,12 @@ def pull_once(base: str, token: str, mode: str, start: datetime, end: datetime,
     row: Dict[str, Any] = {"start": iso_z(start), "end": iso_z(end), "ok": False}
     try:
         body = _request(url, token, "POST", timeout)
-    except urllib.error.HTTPError as exc:
-        row["detail"] = "HTTP %s" % exc.code
+    except NotPsirens as exc:
+        row["detail"] = str(exc)
         return row
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        row["detail"] = type(exc).__name__
+        row["detail"] = "%s: %s" % (type(exc).__name__,
+                                    getattr(exc, "reason", None) or exc)
         return row
     status = body.get("status")
     if status != "ok":
@@ -188,9 +275,12 @@ def check_build(base: str, token: str, timeout: float) -> int:
     """Report the deployment's version and whether a backfill can fill RAAN."""
     try:
         meta = fetch_meta(base, token, timeout)
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError,
-            TimeoutError, ValueError) as exc:
-        print("CANNOT REACH %s: %s" % (base, type(exc).__name__))
+    except NotPsirens as exc:
+        print("REACHED %s BUT NOT PSIRENS: %s" % (bare_url(base), exc))
+        return 2
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
+        print("CANNOT REACH %s: %s: %s" % (bare_url(base), type(exc).__name__,
+                                           getattr(exc, "reason", None) or exc))
         return 2
     version = str(meta.get("version", ""))
     print("version            %s" % (version or "not reported"))
@@ -280,6 +370,20 @@ def self_test() -> int:
     check("failed windows are named", summary["failed_windows"], [("c", "d")])
     check("upstream errors are collected", summary["upstream_errors"], ["x"])
 
+    # Saying what answered (23 November 2026).
+    check("a redirect query is never printed",
+          bare_url("https://sso.example/oauth2/start?rd=x&state=secret"),
+          "https://sso.example/oauth2/start")
+    check("a redirect names the cookie fix",
+          COOKIE_ENV in explain_http(302, "https://sso.example/login?x=1"), True)
+    check("a redirect never prints its query",
+          "x=1" in explain_http(302, "https://sso.example/login?x=1"), False)
+    check("401 names the token", TOKEN_ENV in explain_http(401, ""), True)
+    check("a page title is found", page_title(b"<html><TITLE> Sign in\n</TITLE>"),
+          "Sign in")
+    check("no title is empty", page_title(b"{}"), "")
+    check("the default chunk is one upstream day", DEFAULT_CHUNK_H, 24)
+
     if failures:
         for line in failures:
             print("FAIL " + line)
@@ -298,7 +402,8 @@ def read_token(required: bool) -> str:
     if token or not required:
         return token
     try:
-        return getpass.getpass("PSIRENS team token (not echoed): ").strip()
+        return getpass.getpass("PSIRENS team token (not echoed; Enter if the "
+                               "deployment sets none): ").strip()
     except (EOFError, OSError):
         # No terminal to prompt on: a cron job, a pipe, a CI step. Say what is
         # missing rather than dying in a traceback.

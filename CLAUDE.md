@@ -1253,6 +1253,29 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   neighbours there was nothing to collide, so the guard would have passed on a
   chart that could not fail. Four co-located objects now sit around BEIDOU-3 G1
   at 140E, which is also what a real GEO neighbourhood looks like.
+- BACKFILL BLOCKED BY THE PLATFORM SIGN-IN, 23 November 2026. FACT: the
+  deployed address is `https://psirens.appstore.bluestaq.com/` (Ash's
+  PowerShell). FACT: `backfill_pull.py --check` from Ash's workstation got a
+  NON-JSON answer (`JSONDecodeError`), which the script mislabelled "CANNOT
+  REACH". INFERENCE, strong: the App Store sign-in redirected the request to a
+  login page, which urllib followed silently (requests arrive carrying
+  `X-Auth-Request-Email`, so a sign-in proxy sits in front). PROVEN locally:
+  the old script against a fake sign-in redirect prints Ash's exact line.
+  FIXED in the tool (not the app): redirects are refused and named (query
+  never printed, it carries state), a non-JSON page is named with its title,
+  401/403/429 each say what to do, the browser session can be sent from
+  `PSIRENS_COOKIE` (env only, never printed), and the default chunk is now 24 h
+  because one live day is 33 upstream requests. Verified against the fake
+  sign-in (with and without the cookie) and a real local token-gated instance
+  (wrong token, right token). TBC, owner Ash: whether the platform accepts a
+  copied session cookie from a non-browser client, and whether it offers a
+  proper machine credential instead.
+  FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
+  (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
+  the response. So either `TEAM_TOKEN` is unset in the deployment (writes are
+  then guarded only by the platform sign-in) or every interface pull returns a
+  401 nobody sees. Ask Ash which; the second is the `response.ok` pattern a
+  fourth time (1.5.2, 1.6.4, 1.6.13).
 - BACKFILL PULL, still outstanding and NOT something this environment can run.
   It needs the deployed app's URL, the team token and a route to an internal
   host; this container has none of the three, and no deployed URL is recorded
