@@ -71,6 +71,23 @@ untagged history and gives the observed cross-check its 24 h; run
 `tools/udl_elset_probe.py` to confirm live element sets state their
 ephemeris type, which the agreement check and the consensus both depend on.
 
+1.7.9, 23 November 2026: INGEST DIAGNOSIS FIX, from Ash's live `/api/meta`
+(FACT: version 1.7.8 confirmed live, data 0.65 h old, 0 request failures,
+`last_ingest_added: 1177` beside the diagnosis "no new epochs in the window").
+`Refresher.diagnosis()` never read `added`; it now says "healthy: N new
+fix(es) merged for M high-interest object(s)". Also: the truncation guard was
+a log line only. `/api/meta` now carries `last_ingest_requests_halved` and
+`last_ingest_truncated_windows`, and the diagnosis names a window still full at
+the smallest slice ("newer fixes may be missing"). Live counts, read with the
+new knowledge: 33 requests is a halving tree (17 leaves, 16 discarded parents,
+INFERENCE), and 423,571 rows over 33 requests exceeds 33 x 10,000, so
+`/udl/elset` without `maxResults` is NOT capped at 10,000 here (FACT,
+arithmetic). The halving re-fetches each 24 h window about five times; working
+and correct, wasteful. Lowering `UDL_SLICE_HOURS` would stop it but multiplies
+the inter-slice pause inside a backfill chunk, so it is left for Ash. Four red
+cases added (18 of 18 go red). `docs/API-REFERENCE.html` documents every route.
+Upload 1.7.9.
+
 1.7.8, 17 November 2026: a CONSENSUS DRIFT RATE. Ash, from four live
 inspector panels all reading "no usable baseline": "now we have sorted the
 provider states, we need to come to a consensus on the actual drift rate, I
@@ -638,7 +655,10 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `last_ingest_added`, `last_ingest_errors`, `last_successful_ingest`, and
   from 1.6.9 the STAGE COUNTS `last_ingest_requests`,
   `last_ingest_request_failures`, `last_ingest_rows`, `last_ingest_fetched`,
-  `last_ingest_kept`, `hrr_list_size` and `ingest_diagnosis`.
+  `last_ingest_kept`, `hrr_list_size` and `ingest_diagnosis`; from 1.7.9
+  `last_ingest_requests_halved` (responses at the threshold set aside and
+  re-requested in halves, which `last_ingest_rows` still counts) and
+  `last_ingest_truncated_windows` (still full at the smallest slice).
   `last_refresh` alone is a trap: it advances every tick whether or not a
   record arrived. `last_ingest_added: 0` is a second trap: on its own it
   cannot tell a quiet feed from a rejected one. `/readyz` stays 200 when
@@ -1767,4 +1787,8 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   reported by eslint-plugin-sonarjs, including the one that failed 1.5.2, so a
   green eslint run does not predict a green SonarQube gate.
 - `READINESS.md` — pre-submit App Store readiness scoring.
+- `docs/API-REFERENCE.html` - every route (16 plus FastAPI's `/docs`, `/redoc`,
+  `/openapi.json`, which are ON and untokened: a decision for Ash), built from
+  the route table and responses captured offline. Update it with any route or
+  payload change. Not in the deploy zip.
 - `pyproject.toml` — tool config and the coverage floor.

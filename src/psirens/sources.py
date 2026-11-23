@@ -299,6 +299,14 @@ class FetchStats:
     # Rows refused at the boundary, by reason (1.7.4): incomplete elements, no
     # provider, no marking, no recognised data mode. Counted, never filled in.
     rejected: dict[str, int] = field(default_factory=dict)
+    # The truncation guard (1.7.9). `halved` counts responses at or above the
+    # threshold that were set aside and asked for again as two halves, so
+    # `rows` includes them and over-counts what was used. `truncated` counts
+    # windows still at the threshold when they could not be split further:
+    # those may be MISSING fixes. Until 1.7.9 both were a log line only, the
+    # same silence 1.6.9 removed for failed requests.
+    halved: int = 0
+    truncated: int = 0
 
     def note_failure(self, reason: str) -> None:
         self.failures += 1
@@ -442,6 +450,7 @@ class UDLElsetSource:
                     "records are the ones a truncated page drops.",
                     len(rows), _udl_ts(start), _udl_ts(end),
                     self.cfg.udl_truncation_threshold)
+                self.last_stats.halved += 1
                 out = self._fetch_slice(client, start, start + span, depth + 1)
                 _merge_records(out, self._fetch_slice(client, start + span, end,
                                                       depth + 1))
@@ -450,6 +459,7 @@ class UDLElsetSource:
                 "UDL returned %d rows for a %s window that cannot be split "
                 "further; the result is probably TRUNCATED and newer fixes "
                 "may be missing.", len(rows), end - start)
+            self.last_stats.truncated += 1
         return self._normalise(rows)
 
     def _target_of(self, row: dict) -> str | None:

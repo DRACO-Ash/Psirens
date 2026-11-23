@@ -255,3 +255,58 @@ def test_meta_carries_the_stage_counts(client):
                 "last_ingest_rows", "last_ingest_fetched", "last_ingest_kept",
                 "hrr_list_size", "ingest_diagnosis"):
         assert key in body, f"/api/meta must report {key}"
+
+
+# -- 1.7.9: the diagnosis reads `added`, and truncation is counted ----------
+def test_the_diagnosis_never_says_no_new_epochs_when_epochs_arrived(tmp_path):
+    """Ash's live /api/meta, 23 November 2026, verbatim counts: 1177 added
+    beside "no new epochs in the window". Reinstating the old fall-through
+    makes this fail."""
+    from psirens.refresh import IngestResult
+
+    ref = _refresher(tmp_path, _seeded_store(tmp_path, _NOW))
+    ref.last_ingest = IngestResult(added=1177, requests=33, rows=423571,
+                                   fetched=24957, kept=581, hrr_size=597)
+    text = ref.diagnosis()
+    assert "no new epochs" not in text
+    assert "1177" in text and text.startswith("healthy")
+
+
+def test_a_halved_response_is_counted(tmp_path):
+    from test_sources import _RecordingTransport, _row, _slice_cfg
+    import httpx
+    from psirens.sources import UDLElsetSource
+
+    def rows(_rng, n):
+        return [_row(satNo=str(40000 + i)) for i in range(5)] if n == 1 else []
+    t = _RecordingTransport(rows)
+    src = UDLElsetSource(_slice_cfg(), client=httpx.Client(transport=t))
+    src.fetch(_NOW - timedelta(hours=24), _NOW)
+    assert src.last_stats.halved == 1
+    assert src.last_stats.truncated == 0
+    assert src.last_stats.requests == 3
+
+
+def test_a_window_still_full_at_the_smallest_slice_reaches_the_operator(tmp_path):
+    """The silent case: a window that cannot be split any further and is
+    still at the threshold. Until 1.7.9 that was a log line only."""
+    from test_sources import _RecordingTransport, _row, _slice_cfg
+    import httpx
+    from psirens.sources import UDLElsetSource
+
+    t = _RecordingTransport(lambda _rng, _n: [_row(satNo=str(40000 + i))
+                                              for i in range(5)])
+    cfg = _slice_cfg()
+    src = UDLElsetSource(cfg, client=httpx.Client(transport=t))
+    ref = Refresher(cfg, _seeded_store(tmp_path, _NOW), [src], SingleFlight())
+    ref.run_once(now=_NOW)
+    health = ref.health(_NOW)
+    assert health["last_ingest_truncated_windows"] > 0
+    assert health["last_ingest_requests_halved"] > 0
+    assert "newer fixes may be missing" in health["ingest_diagnosis"]
+
+
+def test_meta_carries_the_truncation_counts(client):
+    body = client.get("/api/meta").json()
+    assert body["last_ingest_requests_halved"] == 0
+    assert body["last_ingest_truncated_windows"] == 0

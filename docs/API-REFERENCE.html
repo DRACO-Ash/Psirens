@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSIRENS API Reference</title>
+<meta name="description" content="Every HTTP route the PSIRENS application serves, its parameters, its response and its access rules, for build 1.7.9.">
+<style>
+:root{
+  --navy:#162646;--blue1:#385FAF;--blue2:#739BCF;--amber:#C67C00;--green:#27AE60;
+  --body:#2C3E50;--bg:#F5F7FB;--card:#FFFFFF;--line:#DCE3EE;--muted:#5B6B80;
+  --code-bg:#EEF2F8;--get:#27AE60;--post:#385FAF;--del:#B03A2E;--chip:#E8EEF8;
+  --head-bg:#162646;--head-fg:#FFFFFF;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --body:#DCE4F0;--bg:#0E1626;--card:#152036;--line:#26344F;--muted:#9AA9C0;
+    --code-bg:#0B1220;--chip:#1D2B47;--head-bg:#0B1220;--head-fg:#FFFFFF;
+    --blue1:#739BCF;--del:#E06A5E;--get:#3CCB7F;--post:#8DB2E8;
+  }
+}
+:root[data-theme="dark"]{
+  --body:#DCE4F0;--bg:#0E1626;--card:#152036;--line:#26344F;--muted:#9AA9C0;
+  --code-bg:#0B1220;--chip:#1D2B47;--head-bg:#0B1220;--head-fg:#FFFFFF;
+  --blue1:#739BCF;--del:#E06A5E;--get:#3CCB7F;--post:#8DB2E8;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--body);font:15px/1.55 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+code,pre,.mono{font-family:Consolas,"Cascadia Mono","SFMono-Regular",Menlo,monospace;font-size:13px}
+a{color:var(--blue1)}
+header.top{background:var(--head-bg);color:var(--head-fg);padding:18px 16px 16px}
+.top-in{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
+.brand{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#B9C8E4}
+h1{margin:4px 0 2px;font-size:26px;font-weight:600}
+.sub{color:#C9D6EC;font-size:14px}
+.top-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.top-tools input{width:240px;max-width:70vw;padding:8px 10px;border-radius:6px;border:1px solid #33476E;background:#0F1B33;color:#fff}
+.top-tools button{padding:8px 10px;border-radius:6px;border:1px solid #33476E;background:#22355C;color:#fff;cursor:pointer}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px}
+nav.toc{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto;font-size:14px}
+nav.toc h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 6px}
+nav.toc a{display:flex;gap:6px;align-items:center;padding:3px 6px;border-radius:5px;text-decoration:none;color:var(--body)}
+nav.toc a:hover{background:var(--chip)}
+nav.toc a.hidden{display:none}
+.m{display:inline-block;min-width:52px;text-align:center;font-weight:700;font-size:11px;padding:2px 6px;border-radius:4px;color:#fff}
+.m.GET{background:var(--get)}.m.POST{background:var(--post)}.m.DELETE{background:var(--del)}
+main section.block{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:18px}
+h2.sec{font-size:20px;margin:0 0 10px;color:var(--blue1)}
+h3{font-size:15px;margin:16px 0 6px}
+p{margin:8px 0}
+ul.dot{list-style:none;padding-left:0;margin:8px 0}
+ul.dot li{position:relative;padding-left:18px;margin:4px 0}
+ul.dot li::before{content:"●";position:absolute;left:0;color:var(--blue2);font-size:11px;top:3px}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+td code{background:var(--code-bg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.tbl{overflow-x:auto}
+.overview td:nth-child(2){white-space:nowrap}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;background:var(--chip);color:var(--body);margin-right:4px;white-space:nowrap}
+.tag.tok{background:#F6E7CC;color:#6B4300}
+.tag.new{background:#D8F1E3;color:#145A32}
+:root[data-theme="dark"] .tag.tok{background:#4A3510;color:#F3D9A6}
+:root[data-theme="dark"] .tag.new{background:#173D2A;color:#A9E5C3}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .tag.tok{background:#4A3510;color:#F3D9A6}
+  :root:not([data-theme="light"]) .tag.new{background:#173D2A;color:#A9E5C3}
+}
+details.ep{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
+details.ep[open]{box-shadow:0 2px 10px rgba(22,38,70,.08)}
+details.ep>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+details.ep>summary::-webkit-details-marker{display:none}
+details.ep>summary .path{font-family:Consolas,Menlo,monospace;font-size:15px;font-weight:600}
+details.ep>summary .what{color:var(--muted);font-size:14px;flex:1 1 260px}
+details.ep>summary .chev{margin-left:auto;color:var(--muted);transition:transform .15s}
+details.ep[open]>summary .chev{transform:rotate(90deg)}
+.ep-body{padding:0 18px 16px;border-top:1px solid var(--line)}
+.callout{border-left:4px solid var(--amber);background:var(--code-bg);padding:8px 12px;border-radius:0 6px 6px 0;margin:10px 0;font-size:14px}
+.callout.info{border-left-color:var(--blue1)}
+.callout.good{border-left-color:var(--green)}
+.cmd{position:relative;margin:8px 0}
+.cmd pre{margin:0;background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:10px 70px 10px 12px;overflow-x:auto;white-space:pre}
+.cmd button{position:absolute;top:6px;right:6px;font-size:12px;padding:4px 8px;border-radius:5px;border:1px solid var(--line);background:var(--card);color:var(--body);cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted);margin-top:6px}
+.empty{display:none;color:var(--muted);padding:12px}
+footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--muted);font-size:13px}
+@media (max-width:860px){
+  .wrap{grid-template-columns:minmax(0,1fr)}
+  nav.toc{position:static;max-height:none}
+  h1{font-size:22px}
+}
+@media print{
+  header.top,nav.toc,.top-tools,.cmd button{display:none}
+  .wrap{display:block}
+  details.ep{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div>
+      <div class="brand">Bluestaq Limited · Not Classified</div>
+      <h1>PSIRENS API Reference</h1>
+      <div class="sub">Every route the application serves, for build 1.7.9. Generated from the live route table and from captured responses, 23 November 2026.</div>
+    </div>
+    <div class="top-tools">
+      <input id="q" type="search" placeholder="Filter routes, e.g. drift or token" aria-label="Filter routes">
+      <button id="expand" type="button">Expand all</button>
+      <button id="theme" type="button" aria-label="Switch theme">Theme</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<nav class="toc" aria-label="Contents">
+  <h2>Start here</h2>
+  <a href="#overview">All routes at a glance</a>
+  <a href="#access">Access, limits and errors</a>
+  <h2>Read the picture</h2>
+  <a href="#ep-tracks" data-ep="ep-tracks"><span class="m GET">GET</span>/api/tracks</a>
+  <a href="#ep-events" data-ep="ep-events"><span class="m GET">GET</span>/api/events</a>
+  <a href="#ep-hrr" data-ep="ep-hrr"><span class="m GET">GET</span>/api/hrr</a>
+  <a href="#ep-conj" data-ep="ep-conj"><span class="m GET">GET</span>/api/conjunctions</a>
+  <a href="#ep-coplanar" data-ep="ep-coplanar"><span class="m GET">GET</span>/api/coplanar</a>
+  <a href="#ep-meta" data-ep="ep-meta"><span class="m GET">GET</span>/api/meta</a>
+  <h2>Change the data</h2>
+  <a href="#ep-pull" data-ep="ep-pull"><span class="m POST">POST</span>/api/pull</a>
+  <a href="#ep-refresh" data-ep="ep-refresh"><span class="m POST">POST</span>/api/refresh</a>
+  <a href="#ep-manual-add" data-ep="ep-manual-add"><span class="m POST">POST</span>/api/manual-elset</a>
+  <a href="#ep-manual-del" data-ep="ep-manual-del"><span class="m DELETE">DEL</span>/api/manual-elset/{id}</a>
+  <h2>Health and platform</h2>
+  <a href="#ep-healthz" data-ep="ep-healthz"><span class="m GET">GET</span>/healthz</a>
+  <a href="#ep-readyz" data-ep="ep-readyz"><span class="m GET">GET</span>/readyz</a>
+  <h2>Interface and files</h2>
+  <a href="#ep-index" data-ep="ep-index"><span class="m GET">GET</span>/</a>
+  <a href="#ep-favicon" data-ep="ep-favicon"><span class="m GET">GET</span>/favicon.ico</a>
+  <a href="#ep-static" data-ep="ep-static"><span class="m GET">GET</span>/static/{name}</a>
+  <h2>Framework defaults</h2>
+  <a href="#ep-docs" data-ep="ep-docs"><span class="m GET">GET</span>/docs, /redoc, /openapi.json</a>
+</nav>
+
+<main>
+<section class="block" id="overview">
+  <h2 class="sec">All routes at a glance</h2>
+  <p>16 application routes, plus 3 that the FastAPI framework adds by default. Read routes need no token inside the application; the 4 routes that change data need the team token. Click a path to jump to its detail.</p>
+  <div class="tbl">
+  <table class="overview">
+    <thead><tr><th>Method</th><th>Path</th><th>What it does</th><th>Access</th></tr></thead>
+    <tbody>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-tracks"><code>/api/tracks</code></a></td><td>The plotted belt: every object's track, provider agreement and consensus drift rate</td><td><span class="tag">120/min</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-events"><code>/api/events</code></a></td><td>The Shift Brief: manoeuvres, early warnings and silences, newest first</td><td><span class="tag">120/min</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-hrr"><code>/api/hrr</code></a></td><td>The JCO high-interest list with names, countries, ranks and affiliation</td><td><span class="tag">120/min</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-conj"><code>/api/conjunctions</code></a></td><td>Closest-approach screen and TLEs for one object and its neighbours</td><td><span class="tag">120/min</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-coplanar"><code>/api/coplanar</code></a></td><td>Coplanar angle against longitude difference, with history, for one object's neighbourhood</td><td><span class="tag">120/min</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-meta"><code>/api/meta</code></a></td><td>Running version, configuration and ingest health</td><td><span class="tag">open</span></td></tr>
+      <tr><td><span class="m POST">POST</span></td><td><a href="#ep-pull"><code>/api/pull</code></a></td><td>Pull a chosen window from UDL now (also the backfill route)</td><td><span class="tag tok">token</span><span class="tag">6/min</span></td></tr>
+      <tr><td><span class="m POST">POST</span></td><td><a href="#ep-refresh"><code>/api/refresh</code></a></td><td>Run the scheduled refresh immediately, including the HRR list</td><td><span class="tag tok">token</span><span class="tag">6/min</span></td></tr>
+      <tr><td><span class="m POST">POST</span></td><td><a href="#ep-manual-add"><code>/api/manual-elset</code></a></td><td>Add a temporary operator element set</td><td><span class="tag tok">token</span><span class="tag">6/min</span></td></tr>
+      <tr><td><span class="m DELETE">DELETE</span></td><td><a href="#ep-manual-del"><code>/api/manual-elset/{object_id}</code></a></td><td>Remove an operator element set and its object</td><td><span class="tag tok">token</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-healthz"><code>/healthz</code></a></td><td>Liveness for the platform</td><td><span class="tag">open</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-readyz"><code>/readyz</code></a></td><td>Readiness for the platform, with the staleness report</td><td><span class="tag">open</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-index"><code>/</code></a></td><td>The PSIRENS interface (single-page application)</td><td><span class="tag">open</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-favicon"><code>/favicon.ico</code></a></td><td>The browser tab icon</td><td><span class="tag">open</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-static"><code>/static/{name}</code></a></td><td>Allowlisted files: icons, the HRR snapshot, the Operator Guide and its figures</td><td><span class="tag">open</span></td></tr>
+      <tr><td><span class="m GET">GET</span></td><td><a href="#ep-docs"><code>/docs</code> · <code>/redoc</code> · <code>/openapi.json</code></a></td><td>FastAPI's generated documentation and schema</td><td><span class="tag">open</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="legend"><span><span class="tag tok">token</span> needs <code>Authorization: Bearer</code> with the team token</span><span><span class="tag">120/min</span> rate limit per client address</span><span><span class="tag">open</span> no token and no limiter inside the application</span><span><span class="tag new">1.7.9</span> new in the build awaiting upload</span></div>
+</section>
+
+<section class="block" id="access">
+  <h2 class="sec">Access, limits and errors</h2>
+  <h3>Base address</h3>
+  <p>Every path is relative to the deployed application's address on the App Store. That address is not recorded in the repository, so the examples use <code>$PSIRENS</code>. Set it once in your shell:</p>
+  <div class="cmd"><pre>export PSIRENS=https://&lt;app-url&gt;</pre><button type="button">Copy</button></div>
+  <h3>The team token</h3>
+  <ul class="dot">
+    <li>The 4 routes that change data read <code>Authorization: Bearer &lt;token&gt;</code> and compare it with the <code>TEAM_TOKEN</code> environment variable. A wrong or missing token returns <code>401 {"detail":"unauthorized"}</code>.</li>
+    <li>Keep the token in an environment variable, never on the command line, because a command line lands in the shell history and in <code>ps</code>. The examples read <code>$PSIRENS_TOKEN</code>. Set it without echoing: <code>read -rs PSIRENS_TOKEN; export PSIRENS_TOKEN</code>.</li>
+    <li>With <code>TEAM_TOKEN</code> unset the application runs in single-user local mode and the write routes are open. The application refuses to start if <code>TEAM_TOKEN</code> is set while <code>ALLOWED_ORIGIN</code> is unset or <code>*</code>.</li>
+    <li>Read routes do not check the token. INFERENCE: on the App Store, user sign-in is enforced in front of the application, which is why requests arrive carrying <code>X-Auth-Request-Email</code>. Not verified from inside this repository.</li>
+  </ul>
+  <h3>Rate limits</h3>
+  <ul class="dot">
+    <li><strong>General:</strong> 120 requests per 60 seconds per client address, on <code>/api/tracks</code>, <code>/api/events</code>, <code>/api/hrr</code>, <code>/api/conjunctions</code> and <code>/api/coplanar</code>.</li>
+    <li><strong>Strict:</strong> 6 requests per 60 seconds per client address, on <code>/api/pull</code>, <code>/api/refresh</code> and <code>POST /api/manual-elset</code>.</li>
+    <li>Over the limit returns <code>429 {"detail":"rate limited"}</code>. <code>/api/meta</code>, <code>/healthz</code>, <code>/readyz</code>, the interface, static files and <code>DELETE /api/manual-elset</code> carry no limiter.</li>
+    <li>Only one refresh or pull runs at a time. A second one while the first is running returns <code>200 {"status":"busy"}</code>, not an error.</li>
+  </ul>
+  <h3>Caching</h3>
+  <p><code>/api/tracks</code> and <code>/api/events</code> send an <code>ETag</code>. Send it back as <code>If-None-Match</code> and an unchanged picture returns <code>304</code> with no body. The tag covers the content and the filters, not the generation time, so a narrower request is never answered from a wider one.</p>
+  <h3>Errors</h3>
+  <p>Every error body is JSON with a <code>detail</code> string that states the cause, for example <code>400 {"detail":"rank 9 out of range 1-5"}</code>. The interface shows that text rather than a generic failure.</p>
+  <h3>Headers on every response</h3>
+  <p><code>Content-Security-Policy</code> (self only), <code>X-Frame-Options: DENY</code>, and <code>Access-Control-Allow-Origin</code> set to <code>ALLOWED_ORIGIN</code> when it is a real origin.</p>
+</section>
+
+<details class="ep" id="ep-tracks" open>
+<summary><span class="m GET">GET</span><span class="path">/api/tracks</span><span class="what">The plotted belt: one track per object</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>The data behind the main plot. Each object's track is ONE provider's fixes in ONE data mode, chosen by the provider agreement check, with the consensus drift rate, the observed fit beside it as a cross-check, and every provider's own status. The interface calls this on load and on every refresh.</p>
+  <h3>Query parameters</h3>
+  <div class="tbl"><table>
+    <tr><th>Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr><td><code>view</code></td><td><code>combined</code></td><td><code>real</code> (REAL only), <code>sim</code> (SIMULATED only) or <code>combined</code> (REAL, SIMULATED, TEST, EXERCISE). Anything else is <code>400 unknown view</code>.</td></tr>
+    <tr><td><code>modes</code></td><td>the view's modes</td><td>Comma list overriding the view: <code>REAL</code>, <code>SIMULATED</code>, <code>TEST</code>, <code>EXERCISE</code>. An unknown value is <code>400</code>.</td></tr>
+    <tr><td><code>ranks</code></td><td>every rank</td><td>Comma list of HRR ranks 1 to 5, e.g. <code>1,2,3</code>. Out of range or non-numeric is <code>400</code>, never silently ignored. The interface sends <code>1,2,3</code> on first paint.</td></tr>
+  </table></div>
+  <h3>Response</h3>
+  <p>Top level: <code>view</code>, <code>generated_at</code>, <code>classification_banner</code>, <code>bounds</code> {lon_min, lon_max, inc_min, inc_max}, <code>count</code>, <code>ranks</code>, <code>stale_after_hours</code>, <code>tracks[]</code>. Each track carries:</p>
+  <div class="tbl"><table>
+    <tr><th>Field</th><th>Meaning</th></tr>
+    <tr><td><code>object_id</code>, <code>name</code></td><td>Catalogue number and the HRR common name (never the number twice)</td></tr>
+    <tr><td><code>data_mode</code>, <code>origin</code>, <code>target</code></td><td>Mode of the served stream, where it came from, and a manual set's stated target</td></tr>
+    <tr><td><code>classification_marking</code>, <code>classification_markings[]</code></td><td>Every distinct marking on the served samples, verbatim; the single field is them joined with " | "</td></tr>
+    <tr><td><code>samples[]</code></td><td>{epoch, sub_lon_deg, inclination_deg, raan_deg, p}. <code>p</code> indexes <code>provenance</code>. Only samples whose own mode is in the view are served.</td></tr>
+    <tr><td><code>provenance[]</code></td><td>{source, data_mode, classification_marking} for each sample's <code>p</code></td></tr>
+    <tr><td><code>source</code>, <code>head_source</code></td><td>The provider chosen for the track and the provider of the newest fix</td></tr>
+    <tr><td><code>providers</code></td><td>Provider to {count, status, note, newest_epoch, lon_at_common_deg, elset_rate_deg_per_day, drift_deg_per_day, drift_residual_deg, drift_withheld}. Status is one of track, agrees, set aside, disputed, unverified, aged out, not used, excluded (untagged history stored before 1.7.4).</td></tr>
+    <tr><td><code>agreement</code></td><td>{mode, status (agreed, single, disputed, unchecked), primary, samples_untagged, common_epoch, agree_deg, max_lag_hours, positions, set_aside, unverified, aged_out, consensus}</td></tr>
+    <tr><td><code>drift_deg_per_day</code></td><td>The PUBLISHED rate: the median of the agreeing providers' element-set rates where there is one, else the observed fit. Positive is east.</td></tr>
+    <tr><td><code>drift_basis</code></td><td><code>element_sets</code> or <code>observed_fit</code>: which of the two the published rate is</td></tr>
+    <tr><td><code>drift_consensus</code></td><td>{rate_deg_per_day, min_deg_per_day, max_deg_per_day, providers, count, method}, or null</td></tr>
+    <tr><td><code>drift_observed_deg_per_day</code>, <code>drift_observed_withheld_reason</code></td><td>The least-squares fit to the track provider's own fixes, and why it is null when it is</td></tr>
+    <tr><td><code>drift_residual_deg</code>, <code>drift_fit_hours</code>, <code>drift_fit_points</code>, <code>drift_fit_harmonic</code></td><td>Describe the OBSERVED fit only (rms residual, baseline, fix count, whether the daily libration was modelled). May be null beside a published consensus rate.</td></tr>
+    <tr><td><code>drift_crosscheck</code></td><td>{difference_deg_per_day, agrees}: consensus against observed fit; disagrees beyond 0.05 deg/day</td></tr>
+    <tr><td><code>drift_withheld_reason</code></td><td>Why there is no published rate, when there is none</td></tr>
+    <tr><td><code>drift_since_event</code></td><td>Epoch of the newest CONFIRMED E-W manoeuvre; the observed fit uses only fixes after it</td></tr>
+    <tr><td><code>ra_deg</code></td><td>Right ascension of the ascending node for the RA bearing needle</td></tr>
+  </table></div>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/tracks?view=real&amp;ranks=1,2,3"</pre><button type="button">Copy</button></div>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/tracks?view=real" | jq '.tracks[] | select(.object_id=="64467") | {name, drift_deg_per_day, drift_basis, agreement: .agreement.status}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-events">
+<summary><span class="m GET">GET</span><span class="path">/api/events</span><span class="what">The Shift Brief: what changed, newest first</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Events detected on the resolved view, computed once per store change in the background and never per request. Filtered exactly as <code>/api/tracks</code>, so the brief never lists an object the plot is not showing.</p>
+  <h3>Query parameters</h3>
+  <p><code>view</code>, <code>modes</code> and <code>ranks</code>, with the same meaning and validation as <a href="#ep-tracks">/api/tracks</a>. Supports <code>If-None-Match</code>.</p>
+  <h3>Event types</h3>
+  <div class="tbl"><table>
+    <tr><th>Type</th><th>Meaning</th></tr>
+    <tr><td><code>STARTED</code>, <code>STOPPED</code>, <code>EW</code></td><td>East-west manoeuvre: the drift rate either side of a 3-hour split differs beyond 0.02 deg/day and 6 standard errors</td></tr>
+    <tr><td><code>NS</code></td><td>North-south manoeuvre: a median inclination step beyond 0.008 deg</td></tr>
+    <tr><td><code>LEAVING</code></td><td>Early warning: the newest fixes depart from the track fitted over the 72 hours before. Always SUSPECTED.</td></tr>
+    <tr><td><code>QUIET</code></td><td>No fix for 12 hours from an object that usually reports at least every 4 hours, judged only while the belt is current</td></tr>
+  </table></div>
+  <p>Tier is <code>CONFIRMED</code> or <code>SUSPECTED</code>. Evidence that peaks at the last testable split is never CONFIRMED.</p>
+  <h3>Response</h3>
+  <p>Top level: <code>view</code>, <code>ranks</code>, <code>generated_at</code>, <code>reference_epoch</code>, <code>belt_current</code>, <code>lookback_hours</code>, <code>thresholds</code> {ew_floor_deg_per_day, ns_floor_deg, sigma, quiet_hours, max_residual_deg}, <code>compute_seconds</code>, <code>count</code>, <code>events[]</code>.</p>
+  <p>Each event: <code>id</code>, <code>object_id</code>, <code>type</code>, <code>tier</code>, <code>epoch</code>, <code>detectable_from</code>, <code>data_mode</code>, <code>name</code>, <code>rank</code>, <code>country</code>, the type's numbers (<code>rate_before</code>/<code>rate_after</code>, <code>delta_inc_deg</code>, <code>age_hours</code>, <code>usual_cadence_hours</code>) and an <code>evidence</code> block (series, split, the two fitted lines, method). No event carries a projected approach.</p>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/events?view=real&amp;ranks=1,2,3" | jq '.events[] | {type, tier, name, epoch}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-hrr">
+<summary><span class="m GET">GET</span><span class="path">/api/hrr</span><span class="what">The JCO high-interest list</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>The dynamic JCO HRR GEO list, pulled from UDL every 6 hours (<code>HRR_REFRESH_SECONDS</code>) with a bundled snapshot as the fallback. The interface joins tracks to it and plots REAL objects on it only. It is the naming authority for every other route.</p>
+  <h3>Response</h3>
+  <p><code>marking</code>, <code>source</code>, <code>regime</code>, <code>generated</code>, <code>count</code>, and <code>objects</code>: catalogue number to {name, country, rank, affiliation}. Affiliation is <code>RED</code>, <code>BLUE</code>, <code>OTHER</code> (a known country on neither list) or <code>UNKNOWN</code> (no country given), resolved from the <code>AFFILIATION_RED</code> and <code>AFFILIATION_BLUE</code> policy lists. It colours the RA needle and nothing else.</p>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/hrr" | jq '.objects["43683"]'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-conj">
+<summary><span class="m GET">GET</span><span class="path">/api/conjunctions</span><span class="what">Closest-approach screen for one object</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Propagates the target and every object within 10 degrees of longitude with SGP4 over the screening window (<code>CONJ_WINDOW_HOURS</code>, 168) and reports the closest approach. Computed on demand when an object is selected, from the same provider the plot uses. The interface's inspector calls this.</p>
+  <h3>Query parameters</h3>
+  <div class="tbl"><table>
+    <tr><th>Name</th><th>Meaning</th></tr>
+    <tr><td><code>target</code> (required)</td><td>Catalogue number. Absent is <code>400 {"detail":"target required"}</code>. An unknown or unusable target returns <code>200</code> with <code>target: null</code> and a <code>detail</code> naming why.</td></tr>
+  </table></div>
+  <h3>Response</h3>
+  <ul class="dot">
+    <li><code>target</code>: {id, name, tle, tle_provenance}. <code>tle</code> is the provider's own two lines, or null when none was issued.</li>
+    <li><code>tle_provenance</code>: {source, source_class, epoch, native, classification_marking, rev_no, ephem_type, data_mode, propagation_refused, copyable, copy_denied_reason, tle_withheld_reason}. The copy control is offered only for a plain unclassified, caveat-free marking.</li>
+    <li><code>neighbours[]</code>: {id, name, sub_lon_deg, range_now_km, min_km, tca, tle, tle_provenance}, nearest first.</li>
+    <li><code>not_screened</code>: nearby objects whose element set could not be propagated without an assumption (no stated SGP4 type, no B*, or none at all).</li>
+    <li><code>window_hours</code>, <code>computed_at</code>.</li>
+  </ul>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/conjunctions?target=64467" | jq '.neighbours[:5][] | {name, min_km, tca}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-coplanar">
+<summary><span class="m GET">GET</span><span class="path">/api/coplanar</span><span class="what">Co-Planar chart data for one object's neighbourhood</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Coplanar angle (the mutual inclination of two orbital planes) against absolute longitude difference, for every object within <code>COPLANAR_HALF_WIDTH_DEG</code> (20) of the primary, with a history trail. Small angle and small separation is the co-orbital geometry to watch. Computed on demand when the Co-Planar view opens.</p>
+  <h3>Query parameters</h3>
+  <p><code>target</code> (required): catalogue number. Absent is <code>400</code>. An unknown primary returns <code>200</code> with <code>primary: null</code> and a <code>detail</code>.</p>
+  <h3>Response</h3>
+  <ul class="dot">
+    <li><code>primary</code>: {id, name, inclination_deg, raan_deg, sub_lon_deg}.</li>
+    <li><code>tracks[]</code>: {id, name, group, points[]}. Each point is {coplanar_deg, lon_diff_deg, epoch}, oldest first. The LAST point comes from the element set; earlier points pair stored samples that both carry RAAN within 6 hours of each other (<code>COPLANAR_PAIR_HOURS</code>). Capped at 60 points (<code>COPLANAR_MAX_POINTS</code>). One point means no usable history, not an error.</li>
+    <li><code>half_width_deg</code>, <code>computed_at</code>.</li>
+  </ul>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/coplanar?target=43683" | jq '.tracks[] | {name, latest: .points[-1]}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-meta">
+<summary><span class="m GET">GET</span><span class="path">/api/meta</span><span class="what">Running version, configuration and ingest health</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>The first place to look when anything seems wrong. Names the running build and says, in counts and one plain line, what the last ingest cycle actually did.</p>
+  <h3>Response</h3>
+  <div class="tbl"><table>
+    <tr><th>Field</th><th>Meaning</th></tr>
+    <tr><td><code>version</code></td><td>The running build, read from the application itself</td></tr>
+    <tr><td><code>classification_default</code>, <code>views</code></td><td>Default marking, and the data modes each view shows</td></tr>
+    <tr><td><code>refresh_seconds</code>, <code>refresh_lookback_hours</code>, <code>retention_days</code></td><td>Refresh cadence (3600), how far each scheduled refresh looks back (24) and how long fixes are kept (90)</td></tr>
+    <tr><td><code>manual_count</code></td><td>Active operator element sets</td></tr>
+    <tr><td><code>last_refresh</code></td><td>Last tick. Advances whether or not a record arrived: never read it alone.</td></tr>
+    <tr><td><code>last_successful_ingest</code></td><td>Last cycle that merged at least one new fix</td></tr>
+    <tr><td><code>newest_sample_epoch</code>, <code>data_age_hours</code>, <code>stale</code>, <code>stale_after_hours</code></td><td>How old the freshest fix is, and whether that passes the 24-hour alarm</td></tr>
+    <tr><td><code>last_ingest_added</code></td><td>New fixes merged in the last cycle</td></tr>
+    <tr><td><code>last_ingest_requests</code>, <code>last_ingest_request_failures</code></td><td>Upstream requests made and how many failed</td></tr>
+    <tr><td><code>last_ingest_errors[]</code></td><td>Failure reasons, e.g. <code>HTTP 401</code> (credentials), <code>HTTP 403</code> (entitlement)</td></tr>
+    <tr><td><code>last_ingest_rows</code></td><td>Raw records returned by UDL, INCLUDING responses that were set aside and asked for again in halves</td></tr>
+    <tr><td><code>last_ingest_fetched</code>, <code>last_ingest_kept</code>, <code>hrr_list_size</code></td><td>Distinct objects offered, how many survived the mode and HRR filters, and the list size</td></tr>
+    <tr><td><code>last_ingest_rejected</code>, <code>last_ingest_rejected_reasons</code></td><td>Records refused at the boundary and why: no catalogue number, no usable epoch with a time zone, incomplete elements, no provider (source), no classification marking, no recognised data mode. Never filled in.</td></tr>
+    <tr><td><code>last_ingest_requests_halved</code> <span class="tag new">1.7.9</span></td><td>Responses at or above the 9000-row threshold that were set aside and re-requested as two halves</td></tr>
+    <tr><td><code>last_ingest_truncated_windows</code> <span class="tag new">1.7.9</span></td><td>Windows still at the threshold at the smallest slice. Above 0 means newer fixes may be missing.</td></tr>
+    <tr><td><code>ingest_diagnosis</code></td><td>One line naming the state: failing requests, possible truncation, nothing returned, everything rejected, nothing on the HRR list, healthy with N new fixes, or no new epochs</td></tr>
+  </table></div>
+  <div class="callout info">From 1.7.9 a healthy cycle reads <code>healthy: 1177 new fix(es) merged for 581 high-interest object(s)</code>. Build 1.7.8 says "no new epochs in the window" even when fixes arrived: that line is wrong on 1.7.8, the counts beside it are right.</div>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/meta" | jq '{version, data_age_hours, stale, last_ingest_added, ingest_diagnosis}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-pull">
+<summary><span class="m POST">POST</span><span class="path">/api/pull</span><span class="what">Pull a chosen window from UDL now</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>An operator-defined pull, and the route a backfill uses. REAL and combined pulls are filtered to the HRR list and pruned; SIM pulls skip both. A re-pull of a fix already held re-tags untagged history with its provider and fills missing fields, so it is how pre-1.7.4 history gains provenance.</p>
+  <div class="tbl"><table>
+    <tr><th>Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr><td><code>mode</code></td><td><code>real</code></td><td><code>real</code>, <code>sim</code> or <code>combined</code></td></tr>
+    <tr><td><code>hours</code></td><td><code>24</code></td><td>Relative window ending now, clamped to 1 hour to 366 days</td></tr>
+    <tr><td><code>start</code>, <code>end</code></td><td>none</td><td>Absolute window in ISO 8601, e.g. <code>2026-11-01T00:00:00Z</code>. Both or neither; a time with no zone is read as UTC; at most 366 days; start before end. When given, <code>hours</code> is ignored.</td></tr>
+  </table></div>
+  <p>Response: <code>{"status":"ok","mode","start","end","added","errors","fetched"}</code>, or <code>{"status":"busy"}</code> while another refresh or pull runs.</p>
+  <div class="callout">The pull runs inside the request. A long window is many upstream slices with pauses between them, and the platform ingress closes a long request before the server finishes. For anything over a few days use <code>tools/backfill_pull.py</code>, which chunks the window and prints the exact range to re-run for any chunk that fails.</div>
+  <div class="cmd"><pre>curl -s -X POST -H "Authorization: Bearer $PSIRENS_TOKEN" "$PSIRENS/api/pull?mode=real&amp;hours=72"</pre><button type="button">Copy</button></div>
+  <div class="cmd"><pre>python3 tools/backfill_pull.py --base "$PSIRENS" --check
+python3 tools/backfill_pull.py --base "$PSIRENS" --days 90</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-refresh">
+<summary><span class="m POST">POST</span><span class="path">/api/refresh</span><span class="what">Run the scheduled refresh now</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Runs one scheduled cycle immediately: re-pulls the HRR list (forced, ignoring its 6-hour cadence), then pulls the last <code>REFRESH_LOOKBACK_HOURS</code> (24) of REAL element sets. No parameters.</p>
+  <p>Response: <code>{"status":"ok","added","errors","hrr_count","fetched","kept","rows","requests","request_failures"}</code>, or <code>{"status":"busy"}</code>. The same counts then appear on <code>/api/meta</code>.</p>
+  <div class="cmd"><pre>curl -s -X POST -H "Authorization: Bearer $PSIRENS_TOKEN" "$PSIRENS/api/refresh"</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-manual-add">
+<summary><span class="m POST">POST</span><span class="path">/api/manual-elset</span><span class="what">Add a temporary operator element set</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Adds an operator-supplied element set as mean Keplerian elements, so no TLE has to be built by hand. It is merged straight away, its provider is always <code>MANUAL</code>, and it expires after <code>ttl_hours</code>. Nothing is defaulted: the marking, the data mode and B* must be stated.</p>
+  <h3>JSON body</h3>
+  <div class="tbl"><table>
+    <tr><th>Field</th><th>Rule</th></tr>
+    <tr><td><code>object_id</code></td><td>Required, 1 to 64 characters</td></tr>
+    <tr><td><code>name</code></td><td>Required, 1 to 120 characters</td></tr>
+    <tr><td><code>epoch</code></td><td>Required, ISO 8601 WITH a time zone (e.g. trailing <code>Z</code>); a time with no zone is refused</td></tr>
+    <tr><td><code>inclination_deg</code></td><td>0 to 180</td></tr>
+    <tr><td><code>eccentricity</code></td><td>0 or more, below 1</td></tr>
+    <tr><td><code>raan_deg</code>, <code>argp_deg</code>, <code>mean_anomaly_deg</code></td><td>0 to 360</td></tr>
+    <tr><td><code>mean_motion_rev_per_day</code></td><td>Above 0, at most 20</td></tr>
+    <tr><td><code>bstar</code></td><td>Required</td></tr>
+    <tr><td><code>data_mode</code></td><td>Required: <code>REAL</code>, <code>SIMULATED</code>, <code>TEST</code> or <code>EXERCISE</code></td></tr>
+    <tr><td><code>classification_marking</code></td><td>Required, not blank, at most 64 characters</td></tr>
+    <tr><td><code>source</code></td><td>Optional note of where the numbers came from, at most 64 characters</td></tr>
+    <tr><td><code>target</code></td><td>Optional, at most 120 characters</td></tr>
+    <tr><td><code>ttl_hours</code></td><td>Optional, default 24, at most 8760 (one year)</td></tr>
+  </table></div>
+  <p>Response: <code>{"status":"added","object_id"}</code>. A body that breaks a rule returns <code>422</code> naming the field.</p>
+  <div class="cmd"><pre>curl -s -X POST -H "Authorization: Bearer $PSIRENS_TOKEN" -H "Content-Type: application/json" \
+  "$PSIRENS/api/manual-elset" -d '{
+  "object_id":"EX-1","name":"Exercise object","epoch":"2026-11-23T12:00:00Z",
+  "inclination_deg":0.05,"eccentricity":0.0002,"raan_deg":80,"argp_deg":10,
+  "mean_anomaly_deg":200,"mean_motion_rev_per_day":1.0027,"bstar":0,
+  "data_mode":"EXERCISE","classification_marking":"U","ttl_hours":12}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-manual-del">
+<summary><span class="m DELETE">DELETE</span><span class="path">/api/manual-elset/{object_id}</span><span class="what">Remove an operator element set</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Removes the operator element set and drops the object from the store, so it leaves the plot at once. Returns <code>{"status":"removed","object_id"}</code>, or <code>404</code> when no such manual set exists.</p>
+  <div class="cmd"><pre>curl -s -X DELETE -H "Authorization: Bearer $PSIRENS_TOKEN" "$PSIRENS/api/manual-elset/EX-1"</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-healthz">
+<summary><span class="m GET">GET</span><span class="path">/healthz</span><span class="what">Liveness for the platform</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Always <code>200</code> while the server is up: <code>{"status":"ok","storage":"writable"|"degraded","detail"}</code>. A read-only store is reported as degraded rather than failing, so the platform never restarts an otherwise healthy container.</p>
+  <div class="cmd"><pre>curl -s "$PSIRENS/healthz"</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-readyz">
+<summary><span class="m GET">GET</span><span class="path">/readyz</span><span class="what">Readiness for the platform, with staleness</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p><code>{"status":"ready","data_stale"}</code> plus the full ingest health block from <a href="#ep-meta">/api/meta</a>. Stays <code>200</code> when the data is stale, on purpose: stale data is not unreadiness, and a restart would fix no feed and lose the store.</p>
+  <div class="cmd"><pre>curl -s "$PSIRENS/readyz" | jq '{data_stale, data_age_hours, ingest_diagnosis}'</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-index">
+<summary><span class="m GET">GET</span><span class="path">/</span><span class="what">The PSIRENS interface</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>Serves the single-file canvas interface. Everything it shows comes from the read routes above.</p>
+</div>
+</details>
+
+<details class="ep" id="ep-favicon">
+<summary><span class="m GET">GET</span><span class="path">/favicon.ico</span><span class="what">Browser tab icon</span><span class="chev">▶</span></summary>
+<div class="ep-body"><p>A 32-pixel PNG.</p></div>
+</details>
+
+<details class="ep" id="ep-static">
+<summary><span class="m GET">GET</span><span class="path">/static/{name}</span><span class="what">Allowlisted files</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p><code>{name}</code> is looked up in a fixed allowlist, never used as a file path, so anything not listed returns <code>404</code>. The list:</p>
+  <ul class="dot">
+    <li><strong>Operator Guide:</strong> <code>guide.html</code>, linked from the top right of the interface, and its 12 figures <code>guide-overview.png</code>, <code>guide-top.png</code>, <code>guide-bar.png</code>, <code>guide-rail.png</code>, <code>guide-plot.png</code>, <code>guide-legend.png</code>, <code>guide-inspector.png</code>, <code>guide-coplanar.png</code>, <code>guide-country.png</code>, <code>guide-stale.png</code>, <code>guide-brief.png</code>, <code>guide-focus.png</code>.</li>
+    <li><strong>HRR snapshot:</strong> <code>hrr-geo.json</code>, the bundled GEO subset of the JCO list used until the live list loads.</li>
+    <li><strong>Icons and install:</strong> <code>icon-512.png</code>, <code>icon-192.png</code>, <code>favicon-32.png</code>, <code>apple-touch-icon.png</code>, <code>psirens-banner.png</code>, <code>manifest.webmanifest</code>.</li>
+  </ul>
+  <div class="cmd"><pre>curl -s -o guide.html "$PSIRENS/static/guide.html"</pre><button type="button">Copy</button></div>
+</div>
+</details>
+
+<details class="ep" id="ep-docs">
+<summary><span class="m GET">GET</span><span class="path">/docs · /redoc · /openapi.json</span><span class="what">FastAPI's generated documentation</span><span class="chev">▶</span></summary>
+<div class="ep-body">
+  <p>The framework adds these by default: an interactive Swagger page, a ReDoc page and the machine-readable OpenAPI schema. They describe the same 16 routes, but with fewer of the rules above, because most validation is in the handlers rather than in typed parameters.</p>
+  <div class="callout">FACT: they are enabled in the running application and carry no token. Whether to keep them exposed is a decision for the owner; switching them off is a one-line change in <code>create_app</code>. They are served without the application's security headers, because those are added by the application's own handlers.</div>
+</div>
+</details>
+
+<p class="empty" id="empty">No route matches that filter.</p>
+</main>
+</div>
+
+<footer>Bluestaq Limited · PSIRENS API reference for build 1.7.9 (deployed build 1.7.8 differs only where marked 1.7.9) · Source: <code>src/psirens/main.py</code> route table and responses captured from an offline instance.</footer>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var KEY = "psirens-api-theme";
+  try { var saved = localStorage.getItem(KEY); if (saved) { root.dataset.theme = saved; } } catch (e) { /* storage blocked */ }
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.dataset.theme ? root.dataset.theme === "dark"
+      : globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem(KEY, root.dataset.theme); } catch (e) { /* storage blocked */ }
+  });
+
+  var eps = Array.from(document.querySelectorAll("details.ep"));
+  var expand = document.getElementById("expand");
+  expand.addEventListener("click", function () {
+    var open = eps.some(function (d) { return !d.open; });
+    eps.forEach(function (d) { d.open = open; });
+    expand.textContent = open ? "Collapse all" : "Expand all";
+  });
+
+  var links = Array.from(document.querySelectorAll("nav.toc a[data-ep]"));
+  document.getElementById("q").addEventListener("input", function (ev) {
+    var q = ev.target.value.trim().toLowerCase();
+    var shown = 0;
+    eps.forEach(function (d) {
+      var hit = !q || d.textContent.toLowerCase().indexOf(q) !== -1;
+      d.style.display = hit ? "" : "none";
+      if (hit) { shown += 1; if (q) { d.open = true; } }
+    });
+    links.forEach(function (a) {
+      var target = document.getElementById(a.dataset.ep);
+      a.classList.toggle("hidden", target.style.display === "none");
+    });
+    document.getElementById("empty").style.display = shown ? "none" : "block";
+  });
+
+  document.querySelectorAll(".cmd button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.previousElementSibling.textContent;
+      var done = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1400); };
+      if (navigator.clipboard) { navigator.clipboard.writeText(text).then(done, function () { b.textContent = "Select it"; }); }
+      else { b.textContent = "Select it"; }
+    });
+  });
+
+  if (location.hash) {
+    var t = document.querySelector(location.hash);
+    if (t && t.tagName === "DETAILS") { t.open = true; }
+  }
+  document.querySelectorAll('a[href^="#ep-"]').forEach(function (a) {
+    a.addEventListener("click", function () {
+      var t = document.querySelector(a.getAttribute("href"));
+      if (t) { t.open = true; }
+    });
+  });
+})();
+</script>
+</body>
+</html>

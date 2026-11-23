@@ -68,6 +68,10 @@ class IngestResult:
     # Rows refused at the boundary by reason (1.7.4): incomplete elements, no
     # provider, no marking, no recognised data mode. Never filled in.
     rejected: dict[str, int] = field(default_factory=dict)
+    # Truncation guard counts (1.7.9): responses halved and re-requested, and
+    # windows still full at the smallest slice (fixes may be missing).
+    halved: int = 0
+    truncated: int = 0
 
 
 class Refresher:
@@ -151,6 +155,8 @@ class Refresher:
         res.requests += stats.requests
         res.request_failures += stats.failures
         res.rows += stats.rows
+        res.halved += getattr(stats, "halved", 0)
+        res.truncated += getattr(stats, "truncated", 0)
         for reason, n in (getattr(stats, "rejected", None) or {}).items():
             res.rejected[reason] = res.rejected.get(reason, 0) + n
         if stats.failures:
@@ -324,6 +330,8 @@ class Refresher:
             "last_ingest_kept": res.kept,
             "last_ingest_rejected": sum(res.rejected.values()),
             "last_ingest_rejected_reasons": dict(res.rejected),
+            "last_ingest_requests_halved": res.halved,
+            "last_ingest_truncated_windows": res.truncated,
             "hrr_list_size": res.hrr_size,
             "newest_sample_epoch": self.store.newest_epoch(),
             "data_age_hours": None if age is None else round(age, 2),
@@ -348,11 +356,20 @@ class Refresher:
         if res.fetched == 0 and res.rejected:
             return ("every record returned was rejected at the boundary: " +
                     "; ".join(f"{n} {why}" for why, n in sorted(res.rejected.items())))
+        if res.truncated:
+            return (f"{res.truncated} upstream window(s) were still full at the "
+                    "smallest slice, so newer fixes may be missing; lower "
+                    "UDL_SLICE_HOURS")
         if res.fetched == 0:
             return "the upstream answered but returned no records for the window"
         if res.kept == 0:
             return ("records arrived but none matched the high-interest list "
                     f"({res.hrr_size} objects)")
+        if res.added:
+            # Until 1.7.9 this case fell through to "no new epochs", which a
+            # live /api/meta showed beside last_ingest_added: 1177.
+            return (f"healthy: {res.added} new fix(es) merged for "
+                    f"{res.kept} high-interest object(s)")
         return "records arrived and were merged; no new epochs in the window"
 
     def report(self, result: dict, now: datetime | None = None) -> None:

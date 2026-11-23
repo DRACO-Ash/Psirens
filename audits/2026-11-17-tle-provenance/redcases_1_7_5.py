@@ -73,6 +73,23 @@ CASES = [
   "    data = request.app.state.resolver.load()\n    payload = conjunctions_for(",
   "    data = request.app.state.store.load()\n    payload = conjunctions_for(",
   T, "test_the_api_serves_the_agreement_and_never_a_projection"),
+ # 1.7.9, the live /api/meta of 23 November 2026.
+ ("the diagnosis ignores added (1177 added read as no new epochs)", "src/psirens/refresh.py",
+  "        if res.added:\n",
+  "        if False:\n",
+  "tests/test_ingest_health.py", "test_the_diagnosis_never_says_no_new_epochs_when_epochs_arrived"),
+ ("a window still full at the smallest slice is a log line only", "src/psirens/sources.py",
+  "            self.last_stats.truncated += 1\n",
+  "            pass\n",
+  "tests/test_ingest_health.py", "test_a_window_still_full_at_the_smallest_slice_reaches_the_operator"),
+ ("a halved response is not counted", "src/psirens/sources.py",
+  "                self.last_stats.halved += 1\n",
+  "                pass\n",
+  "tests/test_ingest_health.py", "test_a_halved_response_is_counted"),
+ ("the cycle drops the truncation count", "src/psirens/refresh.py",
+  "        res.truncated += getattr(stats, \"truncated\", 0)\n",
+  "        pass\n",
+  "tests/test_ingest_health.py", "test_a_window_still_full_at_the_smallest_slice_reaches_the_operator"),
 ]
 
 
