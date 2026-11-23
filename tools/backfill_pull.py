@@ -93,6 +93,14 @@ DEFAULT_CHUNK_H = 24
 # client. Chunks take far longer than that to run, so this pause exists only to
 # keep a fast failure path (every chunk erroring instantly) from tripping it.
 MIN_GAP_S = 11.0
+# FACT, 23 November 2026, live run against 1.7.8: one 24 h chunk outlasted a
+# 300 s client timeout (the gateway held the request at least that long), the
+# server kept working, and the next 54 chunks were each told "busy" 11 seconds
+# apart and skipped. So a busy answer now WAITS for the server and retries the
+# same window, and the default timeout is longer.
+BUSY_WAIT_S = 30.0
+DEFAULT_MAX_WAIT_MIN = 45.0
+DEFAULT_TIMEOUT_S = 900.0
 # The first build that retains raan_deg per sample and enriches a held sample
 # on re-pull. Below this a backfill cannot fill the co-planar trail history.
 MIN_ENRICH_VERSION = (1, 7, 4)   # provenance tagging on re-pull (1.7.4)
@@ -301,8 +309,25 @@ def check_build(base: str, token: str, timeout: float) -> int:
     return 1
 
 
+def pull_with_wait(pull: Any, sleep: Any, max_wait_s: float) -> Dict[str, Any]:
+    """Call `pull()`; while the server answers "busy" (its single pull slot is
+    held by an earlier chunk still running, or by the hourly refresh), wait
+    and retry the SAME window rather than skipping it. Gives up after
+    `max_wait_s` and reports the window as failed for a re-run."""
+    waited = 0.0
+    row = pull()
+    while row.get("detail") == "busy" and waited < max_wait_s:
+        sleep(BUSY_WAIT_S)
+        waited += BUSY_WAIT_S
+        row = pull()
+    if waited:
+        row["waited_s"] = waited
+    return row
+
+
 def run(base: str, token: str, mode: str, start: datetime, end: datetime,
-        chunk_h: int, timeout: float, sleep: Any) -> Dict[str, Any]:
+        chunk_h: int, timeout: float, sleep: Any,
+        max_wait_s: float = DEFAULT_MAX_WAIT_MIN * 60) -> Dict[str, Any]:
     windows = chunks(start, end, chunk_h)
     print("%d chunk(s) of up to %dh, %s to %s, mode %s"
           % (len(windows), chunk_h, iso_z(start), iso_z(end), mode))
@@ -311,7 +336,8 @@ def run(base: str, token: str, mode: str, start: datetime, end: datetime,
         if i > 1:
             sleep(MIN_GAP_S)
         began = time.monotonic()
-        row = pull_once(base, token, mode, c_start, c_end, timeout)
+        row = pull_with_wait(lambda s=c_start, e=c_end: pull_once(base, token, mode, s, e, timeout),
+                             sleep, max_wait_s)
         row["seconds"] = round(time.monotonic() - began, 1)
         results.append(row)
         if row["ok"]:
@@ -319,8 +345,11 @@ def run(base: str, token: str, mode: str, start: datetime, end: datetime,
                   % (i, len(windows), iso_z(c_start)[:10], row["added"],
                      row["fetched"], row["seconds"]))
         else:
+            detail = row["detail"]
+            if detail.startswith("TimeoutError"):
+                detail += " (the server may still be working on it; the next chunk waits)"
             print("  %2d/%d  %s  FAILED: %s"
-                  % (i, len(windows), iso_z(c_start)[:10], row["detail"]))
+                  % (i, len(windows), iso_z(c_start)[:10], detail))
     return {"summary": summarise(results), "chunks": results}
 
 
@@ -385,6 +414,16 @@ def self_test() -> int:
     check("no title is empty", page_title(b"{}"), "")
     check("the default chunk is one upstream day", DEFAULT_CHUNK_H, 24)
 
+    # Busy means wait, not skip (live run, 23 November 2026).
+    answers = iter([{"detail": "busy"}, {"detail": "busy"}, {"ok": True, "added": 1}])
+    naps: List[float] = []
+    got = pull_with_wait(lambda: next(answers), naps.append, 600)
+    check("busy is retried until the slot frees", got.get("ok"), True)
+    check("it waited between tries", naps, [BUSY_WAIT_S, BUSY_WAIT_S])
+    stuck = pull_with_wait(lambda: {"detail": "busy"}, naps.append, BUSY_WAIT_S * 2)
+    check("a slot that never frees is reported", stuck.get("detail"), "busy")
+    check("the default timeout outlasts the 300 s that failed live", DEFAULT_TIMEOUT_S > 300, True)
+
     if failures:
         for line in failures:
             print("FAIL " + line)
@@ -431,7 +470,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--end", help="absolute window end (ISO, Z accepted)")
     ap.add_argument("--chunk-hours", type=int, default=DEFAULT_CHUNK_H,
                     help="hours per /api/pull call (default %d)" % DEFAULT_CHUNK_H)
-    ap.add_argument("--timeout", type=float, default=300.0,
+    ap.add_argument("--max-wait-min", type=float, default=DEFAULT_MAX_WAIT_MIN,
+                    help="minutes to wait on a busy server before giving up on a window")
+    ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S,
                     help="per-call HTTP timeout in seconds")
     ap.add_argument("--check", action="store_true",
                     help="report the deployment's version and ingest health, pull nothing")
@@ -467,7 +508,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     start, end = build_window(args)
     report = run(args.base, token, args.mode, start, end,
-                 args.chunk_hours, args.timeout, time.sleep)
+                 args.chunk_hours, args.timeout, time.sleep, args.max_wait_min * 60)
     s = report["summary"]
     print("\n%d/%d chunk(s) ok, %d sample(s) added, %d object-record(s) fetched"
           % (s["ok"], s["chunks"], s["added"], s["fetched"]))

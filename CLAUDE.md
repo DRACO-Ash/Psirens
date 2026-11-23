@@ -1312,6 +1312,17 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   screenshot and this conversation. The script now has `--ask-cookie`
   (getpass, no echo). Never instruct an unmasked prompt for a secret.
   Ash told to sign out to end the exposed session and sign in fresh.
+  FIRST LIVE BACKFILL, 23 November 2026, against 1.7.8, FACT from Ash's
+  screen: chunk 1 (24 h) outlasted the script's 300 s timeout and the
+  gateway held the request that long (so the gateway allows at least 300 s);
+  the server kept working and chunks 2 to 55 were each told "busy" and
+  SKIPPED; chunk 56, about 15 minutes in, got the slot and also timed out.
+  INFERENCE: one day takes ~15 minutes on 1.7.8 (24 h slices fetched about
+  five times over), so 90 days would be ~22 hours. FIXED in the tool: busy
+  WAITS and retries the same window (`pull_with_wait`, 30 s steps, 45 min
+  cap), default timeout 900 s; proven against a fake slow server. The real
+  fix is upstream: upload 1.7.10 or later (one-hour slices) BEFORE the
+  backfill.
   FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
   (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
   the response. So either `TEAM_TOKEN` is unset in the deployment (writes are
