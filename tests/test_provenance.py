@@ -206,7 +206,9 @@ def test_an_absent_b_star_stays_absent(tmp_path):
 def test_rejections_reach_the_operator(tmp_path):
     client = httpx.Client(transport=httpx.MockTransport(
         lambda r: httpx.Response(200, json=[_row(meanAnomaly=None), _row(source=None)])))
-    cfg = _cfg(tmp_path)
+    # One request per cycle, so the counts are per response: this test is about
+    # rejection, not slicing (the default slice is 1 h from 1.7.10).
+    cfg = _cfg(tmp_path, udl_slice_hours=24)
     store = Store(str(tmp_path))
     ref = Refresher(cfg, store, [UDLElsetSource(cfg, client=client)], SingleFlight())
     ref.run_once(now=NOW)

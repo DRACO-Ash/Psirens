@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PSIRENS API Reference</title>
-<meta name="description" content="Every HTTP route the PSIRENS application serves, its parameters, its response and its access rules, for build 1.7.9.">
+<meta name="description" content="Every HTTP route the PSIRENS application serves, its parameters, its response and its access rules, for build 1.7.10.">
 <style>
 :root{
   --navy:#162646;--blue1:#385FAF;--blue2:#739BCF;--amber:#C67C00;--green:#27AE60;
@@ -103,7 +103,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--muted);fon
     <div>
       <div class="brand">Bluestaq Limited · Not Classified</div>
       <h1>PSIRENS API Reference</h1>
-      <div class="sub">Every route the application serves, for build 1.7.9. Generated from the live route table and from captured responses, 23 November 2026.</div>
+      <div class="sub">Every route the application serves, for build 1.7.10. Generated from the live route table and from captured responses, 23 November 2026.</div>
     </div>
     <div class="top-tools">
       <input id="q" type="search" placeholder="Filter routes, e.g. drift or token" aria-label="Filter routes">
@@ -180,6 +180,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--muted);fon
   <ul class="dot">
     <li>The 4 routes that change data read <code>Authorization: Bearer &lt;token&gt;</code> and compare it with the <code>TEAM_TOKEN</code> environment variable. A wrong or missing token returns <code>401 {"detail":"unauthorized"}</code>.</li>
     <li>Keep the token in an environment variable, never on the command line, because a command line lands in the shell history and in <code>ps</code>. The examples read <code>$PSIRENS_TOKEN</code>. Set it without echoing: <code>read -rs PSIRENS_TOKEN; export PSIRENS_TOKEN</code>.</li>
+    <li><strong>The deployed application sets no <code>TEAM_TOKEN</code></strong> (FACT, owner, 23 November 2026), so on the App Store the write routes are guarded by the platform sign-in alone, and a script needs a signed-in browser session: <code>tools/backfill_pull.py --ask-cookie</code>.</li>
     <li>With <code>TEAM_TOKEN</code> unset the application runs in single-user local mode and the write routes are open. The application refuses to start if <code>TEAM_TOKEN</code> is set while <code>ALLOWED_ORIGIN</code> is unset or <code>*</code>.</li>
     <li>Read routes do not check the token. INFERENCE: on the App Store, user sign-in is enforced in front of the application, which is why requests arrive carrying <code>X-Auth-Request-Email</code>. Not verified from inside this repository.</li>
   </ul>
@@ -445,7 +446,7 @@ python3 tools/backfill_pull.py --base "$PSIRENS" --days 90</pre><button type="bu
 <summary><span class="m GET">GET</span><span class="path">/docs · /redoc · /openapi.json</span><span class="what">FastAPI's generated documentation</span><span class="chev">▶</span></summary>
 <div class="ep-body">
   <p>The framework adds these by default: an interactive Swagger page, a ReDoc page and the machine-readable OpenAPI schema. They describe the same 16 routes, but with fewer of the rules above, because most validation is in the handlers rather than in typed parameters.</p>
-  <div class="callout">FACT: they are enabled in the running application and carry no token. Whether to keep them exposed is a decision for the owner; switching them off is a one-line change in <code>create_app</code>. They are served without the application's security headers, because those are added by the application's own handlers.</div>
+  <div class="callout">FACT: they are enabled in the running application and carry no token. Kept on by the owner's decision, 23 November 2026. They are served without the application's security headers, because those are added by the application's own handlers.</div>
 </div>
 </details>
 
@@ -453,7 +454,7 @@ python3 tools/backfill_pull.py --base "$PSIRENS" --days 90</pre><button type="bu
 </main>
 </div>
 
-<footer>Bluestaq Limited · PSIRENS API reference for build 1.7.9 (deployed build 1.7.8 differs only where marked 1.7.9) · Source: <code>src/psirens/main.py</code> route table and responses captured from an offline instance.</footer>
+<footer>Bluestaq Limited · PSIRENS API reference for build 1.7.10 (builds before 1.7.9 lack the fields marked 1.7.9) · Source: <code>src/psirens/main.py</code> route table and responses captured from an offline instance.</footer>
 
 <script>
 (function () {

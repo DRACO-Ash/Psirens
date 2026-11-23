@@ -369,3 +369,27 @@ def test_a_sample_carries_raan_so_a_plane_can_be_reconstructed():
     assert sample is not None
     assert sample["raan_deg"] == 123.4
     assert {"epoch", "sub_lon_deg", "inclination_deg", "raan_deg"} <= set(sample)
+
+
+def test_the_default_slice_fetches_a_live_day_once():
+    """Tuned in 1.7.10 from the live /api/meta of 23 November 2026: one 24 h
+    refresh made 33 requests and 423,571 rows, a halving tree over roughly
+    84,000 rows a day. At the DEFAULT slice and threshold, a day of that
+    density must arrive with no response set aside and asked for again.
+    Reinstating the 24 h default makes this fail."""
+    from datetime import datetime as _dt
+
+    per_day = 84_000
+
+    def rows(rng, _n):
+        a, b = (_dt.fromisoformat(x.replace("Z", "+00:00")) for x in rng.split(".."))
+        hours = (b - a).total_seconds() / 3600
+        return [{}] * int(per_day * hours / 24)   # rejected cheaply, counted as rows
+
+    t = _RecordingTransport(rows)
+    src = UDLElsetSource(_cfg_udl(), client=httpx.Client(transport=t))
+    src.fetch(_NOW - timedelta(hours=24), _NOW)
+    assert src.last_stats.halved == 0, "a live day must not trip the halving"
+    assert src.last_stats.truncated == 0
+    assert src.last_stats.requests == 24
+    assert src.last_stats.rows == per_day

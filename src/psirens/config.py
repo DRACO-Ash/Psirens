@@ -132,7 +132,13 @@ class Config:
     # is the thing that fact forbids; the response came back truncated and the
     # newest fixes never arrived, leaving the plot a constant ~14 days behind.
     refresh_lookback_hours: int = 24   # scheduled pull: a short overlap, not 90 days
-    udl_slice_hours: int = 24          # split any longer window into slices
+    # One hour, tuned 1.7.10 at Ash's call. FACT, live /api/meta 23 November
+    # 2026: a 24 h refresh made 33 requests returning 423,571 rows, because
+    # every 24 h, 12 h and 3 h response crossed the truncation threshold and
+    # was set aside and asked for again in halves (INFERENCE: about 84,000
+    # rows a day, fetched about five times). One-hour slices land under the
+    # threshold, so a day is ~24 requests and fetched once.
+    udl_slice_hours: int = 1           # split any longer window into slices
     udl_slice_pause_seconds: float = 2.0   # be a good citizen between slices
     udl_max_results: int = 0           # 0 = do not send the parameter (TBC per tenant)
     # A slice returning at least this many rows is treated as TRUNCATED and
@@ -215,7 +221,7 @@ def load_config() -> Config:
         scheduler_enabled=_env_bool("SCHEDULER_ENABLED", default=True),
         conj_window_hours=_env_int("CONJ_WINDOW_HOURS", 168),
         refresh_lookback_hours=_env_int("REFRESH_LOOKBACK_HOURS", 24),
-        udl_slice_hours=_env_int("UDL_SLICE_HOURS", 24),
+        udl_slice_hours=_env_int("UDL_SLICE_HOURS", 1),
         udl_slice_pause_seconds=_env_float("UDL_SLICE_PAUSE_SECONDS", 2),
         udl_max_results=_env_int("UDL_MAX_RESULTS", 0),
         udl_truncation_threshold=_env_int("UDL_TRUNCATION_THRESHOLD", 9000),

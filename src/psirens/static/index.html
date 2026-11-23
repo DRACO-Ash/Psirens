@@ -1859,10 +1859,26 @@ async function doRefresh(){
     qs+=`&hours=${state.pullHours}`;
   }
   setStatus("pulling\u2026");
-  try{await fetch("/api/pull?"+qs,{method:"POST"});}catch{setStatus("offline",true);}
+  let outcome={ok:false,text:"pull failed: offline"};
+  try{const r=await fetch("/api/pull?"+qs,{method:"POST"});
+    outcome=await pullResult(r).catch(()=>({ok:false,text:"pull failed: unreadable answer"}));
+  }catch{/* network failure: the default outcome says so */}
   state.etag=null;EV_ETAG=null;
   if(state.view==="real"||state.view==="combined"){await loadHrr();}
-  await load();}
+  await load();
+  setStatus(outcome.text,!outcome.ok);}
+// The pull's own answer is shown, AFTER the reload, never discarded. Until
+// 1.7.10 the response was ignored and load() wrote a time over the status
+// line, so a refused or busy pull looked exactly like a good one: the
+// response.ok pattern a fourth time (1.5.2, 1.6.4, 1.6.13).
+const PULL_REFUSED={401:"pull refused: team token required",
+  429:"pull rate limited: wait a minute and try again"};
+async function pullResult(r){
+  if(!r.ok){return {ok:false,text:PULL_REFUSED[r.status]||"pull failed: HTTP "+r.status};}
+  const j=await r.json();
+  if(j.status==="busy"){return {ok:false,text:"pull skipped: another pull is running"};}
+  if(j.status!=="ok"){return {ok:false,text:"pull failed: "+(j.detail||j.status||"no status")};}
+  return {ok:true,text:`pulled: ${j.added||0} new fix(es)`};}
 // response.ok checked BEFORE .json(), the pattern 1.5.2 fixed on
 // /api/conjunctions and 1.6.4 on /api/coplanar. This one was still unchecked:
 // a non-JSON error body made .json() reject, the catch blanked the HRR map,

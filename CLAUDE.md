@@ -71,6 +71,26 @@ untagged history and gives the observed cross-check its 24 h; run
 `tools/udl_elset_probe.py` to confirm live element sets state their
 ephemeris type, which the agreement check and the consensus both depend on.
 
+DECISIONS, FACT, Ash, 23 November 2026 (answers to the five open items):
+(1) finer E-W timing: YES, which on the timeline proposal's form means "send
+a separate proposal" (decision 5's wording), so a PROPOSAL is owed, not a
+build; (2) a DISPUTED object KEEPS its marker (no change); (3) `/docs`,
+`/redoc`, `/openapi.json` STAY ON (no change); (4) request volume: TUNE IT,
+done in 1.7.10; (5) `TEAM_TOKEN` is NOT SET in the deployment, so write
+routes are guarded by the platform sign-in alone and the interface's Pull
+control was working, only blind to its own answer.
+
+1.7.10, 23 November 2026: `UDL_SLICE_HOURS` default 24 -> 1 (a live day is
+~24 requests fetched once, instead of 33 requests fetching it about five
+times; still overridable by env), guarded by
+`test_the_default_slice_fetches_a_live_day_once` (84,000 rows a day, zero
+halving) with a red case (19 of 19 go red). And the Pull control now states
+the pull's OWN answer after the reload (`pullResult`: pulled N, busy,
+refused, rate limited, failed), the `response.ok` pattern a fourth time;
+the layout probe fakes 401, busy and ok on `/api/pull`, and the 1.7.9 page
+from git fails all three with "the status line reading '23:39Z'". Upload
+1.7.10: it carries 1.7.9.
+
 1.7.9, 23 November 2026: INGEST DIAGNOSIS FIX, from Ash's live `/api/meta`
 (FACT: version 1.7.8 confirmed live, data 0.65 h old, 0 request failures,
 `last_ingest_added: 1177` beside the diagnosis "no new epochs in the window").
@@ -914,9 +934,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   ran for 403 hours. November: the cause was named on the screen, unprompted,
   and the fix was one environment variable. That is the whole argument for
   counting what a resilient layer swallows.
-  NOTE on the shape: `1/1` is expected, not a loop fault. `REFRESH_LOOKBACK_
-  HOURS` (24) divided by `UDL_SLICE_HOURS` (24) is exactly one request per
-  cycle. A larger window would show more.
+  NOTE on the shape: `1/1` was expected then, not a loop fault. `REFRESH_LOOKBACK_
+  HOURS` (24) divided by `UDL_SLICE_HOURS` (24) was one request per cycle.
+  From 1.7.10 the slice is 1 h, so a healthy cycle reads about 24/24.
   STILL TRUE whenever this recurs: the gap does NOT close on its own, because
   the scheduled refresh looks back 24 hours by design. A backfill pull over
   the gap is needed once the feed is answering:

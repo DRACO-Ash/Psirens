@@ -177,7 +177,11 @@ def _udl_source(status: int, rows=None):
     from psirens.sources import UDLElsetSource
     from test_sources import _cfg_udl
 
-    cfg = _cfg_udl()
+    import dataclasses
+
+    # One request per window: these tests are about COUNTING what the wire
+    # did, not about slicing (the default slice is 1 h from 1.7.10).
+    cfg = dataclasses.replace(_cfg_udl(), udl_slice_hours=24)
     body = httpx.Response(status, json=rows) if rows is not None \
         else httpx.Response(status, text="denied")
     client = httpx.Client(transport=httpx.MockTransport(lambda _req: body))

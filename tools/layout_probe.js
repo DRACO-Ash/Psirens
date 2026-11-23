@@ -836,6 +836,42 @@ function checkBodyFits(m, label) {
            `for two builds.`);
     }
     await page.unroute("**/api/coplanar*");
+
+    // ---------------------------------------------------------------------
+    // The pull's own answer (1.7.10). Until then the Refresh control sent the
+    // pull, IGNORED the response, and the reload that followed wrote a time
+    // over the status line, so a refused or busy pull read as a good one: the
+    // response.ok pattern a fourth time. Each answer must survive the reload.
+    // ---------------------------------------------------------------------
+    const PULL_CASES = [
+      [{ status: 401, contentType: "application/json", body: '{"detail":"unauthorized"}' },
+       /pull refused/],
+      [{ status: 200, contentType: "application/json", body: '{"status":"busy"}' },
+       /another pull is running/],
+      [{ status: 200, contentType: "application/json",
+         body: '{"status":"ok","added":7,"errors":[],"fetched":3}' }, /pulled: 7 new/],
+    ];
+    let pullFailures = 0;
+    for (const [reply, want] of PULL_CASES) {
+      await page.route("**/api/pull*", (route) => route.fulfill(reply));
+      await page.evaluate(() => { document.getElementById("laststatus").textContent = ""; });
+      await page.locator("#refresh").dispatchEvent("click");
+      await page.waitForFunction(
+        () => /pull/.test(document.getElementById("laststatus").textContent),
+        null, { timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(300);   // let the reload's own status write land
+      const said = (await page.textContent("#laststatus") || "").trim();
+      if (!want.test(said)) {
+        pullFailures += 1;
+        fail(`a /api/pull answering HTTP ${reply.status} ${reply.body} left the ` +
+             `status line reading ${JSON.stringify(said)}; the pull's own answer ` +
+             `must survive the reload that follows it.`);
+      }
+      await page.unroute("**/api/pull*");
+    }
+    if (!pullFailures) {
+      console.log("  pull:       refused, busy and ok each stated after the reload");
+    }
     injectingFault = false;
 
     // An uncaught exception is never expected, not even while faulting: the

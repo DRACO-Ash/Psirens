@@ -90,6 +90,11 @@ CASES = [
   "        res.truncated += getattr(stats, \"truncated\", 0)\n",
   "        pass\n",
   "tests/test_ingest_health.py", "test_a_window_still_full_at_the_smallest_slice_reaches_the_operator"),
+ # 1.7.10, request volume tuned at Ash's call.
+ ("the 24 h default slice again (a live day fetched about five times)", "src/psirens/config.py",
+  '        udl_slice_hours=_env_int("UDL_SLICE_HOURS", 1),',
+  '        udl_slice_hours=_env_int("UDL_SLICE_HOURS", 24),',
+  "tests/test_sources.py", "test_the_default_slice_fetches_a_live_day_once"),
 ]
 
 
