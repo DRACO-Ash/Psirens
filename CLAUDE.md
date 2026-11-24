@@ -59,6 +59,16 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 
 ## Current state (repo 1.7.8; DEPLOYED, ALL 12 STAGES GREEN, 21 November 2026)
 
+LATEST, FACT, 24 November 2026, Pipeline tab screenshot from Ash: platform
+version 47 is Active and "All 12 stages passed", Deploy included; the Source
+Code panel offers v46, "accepted Nov 23, 2026", commit `2db868cb` (the
+platform's GitLab hash; it is NOT a commit in this repo). Date Uploaded again
+reads "Jul 28, 2026" (the known oddity). INFERENCE: version 47 is 1.7.12, the
+newest sent; the platform numbers its uploads itself and shows no semver, so
+`/api/meta` is the only check. A green Logging stage does NOT prove 1.7.11 is
+in: the Advisory findings on the upload after 1.7.8 sat beside a passing
+stage. Push rule: this green Deploy re-confirms push without asking.
+
 FACT, 21 November 2026, Pipeline tab screenshot from Ash: "All 12 stages
 passed", Deploy included. INFERENCE: the build is 1.7.8 (the newest sent; the
 screenshot does not show the version; `/api/meta` is the check). The pipeline
