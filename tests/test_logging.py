@@ -106,7 +106,8 @@ def test_a_bad_format_string_never_raises():
 
 def test_request_attributes_sanitise_and_respect_the_email_switch():
     headers = [(b"X-Request-Id", b"abc\r\ninjected"), (b"X-Auth-Request-Email", b"a@b.c")]
-    assert request_attributes(headers, False) == {REQUEST_ID_ATTR: "abcinjected"}
+    assert request_attributes(headers, False) == {REQUEST_ID_ATTR: "abcinjected",
+                                                  "user_agent.original": ""}
     assert request_attributes(headers, True)[EMAIL_ATTR] == "a@b.c"
 
 
@@ -204,3 +205,51 @@ def test_gunicorns_own_lines_go_to_stdout_as_json():
     assert [type(h) for h in glog.error_log.handlers] == [StdoutHandler]
     assert glog.error_log.propagate is False
     assert all(isinstance(h, logging.NullHandler) for h in glog.access_log.handlers)
+
+
+# -- the Logging check on 1.7.10 (two Medium findings, 24 November 2026) ------
+def test_every_request_line_carries_the_user_agent_path_and_method(tmp_path, capsys):
+    """The platform: "Every line written while handling a request needs
+    url.path, http.request.method, user_agent.original, besides the request ID
+    and the user." Lines logged INSIDE the handler are checked too, not only the
+    closing request line."""
+    import logging as _logging
+
+    app = create_app(_cfg(tmp_path), sources=[])
+
+    @app.get("/probe-inside")
+    def _inside():
+        _logging.getLogger("psirens.test").info("inside the handler")
+        return {"ok": True}
+
+    hdr = {"X-Request-Id": "ua1", "User-Agent": "logging-check/1.0"}
+    with TestClient(app) as c:
+        capsys.readouterr()
+        c.get("/probe-inside", headers=hdr)
+        lines = [ln for ln in _lines(capsys.readouterr().out)
+                 if ln["attributes"].get(REQUEST_ID_ATTR) == "ua1"]
+    assert len(lines) >= 2, "expected the handler's line and the request line"
+    for ln in lines:
+        a = ln["attributes"]
+        assert a.get("user_agent.original") == "logging-check/1.0", a
+        assert a.get("url.path") == "/probe-inside", a
+        assert a.get("http.request.method") == "GET", a
+
+
+def test_the_audit_line_states_the_outcome(tmp_path, capsys):
+    """The platform: "The audit line for each request needs url.path,
+    http.request.method, http.response.status_code, user_agent.original and
+    event.outcome." """
+    with TestClient(create_app(_cfg(tmp_path), sources=[])) as c:
+        capsys.readouterr()
+        c.get("/", headers={"X-Request-Id": "o1", "User-Agent": "ua"})
+        c.get("/static/nope.txt", headers={"X-Request-Id": "o2", "User-Agent": "ua"})
+        req = {ln["attributes"][REQUEST_ID_ATTR]: ln["attributes"]
+               for ln in _lines(capsys.readouterr().out)
+               if ln["attributes"].get("logger.name") == "psirens.http"}
+    assert req["o1"]["event.outcome"] == "success"
+    assert req["o2"]["event.outcome"] == "failure"
+    for a in req.values():
+        for key in ("url.path", "http.request.method", "http.response.status_code",
+                    "user_agent.original", "event.outcome"):
+            assert key in a, (key, a)

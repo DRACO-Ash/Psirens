@@ -95,6 +95,19 @@ CASES = [
   '        udl_slice_hours=_env_int("UDL_SLICE_HOURS", 1),',
   '        udl_slice_hours=_env_int("UDL_SLICE_HOURS", 24),',
   "tests/test_sources.py", "test_the_default_slice_fetches_a_live_day_once"),
+ # 1.7.11, the platform Logging check on 1.7.10 (two Medium findings).
+ ("request lines without user_agent.original (Logging check on 1.7.10)", "src/psirens/logjson.py",
+  '            out[USER_AGENT_ATTR] = _header(value)\n',
+  '            pass\n',
+  "tests/test_logging.py", "test_every_request_line_carries_the_user_agent_path_and_method"),
+ ("lines inside a request without url.path and method", "src/psirens/logjson.py",
+  '        attrs["url.path"] = scope.get("path", "")\n',
+  '',
+  "tests/test_logging.py", "test_every_request_line_carries_the_user_agent_path_and_method"),
+ ("the audit line without event.outcome (Logging check on 1.7.10)", "src/psirens/logjson.py",
+  '                          OUTCOME_ATTR: outcome(status["code"]),\n',
+  '',
+  "tests/test_logging.py", "test_the_audit_line_states_the_outcome"),
 ]
 
 

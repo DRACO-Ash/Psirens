@@ -58,6 +58,13 @@ REQUEST_ID = "http.request.header.x-request-id"
 USER_EMAIL = "user.email"
 EMAIL = "logging-check@appstore.invalid"   # the value the platform's check sends
 SECRET = "LOGCHECKSECRET42"
+AGENT = "psirens-logging-check/1.0"
+USER_AGENT = "user_agent.original"
+# The Logging check on 1.7.10, 24 November 2026: every line of a request needs
+# these, and the audit line (the one carrying the status) needs event.outcome.
+EVERY_LINE = ("url.path", "http.request.method", USER_AGENT)
+AUDIT_LINE = ("url.path", "http.request.method", "http.response.status_code",
+              USER_AGENT, "event.outcome")
 RED_MODES = {
     # gunicorn's own lines on stderr: the 1.7.0 behaviour
     "stderr": {"strip_logger_class": True, "env": {}},
@@ -83,7 +90,8 @@ def _free_port() -> int:
 
 def _get(url: str, rid: str) -> None:
     req = urllib.request.Request(url, headers={"X-Request-Id": rid,
-                                               "X-Auth-Request-Email": EMAIL})
+                                               "X-Auth-Request-Email": EMAIL,
+                                               "User-Agent": AGENT})
     with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (localhost)
         resp.read()
 
@@ -158,6 +166,21 @@ def _line_problems(n: int, line: str) -> list[str]:
     return out
 
 
+def _request_line_problems(n: int, attrs: dict, audited: set[str], rid: str) -> list[str]:
+    """Every line of a request names its path, method and user agent; the
+    line carrying the status is the audit line and also needs the outcome."""
+    out = [f"line {n}: request {rid} line lacks {k}" for k in EVERY_LINE if k not in attrs]
+    if attrs.get(USER_AGENT) not in (None, AGENT):
+        out.append(f"line {n}: user_agent.original is {attrs.get(USER_AGENT)!r}, not the agent sent")
+    if "http.response.status_code" in attrs:
+        missing = [k for k in AUDIT_LINE if k not in attrs]
+        if missing:
+            out.append(f"line {n}: audit line for {rid} lacks {', '.join(missing)}")
+        else:
+            audited.add(rid)
+    return out
+
+
 def evaluate(stdout: str, stderr: str, ids: list[str]) -> list[str]:
     problems: list[str] = []
     lines = [ln for ln in stdout.splitlines() if ln.strip()]
@@ -168,6 +191,7 @@ def evaluate(stdout: str, stderr: str, ids: list[str]) -> list[str]:
         problems.append(f"{len(errs)} line(s) went to stderr, first: {errs[0][:120]!r}")
     seen: set[str] = set()
     named: set[str] = set()
+    audited: set[str] = set()
     for n, line in enumerate(lines, 1):
         problems.extend(_line_problems(n, line))
         try:
@@ -178,11 +202,15 @@ def evaluate(stdout: str, stderr: str, ids: list[str]) -> list[str]:
         seen.add(rid)
         if attrs.get(USER_EMAIL) == EMAIL:
             named.add(rid)
+        if rid in ids:
+            problems.extend(_request_line_problems(n, attrs, audited, rid))
     for rid in ids:
         if rid not in seen:
             problems.append(f"no log line carries request id {rid} in its attributes")
         elif rid not in named:
             problems.append(f"no line for request {rid} names the user as user.email")
+        if rid in seen and rid not in audited:
+            problems.append(f"request {rid} has no audit line carrying {', '.join(AUDIT_LINE)}")
     if SECRET in stdout or SECRET in stderr:
         problems.append("a query-string secret was written to the logs")
     return problems
