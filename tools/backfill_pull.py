@@ -170,6 +170,16 @@ def retry_windows(report: Dict[str, Any], hours: int) -> List[Tuple[datetime, da
     return sorted(set(out))
 
 
+def since_filter(windows: List[Tuple[datetime, datetime]],
+                 since: Optional[datetime]) -> List[Tuple[datetime, datetime]]:
+    """Drop windows that end before `since`. Samples older than what each
+    object's 2,000-sample cap can hold are trimmed as soon as they are merged,
+    so pulling them again is work the store throws away."""
+    if since is None:
+        return windows
+    return [(s, e) for s, e in windows if e > since]
+
+
 def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Totals plus the windows that did not land, for a targeted re-run."""
     added = sum(int(r.get("added") or 0) for r in results if r.get("ok"))
@@ -343,25 +353,53 @@ def pull_with_wait(pull: Any, sleep: Any, max_wait_s: float) -> Dict[str, Any]:
 
 def run(base: str, token: str, mode: str, start: datetime, end: datetime,
         chunk_h: int, timeout: float, sleep: Any,
-        max_wait_s: float = DEFAULT_MAX_WAIT_MIN * 60) -> Dict[str, Any]:
+        max_wait_s: float = DEFAULT_MAX_WAIT_MIN * 60, renew: Optional[Any] = None) -> Dict[str, Any]:
     windows = chunks(start, end, chunk_h)
     print("%d chunk(s) of up to %dh, %s to %s, mode %s"
           % (len(windows), chunk_h, iso_z(start), iso_z(end), mode))
-    return run_windows(base, token, mode, windows, timeout, sleep, max_wait_s)
+    return run_windows(base, token, mode, windows, timeout, sleep, max_wait_s, renew)
+
+
+def is_signin(row: Dict[str, Any]) -> bool:
+    """The platform sign-in answered instead of PSIRENS: the session ended."""
+    return not row.get("ok") and "platform sign-in" in str(row.get("detail", ""))
+
+
+def not_attempted(windows: List[Tuple[datetime, datetime]]) -> List[Dict[str, Any]]:
+    return [{"start": iso_z(s), "end": iso_z(e), "ok": False,
+             "detail": "not attempted: the sign-in session ended"} for s, e in windows]
 
 
 def run_windows(base: str, token: str, mode: str,
                 windows: List[Tuple[datetime, datetime]], timeout: float, sleep: Any,
-                max_wait_s: float = DEFAULT_MAX_WAIT_MIN * 60) -> Dict[str, Any]:
-    results = []
+                max_wait_s: float = DEFAULT_MAX_WAIT_MIN * 60,
+                renew: Optional[Any] = None, pull: Any = None) -> Dict[str, Any]:
+    """Pull each window in turn. When the platform session ends (FACT, 25
+    November 2026: about 40 minutes in, every later chunk got the sign-in
+    redirect), ask `renew` for a fresh cookie and retry the same window; if
+    there is none, stop and record the rest as not attempted, so the report's
+    failed windows feed --retry-from directly."""
+    pull = pull or pull_once
+    results: List[Dict[str, Any]] = []
     for i, (c_start, c_end) in enumerate(windows, 1):
         if i > 1:
             sleep(MIN_GAP_S)
         began = time.monotonic()
-        row = pull_with_wait(lambda s=c_start, e=c_end: pull_once(base, token, mode, s, e, timeout),
-                             sleep, max_wait_s)
+
+        def once(s: datetime = c_start, e: datetime = c_end) -> Dict[str, Any]:
+            return pull(base, token, mode, s, e, timeout)
+
+        row = pull_with_wait(once, sleep, max_wait_s)
+        if is_signin(row) and renew is not None and renew():
+            row = pull_with_wait(once, sleep, max_wait_s)
         row["seconds"] = round(time.monotonic() - began, 1)
         results.append(row)
+        if is_signin(row):
+            print("  %2d/%d  %s  STOPPED: the sign-in session ended; %d window(s) left "
+                  "for --retry-from" % (i, len(windows), iso_z(c_start)[:10],
+                                        len(windows) - i + 1))
+            results.extend(not_attempted(windows[i:]))
+            break
         if row["ok"]:
             print("  %2d/%d  %s  added %-6s fetched %-6s %5.1fs"
                   % (i, len(windows), iso_z(c_start)[:10], row["added"],
@@ -446,6 +484,25 @@ def self_test() -> int:
     check("retries end where the failures end", again[-1][1],
           datetime(2026, 11, 3, tzinfo=timezone.utc))
     check("a clean report retries nothing", retry_windows({"summary": {}}, 6), [])
+    check("--since drops windows that end before it",
+          len(since_filter(again, datetime(2026, 11, 2, 1, tzinfo=timezone.utc))), 4)
+    check("no --since keeps every window", len(since_filter(again, None)), 8)
+
+    # The session ending mid-run (25 November 2026).
+    gone = {"ok": False, "detail": "HTTP 302 redirect to x: the platform sign-in answered"}
+    good = {"ok": True, "added": 1, "fetched": 1, "errors": []}
+    script = iter([gone, good, good])
+    rep = run_windows("b", "", "real", again[:2], 1, lambda s: None,
+                      renew=lambda: True,
+                      pull=lambda b, t, m, s, e, to: dict(next(script), start=iso_z(s), end=iso_z(e)))
+    check("a renewed cookie retries the same window", [r["ok"] for r in rep["chunks"]],
+          [True, True])
+    rep = run_windows("b", "", "real", again[:5], 1, lambda s: None,
+                      renew=lambda: False,
+                      pull=lambda b, t, m, s, e, to: dict(gone, start=iso_z(s), end=iso_z(e)))
+    check("with no fresh cookie the run stops at once", len(rep["chunks"]), 5)
+    check("the rest are recorded for --retry-from",
+          len(rep["summary"]["failed_windows"]), 5)
 
     # Busy means wait, not skip (live run, 23 November 2026).
     answers = iter([{"detail": "busy"}, {"detail": "busy"}, {"ok": True, "added": 1}])
@@ -485,11 +542,45 @@ def read_token(required: bool) -> str:
         raise SystemExit(2)
 
 
+def ask_fresh_cookie() -> bool:
+    """The platform session ended mid-run: ask for a fresh one, unechoed."""
+    try:
+        value = getpass.getpass(
+            "\nThe platform session has ended. Sign in again in the browser, copy the "
+            "Cookie header and paste it here (not echoed), or press Enter to stop: ").strip()
+    except (EOFError, OSError):
+        return False
+    if value:
+        os.environ[COOKIE_ENV] = value
+    return bool(value)
+
+
 def build_window(args: argparse.Namespace) -> Tuple[datetime, datetime]:
     now = datetime.now(timezone.utc)
     if args.start and args.end:
         return parse_dt(args.start), parse_dt(args.end)
     return now - timedelta(days=args.days), now
+
+
+def pull_all(args: argparse.Namespace, token: str) -> Dict[str, Any]:
+    """Plan the windows (a whole range, or an earlier report's failures) and
+    pull them."""
+    since = parse_dt(args.since) if args.since else None
+    renew = ask_fresh_cookie if args.ask_cookie else None
+    if args.retry_from:
+        with open(args.retry_from, encoding="utf-8") as fh:
+            windows = since_filter(retry_windows(json.load(fh), args.chunk_hours), since)
+        print("%d chunk(s) of up to %dh re-running the failures in %s, mode %s"
+              % (len(windows), args.chunk_hours, args.retry_from, args.mode))
+        report = run_windows(args.base, token, args.mode, windows, args.timeout,
+                             time.sleep, args.max_wait_min * 60, renew)
+    else:
+        start, end = build_window(args)
+        if since is not None:
+            start = max(start, since)
+        report = run(args.base, token, args.mode, start, end,
+                     args.chunk_hours, args.timeout, time.sleep, args.max_wait_min * 60, renew)
+    return report
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -513,6 +604,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="prompt for the browser session cookie WITHOUT echo "
                          "(else it is read from %s)" % COOKIE_ENV)
     ap.add_argument("--json", metavar="PATH", help="write the full report as JSON")
+    ap.add_argument("--since", metavar="ISO",
+                    help="skip every window that ends before this time")
     ap.add_argument("--retry-from", metavar="PATH",
                     help="re-run only the failed windows of an earlier --json report")
     ap.add_argument("--self-test", action="store_true",
@@ -541,17 +634,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.check:
         return check_build(args.base, token, args.timeout)
 
-    if args.retry_from:
-        with open(args.retry_from, encoding="utf-8") as fh:
-            windows = retry_windows(json.load(fh), args.chunk_hours)
-        print("%d chunk(s) of up to %dh re-running the failures in %s, mode %s"
-              % (len(windows), args.chunk_hours, args.retry_from, args.mode))
-        report = run_windows(args.base, token, args.mode, windows, args.timeout,
-                             time.sleep, args.max_wait_min * 60)
-    else:
-        start, end = build_window(args)
-        report = run(args.base, token, args.mode, start, end,
-                     args.chunk_hours, args.timeout, time.sleep, args.max_wait_min * 60)
+    report = pull_all(args, token)
     s = report["summary"]
     print("\n%d/%d chunk(s) ok, %d sample(s) added, %d object-record(s) fetched"
           % (s["ok"], s["chunks"], s["added"], s["fetched"]))
