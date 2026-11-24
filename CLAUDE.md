@@ -1359,6 +1359,17 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   cap), default timeout 900 s; proven against a fake slow server. The real
   fix is upstream: upload 1.7.10 or later (one-hour slices) BEFORE the
   backfill.
+  SECOND LIVE RUN, 24 November 2026, latest script, FACT from Ash's screen:
+  chunk 1 outlasted the 900 s timeout (so the gateway holds a request at
+  least 900 s); chunk 2 got HTTP 503 (from the platform, not the app: the
+  app answers busy as 200; cause TBC, possibly a restart, owner Ash);
+  chunk 3 ADDED 13,557 samples, 26,213 objects offered, in 549.9 s. So one
+  day takes ~9 to 15 minutes and 90 days is of the order of 15 hours.
+  INFERENCE, unmeasured: UDL response time dominates (24 requests at ~25 s),
+  and the hourly refresh's fixed 24 h lookback holds the pull slot for a
+  similar share of every hour. Proposed fix (not built, waiting on Ash's
+  `/api/meta`): look back from the last successful ingest, not a fixed 24 h,
+  and report each cycle's duration on `/api/meta`.
   FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
   (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
   the response. So either `TEAM_TOKEN` is unset in the deployment (writes are
