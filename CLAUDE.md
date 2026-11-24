@@ -80,7 +80,21 @@ done in 1.7.10; (5) `TEAM_TOKEN` is NOT SET in the deployment, so write
 routes are guarded by the platform sign-in alone and the interface's Pull
 control was working, only blind to its own answer.
 
-PROPOSAL AWAITING ASH, 23 November 2026: EAST-WEST BURN TIMING,
+1.7.11, 24 November 2026: LOGGING CHECK, two new Medium findings (Advisory,
+blocking from 1 December) on the upload after 1.7.8: `user_agent.original`
+missing from request lines, `event.outcome` missing from the audit line.
+Every line inside a request now carries `url.path`, `http.request.method`
+and `user_agent.original`; the request line adds `event.outcome`. The golden
+loop's `logging_check.py` requires them (1.7.10's `logjson.py` from git fails
+it on stdout lines 10 and 11, the platform's own numbers); three red cases
+(22 of 22 go red). See CONTEXT-001 section 7. Built on `main` ahead of the
+burn timing, which becomes 1.7.12 (work in progress on
+`claude/psirens-takeover-setup-xhxjdu`, server side done).
+
+EAST-WEST BURN TIMING: APPROVED by Ash, 24 November 2026 (go; id keyed to the
+nearest hour; uncertainty widened to measured 95% coverage, factor 2.6 measured
+on the shipped function). Building as 1.7.12. The proposal record follows.
+PROPOSAL (now approved), 23 November 2026: EAST-WEST BURN TIMING,
 `proposals/2026-11-23-ew-timing/PROPOSAL.html`. Time a confirmed E-W burn
 where the before and after trend fits cross (refined twice, refused beyond
 two grid steps, grid split kept for audit), state +/-2 sigma, key the id on
@@ -90,8 +104,7 @@ PRODUCTION detector, 393 synthetic burns: median error 0.3 deg/day burn 1.1 h
 9 h of new data for 34 of 60 burns (grid) against 2 of 60 (crossing, hour
 key). LIMITS: 33 of 191 burns under 0.1 deg/day do not cross and keep the
 grid stamp; ~91% of truths inside +/-2 sigma, not 95%. Three decisions on
-its form: go, id keying, uncertainty width. LEAD EVERY REPLY WITH IT until
-answered. Mockup figures from `prototype/capture.sh` (real interface,
+its form: go, id keying, uncertainty width. ANSWERED 24 November 2026. Mockup figures from `prototype/capture.sh` (real interface,
 worked burn seeded as EXAMPLE-1, because UDL-enabled starts purge DEMO-*).
 
 1.7.10, 23 November 2026: `UDL_SLICE_HOURS` default 24 -> 1 (a live day is

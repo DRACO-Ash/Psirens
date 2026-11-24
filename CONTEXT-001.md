@@ -266,6 +266,23 @@ attributes. Put the X-Auth-Request-Email header in the attributes of every
 request line as user.email. Lines: 11, 12." So the check DOES test
 `user.email`, the earlier three findings PASS, and the field is not optional in
 practice. Default ON from 1.7.3.
+FACT, 24 November 2026, from the Logging check (Advisory) on the upload after
+1.7.8 (INFERENCE: 1.7.10): "Your app's logs miss 2 parts of the logging
+standard", both Medium, stdout lines 10 and 11 (the two request lines).
+(1) **Request logs do not say which request they belong to**: "Missing on
+request lines: user_agent.original. Every line written while handling a
+request needs url.path, http.request.method, user_agent.original, besides the
+request ID and the user." (2) **Request audit lines are incomplete or wrong**:
+"Missing: event.outcome. The audit line for each request needs url.path,
+http.request.method, http.response.status_code, user_agent.original and
+event.outcome." So the standard has GROWN again since 1.7.3 passed it: a third
+data point for the general lesson below. Fixed in 1.7.11: the request context
+carries `url.path`, `http.request.method` and `user_agent.original` (empty
+string when no User-Agent is sent), and the request line adds `event.outcome`
+(`success` below 400, else `failure`; the platform's own value set is TBC,
+the finding asked only for presence). PROVEN: `tools/logging_check.py` now
+sends a User-Agent and requires all of it; run against 1.7.10's `logjson.py`
+from git it rejects stdout lines 10 and 11, the platform's own line numbers.
 
 **THE GENERAL LESSON, and it is the one worth carrying to every App Store app:**
 the platform ADDS checks, with deadlines, to pipelines that are already green.

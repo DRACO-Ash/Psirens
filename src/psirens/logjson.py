@@ -38,6 +38,8 @@ _REQUEST: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar
 
 REQUEST_ID_ATTR = "http.request.header.x-request-id"
 EMAIL_ATTR = "user.email"
+USER_AGENT_ATTR = "user_agent.original"
+OUTCOME_ATTR = "event.outcome"
 _MAX_HEADER = 200
 _QUIET_PATHS = ("/healthz", "/readyz")
 
@@ -147,15 +149,28 @@ def _header(value: bytes) -> str:
 
 
 def request_attributes(headers: list[tuple[bytes, bytes]], log_email: bool) -> dict[str, str]:
-    """The attributes every line written while handling this request carries."""
-    out: dict[str, str] = {}
+    """The attributes every line written while handling this request carries.
+
+    `user_agent.original` is always present (1.7.11, the platform Logging
+    check on 1.7.10: "Missing on request lines: user_agent.original"). When
+    the client sent no User-Agent it is the empty string, which says exactly
+    that, rather than a value nobody sent."""
+    out: dict[str, str] = {USER_AGENT_ATTR: ""}
     for key, value in headers:
         name = key.lower()
         if name == b"x-request-id":
             out[REQUEST_ID_ATTR] = _header(value)
+        elif name == b"user-agent":
+            out[USER_AGENT_ATTR] = _header(value)
         elif name == b"x-auth-request-email" and log_email:
             out[EMAIL_ATTR] = _header(value)
     return out
+
+
+def outcome(status: int) -> str:
+    """`event.outcome` for the request's audit line: below 400 the request
+    did what was asked; at or above it, it did not."""
+    return "success" if status < 400 else "failure"
 
 
 _HTTP = logging.getLogger("psirens.http")
@@ -178,6 +193,11 @@ class RequestLog:
             await self.app(scope, receive, send)
             return
         attrs = request_attributes(scope.get("headers") or [], self.log_email)
+        # The platform standard (Logging check on 1.7.10): EVERY line written
+        # while handling a request carries the path and method, not only the
+        # closing request line. The path never carries the query string.
+        attrs["url.path"] = scope.get("path", "")
+        attrs["http.request.method"] = scope.get("method", "")
         token = _REQUEST.set(attrs)
         status = {"code": 500}
 
@@ -197,6 +217,7 @@ class RequestLog:
                           "http.request.method": scope.get("method", ""),
                           "url.path": path,
                           "http.response.status_code": status["code"],
+                          OUTCOME_ATTR: outcome(status["code"]),
                           "http.server.request.duration_ms":
                               round((time.perf_counter() - started) * 1000.0, 2)}})
             _REQUEST.reset(token)
