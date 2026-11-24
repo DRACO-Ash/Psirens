@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import statistics
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -161,7 +162,7 @@ def test_cosmos_2589_northstar_is_set_aside_and_the_drift_is_real(tmp_path):
     # The track is one provider's: nothing near 64E is plotted.
     assert all(abs(s["sub_lon_deg"] - 127.9) < 0.5 for s in t["samples"])
     # The pooled 1.7.4 track fitted -12.96 deg/day at 19 deg rms.
-    assert t["drift_deg_per_day"] == pytest.approx(-0.024, abs=0.01)
+    assert_the_agreeing_rate(t)
     assert t["drift_residual_deg"] < 0.05
     assert t["drift_withheld_reason"] is None
 
@@ -406,13 +407,33 @@ def test_a_rate_is_published_with_hours_of_history_not_days(tmp_path):
     assert t["drift_consensus"]["count"] == 3
 
 
+def assert_the_agreeing_rate(t: dict) -> None:
+    """The published rate is the agreeing providers' own, not NorthStar's
+    -2.28 and not the pooled -12.96.
+
+    ROTTED ASSERTION, found 24 November 2026: this used to compare against
+    the -0.024 deg/day the rows were generated with, +/-0.01. An element
+    set's one-orbit rate is NOT that number: SGP4 adds about +0.007 deg/day
+    (J2) and, at GEO, SDP4's lunisolar terms move it with the Moon. Measured
+    for this very orbit through November 2026: -0.0130 to -0.0193 deg/day on
+    a roughly two-week cycle, so the old assertion failed for a few days in
+    every fortnight (it failed on the 1.7.12 source on 24 November at 23:00Z)
+    and passed the rest. Now the expectation comes from the element sets
+    themselves, with a physical bound that holds all month.
+    """
+    agreeing = [t["providers"][p]["elset_rate_deg_per_day"]
+                for p in ("SAFRAN", "18 SPCS", "KBR", "EXO")]
+    assert t["drift_deg_per_day"] == pytest.approx(statistics.median(agreeing), abs=1e-4)
+    assert -0.04 < t["drift_deg_per_day"] < -0.005
+
+
 def test_the_consensus_never_counts_a_provider_set_aside(tmp_path):
     t = track(tmp_path, _cosmos(tmp_path))
     cons = t["drift_consensus"]
     assert "NorthStar" not in cons["providers"] and cons["count"] == 4
     assert cons["min_deg_per_day"] <= t["drift_deg_per_day"] <= cons["max_deg_per_day"]
     assert t["providers"]["NorthStar"]["elset_rate_deg_per_day"] == pytest.approx(-2.28, abs=0.05)
-    assert t["drift_deg_per_day"] == pytest.approx(-0.024, abs=0.01)
+    assert_the_agreeing_rate(t)
 
 
 def test_one_checked_provider_is_published_as_one_source(tmp_path):
