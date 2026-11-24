@@ -88,7 +88,12 @@ COOKIE_ENV = "PSIRENS_COOKIE"
 # refresh costs 33 upstream requests and ~423,000 rows because the truncation
 # guard halves every full response. A 24 h chunk is exactly what the hourly
 # refresh already completes; six of them in one request risks the gateway.
-DEFAULT_CHUNK_H = 24
+# FACT, 24 November 2026, Ash's 90-chunk report against the live app: all 28
+# chunks that answered took 192 to 342 s on the server, and all 48 that did
+# not ran to the 900 s client timeout. Nothing answered between 342 and 900 s,
+# so a response slower than somewhere in that range never comes back. Six
+# hours is ~75 s on the server, well clear of whatever cuts it off.
+DEFAULT_CHUNK_H = 6
 # `/api/pull` is behind the strict limiter: 6 calls per 60 seconds, keyed by
 # client. Chunks take far longer than that to run, so this pause exists only to
 # keep a fast failure path (every chunk erroring instantly) from tripping it.
@@ -152,6 +157,17 @@ def chunks(start: datetime, end: datetime, hours: int) -> List[Tuple[datetime, d
         out.append((cursor, nxt))
         cursor = nxt
     return out
+
+
+def retry_windows(report: Dict[str, Any], hours: int) -> List[Tuple[datetime, datetime]]:
+    """The failed windows of an earlier --json report, each re-split into
+    chunks of at most `hours`, oldest first. Re-pulling a window that DID land
+    is harmless: samples are de-duplicated on provider and epoch."""
+    failed = (report.get("summary") or {}).get("failed_windows") or []
+    out: List[Tuple[datetime, datetime]] = []
+    for pair in failed:
+        out.extend(chunks(parse_dt(pair[0]), parse_dt(pair[1]), hours))
+    return sorted(set(out))
 
 
 def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -331,6 +347,12 @@ def run(base: str, token: str, mode: str, start: datetime, end: datetime,
     windows = chunks(start, end, chunk_h)
     print("%d chunk(s) of up to %dh, %s to %s, mode %s"
           % (len(windows), chunk_h, iso_z(start), iso_z(end), mode))
+    return run_windows(base, token, mode, windows, timeout, sleep, max_wait_s)
+
+
+def run_windows(base: str, token: str, mode: str,
+                windows: List[Tuple[datetime, datetime]], timeout: float, sleep: Any,
+                max_wait_s: float = DEFAULT_MAX_WAIT_MIN * 60) -> Dict[str, Any]:
     results = []
     for i, (c_start, c_end) in enumerate(windows, 1):
         if i > 1:
@@ -412,7 +434,18 @@ def self_test() -> int:
     check("a page title is found", page_title(b"<html><TITLE> Sign in\n</TITLE>"),
           "Sign in")
     check("no title is empty", page_title(b"{}"), "")
-    check("the default chunk is one upstream day", DEFAULT_CHUNK_H, 24)
+    check("the default chunk stays clear of the live cut-off", DEFAULT_CHUNK_H, 6)
+
+    # Re-running only what failed (24 November 2026).
+    earlier = {"summary": {"failed_windows": [
+        ["2026-11-02T00:00:00+00:00", "2026-11-03T00:00:00+00:00"],
+        ["2026-11-01T00:00:00+00:00", "2026-11-02T00:00:00+00:00"]]}}
+    again = retry_windows(earlier, 6)
+    check("each failed day becomes four 6 h chunks", len(again), 8)
+    check("retries run oldest first", again[0][0], datetime(2026, 11, 1, tzinfo=timezone.utc))
+    check("retries end where the failures end", again[-1][1],
+          datetime(2026, 11, 3, tzinfo=timezone.utc))
+    check("a clean report retries nothing", retry_windows({"summary": {}}, 6), [])
 
     # Busy means wait, not skip (live run, 23 November 2026).
     answers = iter([{"detail": "busy"}, {"detail": "busy"}, {"ok": True, "added": 1}])
@@ -480,6 +513,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="prompt for the browser session cookie WITHOUT echo "
                          "(else it is read from %s)" % COOKIE_ENV)
     ap.add_argument("--json", metavar="PATH", help="write the full report as JSON")
+    ap.add_argument("--retry-from", metavar="PATH",
+                    help="re-run only the failed windows of an earlier --json report")
     ap.add_argument("--self-test", action="store_true",
                     help="offline checks of the pure helpers; no network, no token")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -506,9 +541,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.check:
         return check_build(args.base, token, args.timeout)
 
-    start, end = build_window(args)
-    report = run(args.base, token, args.mode, start, end,
-                 args.chunk_hours, args.timeout, time.sleep, args.max_wait_min * 60)
+    if args.retry_from:
+        with open(args.retry_from, encoding="utf-8") as fh:
+            windows = retry_windows(json.load(fh), args.chunk_hours)
+        print("%d chunk(s) of up to %dh re-running the failures in %s, mode %s"
+              % (len(windows), args.chunk_hours, args.retry_from, args.mode))
+        report = run_windows(args.base, token, args.mode, windows, args.timeout,
+                             time.sleep, args.max_wait_min * 60)
+    else:
+        start, end = build_window(args)
+        report = run(args.base, token, args.mode, start, end,
+                     args.chunk_hours, args.timeout, time.sleep, args.max_wait_min * 60)
     s = report["summary"]
     print("\n%d/%d chunk(s) ok, %d sample(s) added, %d object-record(s) fetched"
           % (s["ok"], s["chunks"], s["added"], s["fetched"]))

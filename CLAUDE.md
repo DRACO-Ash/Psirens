@@ -637,8 +637,9 @@ drills, tour and self-check without a server:
 inside the request: a 90-day pull is 90 upstream slices and 178 seconds of
 deliberate pausing before any network time, held on one connection, which a
 platform ingress will close long before the server finishes. The default chunk
-is 144 hours (six slices). A failed chunk does not stop the run; the summary
-prints the exact `--start/--end` to re-run. `--check` reads `/api/meta` and
+is 6 hours from 24 November 2026 (live cut-off, see the backfill entry). A
+failed chunk does not stop the run; the summary prints the exact
+`--start/--end` to re-run, and `--retry-from <report.json>` re-runs them all. `--check` reads `/api/meta` and
 REFUSES to start against a build older than 1.6.17, because below that a
 re-pull of a held epoch is discarded and no `raan_deg` is filled, so the
 backfill would have to be run twice. Token from `PSIRENS_TOKEN` or an unechoed
@@ -1397,6 +1398,21 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   pod's restart / OOMKilled events. MITIGATION, no build: memory 2Gi in the
   Configuration tab, then re-run the failed windows the script's summary
   prints. DURABLE FIX (a proposal, not built): a compact sample store.
+  FULL REPORT OF THAT RUN, FACT, 24 November 2026 (Ash's `--json` file): 90
+  chunks, 28 ok, 343,051 samples added; 48 TimeoutError, 12 getaddrinfo, 1
+  HTTP 503, 1 reset. Server-side time of EVERY success (wait removed) is 192
+  to 342 s; EVERY timeout ran to the 900 s client limit; NOTHING landed
+  between 342 and 900 s, and the successes pile up against 342. That is a
+  truncated distribution: a response slower than a cut-off somewhere in
+  342 to 900 s never reaches the client. It also weakens the OOM inference
+  above (a killed process resets the gateway's upstream connection, which
+  should surface as a 502 or reset, not a silent hang). Unknown which: the
+  cut-off may be a gateway response limit (then the timed-out windows LANDED
+  and a re-run adds ~0) or the pod dying (then a re-run adds thousands).
+  The re-run DECIDES it. Tool change, same day: default chunk 24 h -> 6 h
+  (~75 s server time), and `--retry-from REPORT.json` re-runs only the failed
+  windows (248 chunks of 6 h for this report, about six hours). Self-test 39
+  checks; proven against a local fake server.
   FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
   (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
   the response. So either `TEAM_TOKEN` is unset in the deployment (writes are
