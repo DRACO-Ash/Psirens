@@ -382,17 +382,22 @@ def test_a_burn_is_timed_where_the_fits_cross():
 
 def test_the_event_id_holds_as_data_arrives():
     """The id churn of 17 November: on the split, the same burn took a new id as
-    the store advanced. Keyed on the crossing to the hour, it holds."""
-    rng = random.Random(5)
-    burn = END - timedelta(hours=58, minutes=24)
+    the store advanced. A burn 32 h old, whose after-window is still filling,
+    so its crossing moves by minutes every hour: keyed to the hour, the id
+    holds. The epoch MUST move here, or the test proves nothing (an id keyed on
+    the exact epoch would pass a burn whose crossing stood still)."""
+    rng = random.Random(1)
+    burn = END - timedelta(hours=32, minutes=24)
     full = _synth(rng, burn=burn, dr=-0.3, end=END + timedelta(hours=8))
-    ids = set()
+    ids, epochs = set(), set()
     for k in range(9):
         now = END + timedelta(hours=k)
         held = [s for s in full if datetime.fromisoformat(s["epoch"]) <= now]
         ev = _ew(detect(_store({"B": held}), TH, now=now, stale_after_hours=24))
-        if ev:
-            ids.add(ev[0]["id"])
+        assert ev, f"hour {k}: the burn must be detected"
+        ids.add(ev[0]["id"])
+        epochs.add(ev[0]["epoch"])
+    assert len(epochs) > 1, "the crossing never moved, so this test is vacuous"
     assert len(ids) == 1, ids
 
 
@@ -421,3 +426,25 @@ def test_the_drift_is_cut_at_the_crossing():
     out = detect(_store({"B": _synth(rng, burn=burn, dr=-0.3)}), TH,
                  now=END, stale_after_hours=24)
     assert latest_splits(out["events"])["B"].isoformat() == _ew(out)[0]["evidence"]["crossing"]["epoch"]
+
+
+def test_the_stated_range_covers_95_percent_of_true_burn_times():
+    """Owner decision, 24 November 2026: the half-width is widened to measured
+    95% coverage, not the nominal 2 sigma. On this suite's own generator (80
+    fixed seeds) the shipped factor covers 97%; 2 sigma would cover 93%, so
+    reverting CROSS_COVERAGE_K to 2 fails this."""
+    inside = n = 0
+    for seed in range(1, 81):
+        rng = random.Random(seed)
+        burn = END - timedelta(hours=rng.uniform(40, 70))
+        dr = rng.choice([0.1, 0.3, 1.0]) * rng.choice([-1, 1])
+        ev = _ew(detect(_store({"B": _synth(rng, burn=burn, dr=dr)}), TH,
+                        now=END, stale_after_hours=24))
+        cross = ev[0]["evidence"]["crossing"] if ev else None
+        if not cross or cross["sigma_hours"] <= 0:
+            continue
+        n += 1
+        err = abs((datetime.fromisoformat(cross["epoch"]) - burn).total_seconds()) / 3600
+        inside += err <= cross["half_width_hours"]
+    assert n >= 60, f"only {n} burns timed at a crossing"
+    assert inside / n >= 0.95, f"{inside} of {n} inside the stated range"

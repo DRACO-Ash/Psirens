@@ -362,6 +362,17 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
   evidence that peaks at the very edge of the data. A burn a few hours old cannot be measured yet:
   PSIRENS says so rather than guessing a rate, and confirms it, or clears it, once a day of fixes
   follows.</p>
+
+  <h3>When the burn happened</h3>
+  <p>A burn changes how fast an object drifts, not where it is. So the line fitted to the days before a
+  burn and the line fitted to the days after it meet at the burn. PSIRENS times every confirmed
+  east-west burn at that <b>crossing</b> and states a range beside it, for example
+  <i>burn 21 Nov 19:43Z &plusmn;0.5 h, where the two fits cross</i>. The range is drawn wide enough to
+  hold the true time in 95 burns out of 100 on a test belt with real scatter, not a nominal figure.</p>
+  <p>The 3-hour slot the detector confirmed it at is kept underneath, so you can see both. When the two
+  lines do not meet within two slots of each other, which happens with small burns, the slot stands and
+  the evidence says so. On the evidence chart the slot is the dotted white line and the crossing the
+  green one, with its range shaded.</p>
   <div class="note"><b>No event is not the same as nothing happened.</b> A drift change under about
   0.05&deg;/day sits inside station-keeping and is not called. A slow, patient approach will not
   appear here. The brief says &ldquo;no detectable events&rdquo; for exactly that reason.</div>
@@ -383,7 +394,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <kbd>+</kbd> <kbd>&minus;</kbd> zoom and <kbd>0</kbd> returns to four days. Double-click does the same.</li>
     <li>Events too close to separate are drawn as a <b>numbered bubble</b>. Click it for a list, and
       click a name in the list to focus that event. If the list says <i>one 3-hour detection slot</i>,
-      the shared time is the detector's resolution, not a coordinated burn.</li>
+      the shared time is the detector's resolution, not a coordinated burn. If it says <i>the same
+      minute</i>, every burn in it was timed where its fits cross, and the times genuinely coincide.</li>
     <li>Names that would overlap are left off and counted at the right of the strip, rather than
       drawn on top of each other.</li>
   </ul>
@@ -1064,6 +1076,7 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">RPO</td><td>Rendezvous and proximity operations: deliberate close approach between two objects.</td></tr>
       <tr><td class="k">Set aside</td><td>A provider that puts an object more than 1&deg; from where most of the other providers put it, at the same instant. Listed, and used for nothing.</td></tr>
       <tr><td class="k">Shift Brief</td><td>The list at the top of the rail of what changed in the last four days, split at your previous visit.</td></tr>
+      <tr><td class="k">Fit crossing</td><td>Where the drift line fitted before a burn meets the one fitted after it: the time PSIRENS gives an east-west burn, with a range that holds the true time 95 times in 100.</td></tr>
       <tr><td class="k">SGP4</td><td>The standard propagator used to turn an element set into a position.</td></tr>
       <tr><td class="k">Sidereal day</td><td>23h 56m 04s, one rotation of the Earth against the stars. The orbital period at GEO.</td></tr>
       <tr><td class="k">Sub-satellite longitude</td><td>The longitude directly beneath the object.</td></tr>
@@ -1088,6 +1101,8 @@ section.tourlit{box-shadow:0 0 0 2px #f0a52e,0 0 44px rgba(240,165,46,.17);borde
       <tr><td class="k">3 days</td><td>Trailing window the drift rate is fitted over.</td></tr>
       <tr><td class="k">6h / 36h / 72h</td><td>Fresh, Stale, and the point the age fade bottoms out.</td></tr>
       <tr><td class="k">0.02&deg;/day</td><td>Smallest drift-rate change the Shift Brief calls (six standard errors also needed).</td></tr>
+      <tr><td class="k">2.6 standard errors</td><td>Half-width of the range stated with a burn time, measured to hold the true time 95 times in 100.</td></tr>
+      <tr><td class="k">6 h</td><td>Furthest a fit crossing may sit from the 3-hour slot; beyond it the slot stands.</td></tr>
       <tr><td class="k">0.008&deg;</td><td>Smallest inclination step the Shift Brief calls.</td></tr>
       <tr><td class="k">48h each side</td><td>The two independent fits that confirm an E-W manoeuvre.</td></tr>
       <tr><td class="k">12h</td><td>No fix for this long, from an object that usually reports often: Gone quiet.</td></tr>
@@ -1209,14 +1224,14 @@ const HOTSPOTS={
     [72.6,17,4,5,"On the timeline","The focused event is ringed and lifted out of any bubble, so it is never hidden. Clicking a single glyph focuses its event."],
     [20.6,27.3,26,3.5,"Focus bar","Which event is in focus. Back to belt, or Esc, restores the view you came from."],
     [51.7,79.4,6,6,"The burn","The trail splits at the event: grey before, amber after, a diamond where it happened."],
-    [81.2,32.4,16.9,24.7,"Event evidence","Longitude against four days, with the two independent fits and the split. This is why PSIRENS believes it."],
+    [81.2,32.4,16.9,24.7,"Event evidence","Longitude against four days, with the two independent fits, the 3-hour slot dotted and, in green, where the fits cross: the burn time. This is why PSIRENS believes it."],
     [81,82.9,17.5,8.6,"Drift, after the event","Fitted after the burn, not across it, and the Drift fit row says so."]],
   inspector:[
     // Positions MEASURED by tools/guide_shots.js from the capture (1.7.4),
     // not estimated: the earlier table pointed at rows the scrolled capture
     // did not even show.
     [2,0.3,96,4,"Title bar","Drag it to move the panel. The cross closes it and leaves the plot untouched."],
-    [3,5,94,21,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track and the split, so you can see why the event was raised."],
+    [3,5,94,21,"Event evidence","Shown when the object has a Shift Brief event: the series, the fitted track, the 3-hour slot and the burn time where the fits cross, so you can see why the event was raised and when."],
     [3,26.9,94,2.8,"Identity","Rank chip, common name, NORAD number and country code."],
     [3,30.5,94,4.8,"State","Priority, data mode, and the classification marking of the track provider's records."],
     [3,35.5,94,3.1,"Track from and agreement","The ONE provider whose positions are plotted, and whether the providers agree on where the object is, compared at the same instant."],
@@ -1457,6 +1472,10 @@ const QUESTIONS=[
    a:["An early warning only: confirm or clear it once a day of fixes follows",
       "It is probably hostile","The object has been lost","The data is stale"],right:0,
    why:"A burn a few hours old cannot be measured yet. Suspected is a reason to look again, not a finding."},
+  {q:"The evidence reads burn 21 Nov 19:43Z \u00b10.5 h, and below it 3-hour detection slot 21 Nov 18:09Z. Which time do you report?",
+   a:["19:43Z \u00b10.5 h, where the two fits cross","18:09Z, the slot",
+      "Halfway between the two","Neither: the event is unconfirmed"],right:0,
+   why:"The slot is where the detector confirmed the burn; the crossing is when it happened. The range holds the true time 95 times in 100."},
   {q:"The brief says no detectable events. What can you conclude?",
    a:["Nothing in the belt has moved","No drift change above the floor, about 0.05°/day or more, in four days",
       "The feed is down","Every object is station-kept"],right:1,

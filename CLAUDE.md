@@ -80,6 +80,29 @@ done in 1.7.10; (5) `TEAM_TOKEN` is NOT SET in the deployment, so write
 routes are guarded by the platform sign-in alone and the interface's Pull
 control was working, only blind to its own answer.
 
+1.7.12, 24 November 2026: EAST-WEST BURN TIMING, BUILT on Ash's approval.
+`events.ew_crossing` refines the winning 3-hour split to where the before and
+after trends meet (refined three times, refused beyond `CROSS_CLAMP_H` = 6 h,
+the split then stands); the event epoch is the crossing, the id keys on it
+rounded to the hour (`hour_key`), the evidence carries `timed_by` and
+`crossing` {epoch, sigma_hours, half_width_hours, coverage, method}, and
+`detectable_from` is a day after the later of crossing and split. The drift
+cut follows the epoch through `latest_splits`. `CROSS_COVERAGE_K` = 2.6,
+MEASURED on the shipped function (95th percentile 2.583 on seed 7; 98.3% on
+independent seed 8; 97% on the test generator against 93% at 2 sigma). SPA:
+evidence text "burn ... +/-X h, where the two fits cross" with the slot
+beneath, a green crossing line and band on the chart, and the timeline list
+says "the same minute" when every member was crossing-timed. PROVEN: three
+server red cases (25 of 25 go red); the id test was VACUOUS at first (its
+58 h-old burn's crossing never moved) and now uses a 32 h-old burn whose
+crossing moves every hour, asserting the move; the 1.7.11 page from `main`
+fails the probe on the evidence text and the bubble wording. NOT GUARDED,
+stated: the early-warning training start now follows the crossing too, a
+small shift no test separates. Guide: "When the burn happened", timeline
+note, glossary, reference card, two hotspot captions, a 17th self-check
+question; figures recaptured (the seeded burn sits on the grid, so crossing
+and slot coincide in the figure). Upload 1.7.12: it carries 1.7.11.
+
 1.7.11, 24 November 2026: LOGGING CHECK, two new Medium findings (Advisory,
 blocking from 1 December) on the upload after 1.7.8: `user_agent.original`
 missing from request lines, `event.outcome` missing from the audit line.

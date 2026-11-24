@@ -1586,10 +1586,15 @@ function tlPinHTML(h){
   const [a,b]=tlSpread(h),same=b-a<6e4,iso=t=>esc(fmtZ(new Date(t).toISOString()));
   const rows=h.members.map(e=>{const k=evKind(e),o=findObj(e.object_id);
     return `<button type="button" class="tlrow" data-evid="${esc(e.id)}"><b style="color:${k.c}">${k.g}</b> ${esc(o?o.name:e.name)} <span class="m">${esc(k.n)}${e.tier==="SUSPECTED"?" \u00b7 suspected":""}</span></button>`;}).join("");
-  const head=`<div class="m">${h.members.length} events \u00b7 ${same?"one 3-hour detection slot, "+iso(a):iso(a)+" to "+iso(b)}</div>`
-    +(same?`<div class="m">The detector places these to the nearest 3-hour slot, so a shared time is its resolution, not a coordinated burn.</div>`:"");
+  const slot=h.members.some(e=>!crossTimed(e));
+  const head=`<div class="m">${h.members.length} events \u00b7 ${same?sharedLabel(slot)+iso(a):iso(a)+" to "+iso(b)}</div>`
+    +(same&&slot?`<div class="m">The detector places these to the nearest 3-hour slot, so a shared time is its resolution, not a coordinated burn.</div>`:"");
   const zoom=same?"":`<button type="button" class="tlzoomto">Zoom to these</button>`;
   return head+rows+zoom;}
+// 1.7.12: an E-W burn is timed where its two fits cross, so a shared time is
+// the slot's resolution only for events still timed to the slot.
+function crossTimed(e){return !!(e.evidence&&e.evidence.timed_by==="fit crossing");}
+function sharedLabel(slot){return slot?"one 3-hour detection slot, ":"the same minute, ";}
 function tlTipHTML(h){
   const rows=h.members.slice(0,6).map(e=>{const k=evKind(e),o=findObj(e.object_id);
     return `<div><b style="color:${k.c}">${k.g}</b> ${esc(o?o.name:e.name)} <span class="m">${esc(k.n)} · ${esc(fmtZ(e.epoch))}</span></div>`;}).join("");
@@ -1757,9 +1762,19 @@ function evidenceText(e){
   const lines=[];
   if(ev.before&&ev.after&&ev.quantity==="longitude"){lines.push(`drift ${ev.before.rate_deg_per_day.toFixed(2)} to ${ev.after.rate_deg_per_day.toFixed(2)}°/day`);}
   if(e.type==="NS"){lines.push(`inclination ${e.delta_inc_deg>0?"+":""}${e.delta_inc_deg.toFixed(3)}°`);}
-  lines.push(`${FOCUS_TAG[e.type]||"event"} ${fmtZ(e.epoch)}`);
+  lines.push(...burnLines(e,ev));
   if(ev.method){lines.push(ev.method);}
   return lines.map(esc).join("<br>");}
+// The burn as timed (1.7.12): where the before and after fits cross, with the
+// half-width that covers 95% of true burn times, and the 3-hour slot the
+// detector confirmed it at kept beside it for audit.
+function halfWidthText(h){return h<0.05?"\u00b1<0.1 h":"\u00b1"+h.toFixed(1)+" h";}
+function burnLines(e,ev){
+  const tag=FOCUS_TAG[e.type]||"event";
+  if(ev.crossing){return [`${tag} ${fmtZ(ev.crossing.epoch)} ${halfWidthText(ev.crossing.half_width_hours)}, where the two fits cross`,
+    `3-hour detection slot ${fmtZ(ev.split)}`];}
+  if(ev.timed_by==="3-hour split"){return [`${tag} ${fmtZ(e.epoch)}, the 3-hour slot (the fits do not cross near it)`];}
+  return [`${tag} ${fmtZ(e.epoch)}`];}
 function evidenceHTML(o){
   const e=eventFor(o.id);if(e===null){return "";}
   const k=evKind(e),chart=e.evidence&&e.evidence.series?`<canvas id="evcv" data-series="0"></canvas>`:"";
@@ -1781,8 +1796,13 @@ function drawEvidence(o){
   g.fillStyle="#8ea3c4";pts.forEach(p=>{if(p[0]>=t0){g.beginPath();g.arc(X(p[0]),Y(p[1]),1.6,0,7);g.fill();}});
   evLine(g,ev.before,X,Y,"#5A86D6",true);evLine(g,ev.after,X,Y,"#F0A52E",false);
   const sx=X(Date.parse(ev.split));g.strokeStyle="#eaf1fb";g.setLineDash([3,3]);g.beginPath();g.moveTo(sx,4);g.lineTo(sx,H-12);g.stroke();g.setLineDash([]);
+  if(ev.crossing){drawCrossing(g,X,H,ev.crossing);}
   g.fillStyle="#5b7093";g.font="9px "+MONO;g.textAlign="left";g.fillText(ev.quantity+" · 4 days to now",6,H-2);
   c.dataset.series=String(pts.length);}
+function drawCrossing(g,X,H,cr){
+  const t=Date.parse(cr.epoch),hw=cr.half_width_hours*36e5,x=X(t);
+  g.fillStyle="rgba(63,210,123,.22)";g.fillRect(X(t-hw),4,Math.max(2,X(t+hw)-X(t-hw)),H-16);
+  g.strokeStyle="#3fd27b";g.lineWidth=2;g.beginPath();g.moveTo(x,4);g.lineTo(x,H-12);g.stroke();}
 // -- keyboard: work the brief without the mouse --
 function stepBrief(d){
   if(!BRIEF_ORDER.length){return;}

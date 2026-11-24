@@ -108,6 +108,19 @@ CASES = [
   '                          OUTCOME_ATTR: outcome(status["code"]),\n',
   '',
   "tests/test_logging.py", "test_the_audit_line_states_the_outcome"),
+ # 1.7.12, east-west burn timing (owner approval, 24 November 2026).
+ ("the burn stamped at the 3-hour split again", "src/psirens/events.py",
+  "    when = cross.when if cross is not None else split.when\n",
+  "    when = split.when\n",
+  "tests/test_events.py", "test_a_burn_is_timed_where_the_fits_cross"),
+ ("the event id keyed on the exact epoch, not the hour", "src/psirens/events.py",
+  "               max(when, split.when) + timedelta(hours=EW_MIN_AFTER_H), hour_key(when))",
+  "               max(when, split.when) + timedelta(hours=EW_MIN_AFTER_H), None)",
+  "tests/test_events.py", "test_the_event_id_holds_as_data_arrives"),
+ ("the stated range back at nominal 2 sigma", "src/psirens/events.py",
+  "CROSS_COVERAGE_K = 2.6",
+  "CROSS_COVERAGE_K = 2.0",
+  "tests/test_events.py", "test_the_stated_range_covers_95_percent_of_true_burn_times"),
 ]
 
 

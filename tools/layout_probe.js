@@ -574,6 +574,12 @@ function checkBodyFits(m, label) {
       fail(`Enter on the brief did not focus the selected event ` +
            `(${JSON.stringify(focus.id)}, bar shown ${focus.bar}).`);
     }
+    // 1.7.12: the burn is timed where the two fits cross, the 3-hour slot is
+    // kept beside it, and the chart draws the crossing.
+    const evText = (await page.textContent(".evid .em").catch(() => "")) || "";
+    if (!/where the two fits cross/.test(evText) || !/3-hour detection slot/.test(evText)) {
+      fail(`the evidence does not state the fit crossing and the slot: ${JSON.stringify(evText.slice(0, 200))}`);
+    }
     if (!(focus.span < 360)) {
       fail("focus mode did not frame the event: the plot is still at the full belt.");
     }
@@ -688,8 +694,10 @@ function checkBodyFits(m, label) {
         const pinned = Number(await page.$eval("#tline", (e) => e.dataset.pinned || "0"));
         const tipText = (await page.textContent("#tltip")) || "";
         if (pinned < 2) { fail(`clicking the bubble did not open its list (pinned ${pinned}).`); }
-        if (!/3-hour detection slot/.test(tipText) || !/not a coordinated burn/.test(tipText)) {
-          fail(`the bubble's list does not state the detection slot: ${JSON.stringify(tipText.slice(0, 160))}`);
+        // 1.7.12: both demo burns are timed where their fits cross, so the
+        // list says they share a minute, and does NOT blame the 3-hour slot.
+        if (!/the same minute/.test(tipText) || /not a coordinated burn/.test(tipText)) {
+          fail(`the bubble's list misdescribes two crossing-timed burns: ${JSON.stringify(tipText.slice(0, 160))}`);
         }
         await page.keyboard.press("Escape");
         const afterOne = await page.evaluate(() => ({
