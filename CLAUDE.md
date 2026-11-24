@@ -1370,6 +1370,23 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   similar share of every hour. Proposed fix (not built, waiting on Ash's
   `/api/meta`): look back from the last successful ingest, not a fixed 24 h,
   and report each cycle's duration on `/api/meta`.
+  THIRD LIVE RUN, 24 November 2026, FACT from Ash's screen (chunks 1 to
+  43): about 9 chunks landed (300 to 550 s each, e.g. added 28,306), most
+  others hit the 900 s timeout, one HTTP 503, one ConnectionResetError at 29,
+  then getaddrinfo failures 30 to 41 (Ash's own network or DNS, client side).
+  MEASURED offline the same day (scratchpad harness, store at the cap, 597
+  objects x 2,000 samples, 138 MB of JSON): peak RSS 590 MB after load, 725
+  MB after save, 915 MB during a pull's merge, before the server's own
+  baseline and the fetched rows of the pull. The image runs ONE gunicorn
+  worker (`--workers 1`) and the pod limit is 1Gi. INFERENCE, strong but
+  unconfirmed: the pod is OOM-killed mid-merge once the store nears the cap,
+  the gateway holds the client on the dead connection (timeout) or answers
+  for the restarting pod (503), and that chunk's work is lost (the store
+  write is atomic, so nothing is corrupted). CHECK: count `storage boot
+  verdict` lines in the App Store logs over the run (one per boot), or the
+  pod's restart / OOMKilled events. MITIGATION, no build: memory 2Gi in the
+  Configuration tab, then re-run the failed windows the script's summary
+  prints. DURABLE FIX (a proposal, not built): a compact sample store.
   FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
   (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
   the response. So either `TEAM_TOKEN` is unset in the deployment (writes are
