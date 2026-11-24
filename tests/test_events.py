@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from psirens.astro import SIDEREAL_DAY_DAYS
 from psirens.astro import unwrap
+from psirens import events as events_mod
 from psirens.events import (EventEngine, Thresholds, detect, ew_kind,
                             ew_split, first_departure, latest_splits, ns_step,
                             series)
@@ -124,7 +125,11 @@ def test_a_drift_that_stops_is_reported_as_stopped():
     assert abs(ev[0]["rate_after"]) < 0.02
     assert ev[0]["evidence"]["before"]["rate_deg_per_day"] == pytest.approx(0.25, abs=0.03)
     known = datetime.fromisoformat(ev[0]["detectable_from"])
-    assert known - datetime.fromisoformat(ev[0]["epoch"]) == timedelta(hours=24)
+    when = datetime.fromisoformat(ev[0]["epoch"])
+    split = datetime.fromisoformat(ev[0]["evidence"]["split"])
+    # 1.7.11: the epoch is the fit crossing; reportable a day after the later
+    # of the burn as timed and the split it was confirmed at.
+    assert known == max(when, split) + timedelta(hours=24)
 
 
 def test_an_inclination_step_is_an_ns_event():
@@ -339,3 +344,80 @@ def test_the_refresh_cycle_warms_the_engine_and_survives_a_failing_hook(tmp_path
 
     app.state.refresher.on_cycle = _boom
     assert app.state.refresher.run_once()["status"] == "ok"
+
+
+# -- burn timing at the fit crossing (1.7.11, owner approval 23 November 2026) --
+def _ew(out):
+    return [e for e in out["events"] if e["type"] in ("STARTED", "STOPPED", "EW")]
+
+
+def test_a_burn_is_timed_where_the_fits_cross():
+    """Fourteen noisy burns, each 1 h 36 min off the 3-hour grid. Judged as a
+    set, because one noisy burn proves nothing either way: the crossing's
+    median error is well under the split's, under half an hour, and the truth
+    sits inside the stated 95% half-width. Reinstating the split as the epoch
+    makes this fail."""
+    burn = END - timedelta(hours=58, minutes=24)
+    cross_err, split_err, inside = [], [], 0
+    for seed in range(1, 15):
+        out = detect(_store({"B": _synth(random.Random(seed), burn=burn, dr=-0.3)}),
+                     TH, now=END, stale_after_hours=24)
+        ev = _ew(out)
+        assert ev, f"seed {seed}: the burn must be detected"
+        evid = ev[0]["evidence"]
+        assert evid["timed_by"] == "fit crossing"
+        cross = evid["crossing"]
+        assert cross["epoch"] == ev[0]["epoch"] and cross["coverage"] == 0.95
+        assert cross["half_width_hours"] == pytest.approx(
+            events_mod.CROSS_COVERAGE_K * cross["sigma_hours"], abs=0.01)
+        err = abs((datetime.fromisoformat(ev[0]["epoch"]) - burn).total_seconds()) / 3600
+        cross_err.append(err)
+        split_err.append(abs((datetime.fromisoformat(evid["split"]) - burn).total_seconds()) / 3600)
+        inside += err <= cross["half_width_hours"]
+    med = lambda v: sorted(v)[len(v) // 2]  # noqa: E731
+    assert med(cross_err) < 0.5, cross_err
+    assert med(cross_err) < med(split_err) / 2, (cross_err, split_err)
+    assert inside >= 13, f"only {inside} of 14 inside the stated half-width"
+
+
+def test_the_event_id_holds_as_data_arrives():
+    """The id churn of 17 November: on the split, the same burn took a new id as
+    the store advanced. Keyed on the crossing to the hour, it holds."""
+    rng = random.Random(5)
+    burn = END - timedelta(hours=58, minutes=24)
+    full = _synth(rng, burn=burn, dr=-0.3, end=END + timedelta(hours=8))
+    ids = set()
+    for k in range(9):
+        now = END + timedelta(hours=k)
+        held = [s for s in full if datetime.fromisoformat(s["epoch"]) <= now]
+        ev = _ew(detect(_store({"B": held}), TH, now=now, stale_after_hours=24))
+        if ev:
+            ids.add(ev[0]["id"])
+    assert len(ids) == 1, ids
+
+
+def test_no_crossing_near_the_split_leaves_the_split_standing(monkeypatch):
+    """Lines that meet too far from the split are refused: the split stands and
+    the evidence says which timed the event."""
+    monkeypatch.setattr(events_mod, "CROSS_CLAMP_H", 0.0)
+    rng = random.Random(5)
+    burn = END - timedelta(hours=58, minutes=24)
+    ev = _ew(detect(_store({"B": _synth(rng, burn=burn, dr=-0.3)}), TH,
+                    now=END, stale_after_hours=24))
+    assert ev and ev[0]["epoch"] == ev[0]["evidence"]["split"]
+    assert ev[0]["evidence"]["timed_by"] == "3-hour split"
+    assert ev[0]["evidence"]["crossing"] is None
+
+
+def test_the_id_is_keyed_to_the_nearest_hour():
+    at = datetime(2026, 11, 21, 19, 29, 59, tzinfo=timezone.utc)
+    assert events_mod.hour_key(at) == "2026-11-21T19:00:00+00:00"
+    assert events_mod.hour_key(at + timedelta(seconds=1)) == "2026-11-21T20:00:00+00:00"
+
+
+def test_the_drift_is_cut_at_the_crossing():
+    rng = random.Random(5)
+    burn = END - timedelta(hours=58, minutes=24)
+    out = detect(_store({"B": _synth(rng, burn=burn, dr=-0.3)}), TH,
+                 now=END, stale_after_hours=24)
+    assert latest_splits(out["events"])["B"].isoformat() == _ew(out)[0]["evidence"]["crossing"]["epoch"]

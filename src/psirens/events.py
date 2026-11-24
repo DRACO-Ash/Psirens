@@ -71,6 +71,24 @@ EARLY_DEV_FLOOR = 0.03  # deg: below this a departure is inside provider scatter
 QUIET_CADENCE_DIVISOR = 3.0   # "normally reports often": median step <= quiet/3
 QUIET_CADENCE_MIN = 6
 EVIDENCE_MAX_POINTS = 240
+# Burn timing (1.7.11, owner approval of 23 November 2026). A burn changes the
+# drift RATE, not the longitude, so the trend fitted before it and the trend
+# fitted after it meet at the burn. The winning 3-hour split is refined to that
+# crossing, re-fitted about the estimate CROSS_ITERATIONS times, and refused
+# (the split stands) if it lands more than CROSS_CLAMP_H from the split.
+# MEASURED on 393 synthetic burns through this detector: median error at
+# 0.3 deg/day fell from 1.1 h (split) to 0.2 h (crossing).
+CROSS_ITERATIONS = 3
+CROSS_CLAMP_H = 2 * STEP_H
+CROSS_MIN_POINTS = 8
+# The stated half-width is CROSS_COVERAGE_K standard errors, the factor that
+# covers 95% of true burn times on the synthetic belt (owner decision: widen to
+# measured coverage, not the nominal 2 sigma, which covered about 91%).
+# MEASURED by proposals/2026-11-23-ew-timing/prototype/coverage.py on this
+# function: 95th percentile of |error| / sigma = 2.583 on 360 burns (seed 7),
+# rounded up to 2.6; on an independent 360 (seed 8) 2.6 covers 98.3%. Plain
+# 2 sigma covered 90.6%.
+CROSS_COVERAGE_K = 2.6
 
 KIND_EW = ("STARTED", "STOPPED", "EW")
 CONFIRMED = "CONFIRMED"
@@ -86,6 +104,12 @@ class Thresholds:
     # A fit missing its data by more than this (deg rms) says nothing about a
     # rate, so it can neither confirm nor rule out a burn (1.7.5).
     max_residual: float = 1.0
+
+
+@dataclass(frozen=True)
+class Crossing:
+    when: datetime
+    sigma_hours: float
 
 
 @dataclass(frozen=True)
@@ -179,6 +203,50 @@ def ew_split(lon: list[tuple[datetime, float]], ref: datetime,
     # against this function's annotation (python:S5886, raised on 1.7.0).
     return _Split(when=best.when, before=best.before, after=best.after,
                   z=best.z, edge=(tested - best.when) <= step)
+
+
+def _trend(lon: list[tuple[datetime, float]], keys: list[datetime],
+           lo: datetime, hi: datetime, origin: datetime) -> tuple[float, float, float, int] | None:
+    """(intercept at `origin`, rate deg/day, rms, points) of the fitted trend,
+    libration modelled where the sampling resolves it."""
+    rows = _between(lon, keys, lo, hi)
+    if len(rows) < CROSS_MIN_POINTS:
+        return None
+    xs = [(w - origin).total_seconds() / 86400.0 for w, _ in rows]
+    fitted = model_coefficients(xs, [v for _, v in rows], resolves_libration(xs))
+    if fitted is None:
+        return None
+    coeffs, rms = fitted
+    return coeffs[0], coeffs[1], rms, len(rows)
+
+
+def ew_crossing(lon: list[tuple[datetime, float]], split_when: datetime) -> Crossing | None:
+    """Where the before and after trends meet, refined about the estimate, or
+    None when they do not meet within CROSS_CLAMP_H of the split (the split
+    then stands). The standard error comes from the two intercepts at the
+    window edge, about 2 rms / sqrt(n) each, over the change in rate."""
+    keys = [p[0] for p in lon]
+    win = timedelta(hours=WIN_H)
+    t, sigma_h = split_when, 0.0
+    for _ in range(CROSS_ITERATIONS):
+        b = _trend(lon, keys, t - win, t, t)
+        a = _trend(lon, keys, t, t + win, t)
+        if b is None or a is None or abs(b[1] - a[1]) < 1e-9:
+            return None
+        s_int = math.hypot(2 * b[2] / math.sqrt(b[3]), 2 * a[2] / math.sqrt(a[3]))
+        sigma_h = s_int / abs(b[1] - a[1]) * 24.0
+        t = t + timedelta(days=(a[0] - b[0]) / (b[1] - a[1]))
+        if abs(_hours(split_when, t)) > CROSS_CLAMP_H:
+            return None
+    return Crossing(when=t, sigma_hours=sigma_h)
+
+
+def hour_key(when: datetime) -> str:
+    """The epoch rounded to the nearest hour, which an E-W event id is keyed
+    on (owner decision, 23 November 2026). MEASURED: over 9 hours of new data
+    the id changed for 2 of 60 burns, against 34 of 60 on the 3-hour split."""
+    base = when.replace(minute=0, second=0, microsecond=0)
+    return (base + timedelta(hours=1) if when - base >= timedelta(minutes=30) else base).isoformat()
 
 
 def ew_kind(before: float, after: float, floor: float) -> str:
@@ -306,13 +374,13 @@ class _Object:
 
 
 def _base(obj: _Object, kind: str, tier: str, when: datetime,
-          known: datetime | None = None) -> dict:
+          known: datetime | None = None, key: str | None = None) -> dict:
     """`detectable_from` is when the event first COULD have been reported: a
     burn is only confirmable once a day of fixes follows it. "New since you
     last looked" is judged against this, not the burn epoch, or a burn that
     happened before the operator's last visit but was confirmed after it would
     be filed as old news."""
-    return {"id": f"{obj.oid}:{kind}:{when.isoformat()}",
+    return {"id": f"{obj.oid}:{kind}:{key or when.isoformat()}",
             "object_id": obj.oid, "type": kind, "tier": tier,
             "epoch": when.isoformat(),
             "detectable_from": (known or when).isoformat(),
@@ -322,8 +390,12 @@ def _base(obj: _Object, kind: str, tier: str, when: datetime,
 def _ew_event(obj: _Object, split: _Split, ref: datetime, th: Thresholds) -> dict:
     rb, ra = split.before.rate_deg_per_day, split.after.rate_deg_per_day
     win = timedelta(hours=WIN_H)
-    ev = _base(obj, ew_kind(rb, ra, th.ew_floor), CONFIRMED, split.when,
-               split.when + timedelta(hours=EW_MIN_AFTER_H))
+    cross = ew_crossing(obj.lon, split.when)
+    when = cross.when if cross is not None else split.when
+    # Reportable once a day of fixes follows the burn AS TIMED and the split
+    # the detector confirmed it at, whichever is later.
+    ev = _base(obj, ew_kind(rb, ra, th.ew_floor), CONFIRMED, when,
+               max(when, split.when) + timedelta(hours=EW_MIN_AFTER_H), hour_key(when))
     ev.update({
         "rate_before": round(rb, 4), "rate_after": round(ra, 4), "z": round(split.z, 1),
         "evidence": {
@@ -333,6 +405,14 @@ def _ew_event(obj: _Object, split: _Split, ref: datetime, th: Thresholds) -> dic
             "before": _line(split.before, split.when - win, split.when),
             "after": _line(split.after, split.when, min(split.when + win, obj.lon[-1][0])),
             "method": "two independent 48 h fits, libration modelled where the sampling resolves it",
+            "timed_by": "fit crossing" if cross is not None else "3-hour split",
+            "crossing": None if cross is None else {
+                "epoch": cross.when.isoformat(),
+                "sigma_hours": round(cross.sigma_hours, 3),
+                "half_width_hours": round(CROSS_COVERAGE_K * cross.sigma_hours, 2),
+                "coverage": 0.95,
+                "method": "where the before and after trends meet, refined about the estimate",
+            },
         },
     })
     return ev
@@ -402,7 +482,7 @@ def _object_events(obj: _Object, ref: datetime, th: Thresholds) -> list[dict]:
     found = ns_step(obj.inc, ref, th)
     if found is not None:
         out.append(_ns_event(obj, found, ref))
-    since = confirmed.when if confirmed is not None else None
+    since = _parse(out[0]["epoch"]) if confirmed is not None else None
     departed = first_departure(obj.lon, since, th)
     if departed is not None and departed >= ref - timedelta(hours=LOOKBACK_H):
         out.append(_leaving_event(obj, departed, ref))

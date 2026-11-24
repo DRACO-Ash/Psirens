@@ -1,0 +1,11 @@
+{
+ "fit_seed": 7,
+ "check_seed": 8,
+ "fit_n": 360,
+ "check_n": 360,
+ "k95_fit": 2.583,
+ "k_chosen": 2.6,
+ "coverage_2sigma_fit": 0.906,
+ "coverage_k_fit": 0.95,
+ "coverage_k_check": 0.983
+}
