@@ -1,0 +1,44 @@
+[
+ {
+  "n": 1,
+  "left": 47.1,
+  "top": 15.7,
+  "c": "Every pull reads the whole store and writes all of it back, 138 MB each way, to add about 1,194 samples. A backfill chunk does the same."
+ },
+ {
+  "n": 2,
+  "left": 37.1,
+  "top": 29.7,
+  "c": "Three more full parses in the same refresh, found by reading the code: the prune, the staleness report, and the resolved view every route reads."
+ },
+ {
+  "n": 3,
+  "left": 34.8,
+  "top": 59.4,
+  "c": "health() reads the newest epoch three times, and each read parses the whole store: 4.0 s per probe, measured. /api/meta does the same."
+ },
+ {
+  "n": 4,
+  "left": 37.8,
+  "top": 75.3,
+  "c": "Measured: 1,183 MB at the peak, over the 1,024 MB the pod is given. The store here is at its retention cap, which the live one is near (inference from your inspector screenshots)."
+ },
+ {
+  "n": 5,
+  "left": 96.7,
+  "top": 15.7,
+  "c": "The store is decoded once, at start, and held. Nothing parses it again until the next restart."
+ },
+ {
+  "n": 6,
+  "left": 96.7,
+  "top": 34.3,
+  "c": "The pull is merged by the same production functions, then only what changed is written, as a new file: 0.96 MB against 138 MB. No rename and no overwrite, which is all an S3-backed mount allows by default."
+ },
+ {
+  "n": 7,
+  "left": 96.7,
+  "top": 68.6,
+  "c": "Compaction bounds what a restart replays to at most a day of segments. If the mount refuses deletes, old files are simply never read again."
+ }
+]

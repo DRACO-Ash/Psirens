@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger Store</title>
+<style>
+:root{
+  --navy:#162646;--blue1:#385FAF;--blue2:#739BCF;--amber:#C67C00;--green:#27AE60;
+  --body:#2C3E50;--bg:#F5F7FB;--card:#FFFFFF;--line:#DCE3EE;--muted:#5B6B80;--code:#EEF2F8;
+  --grid:#E3E8EF;--today:#C67C00;--prop:#27AE60;--limit:#B03A2E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --body:#DCE4F0;--bg:#0E1626;--card:#152036;--line:#26344F;--muted:#9AA9C0;--code:#0B1220;
+    --grid:#1C2A43;--today:#F0A52E;--prop:#3CCB7F;--limit:#E06A5E;
+  }
+}
+:root[data-theme="dark"]{
+  --body:#DCE4F0;--bg:#0E1626;--card:#152036;--line:#26344F;--muted:#9AA9C0;--code:#0B1220;
+  --grid:#1C2A43;--today:#F0A52E;--prop:#3CCB7F;--limit:#E06A5E;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--body);font:16px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+code{font-family:Consolas,Menlo,monospace;font-size:.88em;background:var(--code);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+header{background:#162646;color:#fff;padding:22px 16px}
+.hin,.wrap{max-width:1000px;margin:0 auto}
+.brand{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#B9C8E4}
+h1{margin:6px 0 4px;font-size:28px;font-weight:600}
+.sub{color:#C9D6EC}
+.top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.top button{padding:7px 12px;border-radius:6px;border:1px solid #33476E;background:#22355C;color:#fff;cursor:pointer}
+.wrap{padding:20px 16px 60px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:0 0 18px}
+h2{margin:0 0 10px;font-size:21px;color:var(--blue1)}
+h3{font-size:16px;margin:16px 0 6px}
+.ask{border-left:5px solid var(--amber)}
+ul.dot{list-style:none;padding:0;margin:8px 0}
+ul.dot li{position:relative;padding-left:20px;margin:6px 0}
+ul.dot li::before{content:"●";position:absolute;left:0;top:2px;font-size:11px;color:var(--blue2)}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:1px 7px;border-radius:10px;margin-right:6px;vertical-align:1px}
+.fact{background:#D8F1E3;color:#145A32}.inf{background:#E3ECFA;color:#1F3F7A}.lim{background:#F6E7CC;color:#6B4300}.tbc{background:#F3DADA;color:#7A1F1F}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:12px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:12px}
+.stat b{display:block;font-size:26px;color:var(--blue1)}
+.stat span{font-size:13px;color:var(--muted)}
+.cv{width:100%;height:340px;display:block;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tbl{overflow-x:auto}
+figure{margin:0}
+figure img{max-width:100%;height:auto;display:block;border-radius:8px;border:1px solid var(--line)}
+.fig{position:relative;display:inline-block;width:100%}
+.fig img{width:100%;display:block;border-radius:8px;border:1px solid var(--line)}
+.hs{position:absolute;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:#C67C00;color:#fff;font:700 13px/1 "Segoe UI",sans-serif;cursor:pointer;box-shadow:0 0 0 4px rgba(198,124,0,.35);display:grid;place-items:center;padding:0}
+.hs[aria-pressed="true"]{background:#27AE60;box-shadow:0 0 0 4px rgba(39,174,96,.4)}
+figcaption{font-size:14px;color:var(--muted);margin-top:6px}
+.cap{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px;min-height:3.2em;background:var(--code)}
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px}
+.calc label{font-size:14px}
+input[type=range]{width:100%}
+form fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:10px 14px}
+legend{font-weight:600;padding:0 6px}
+.opt{display:flex;gap:8px;align-items:flex-start;margin:6px 0;cursor:pointer}
+.opt small{display:block;color:var(--muted)}
+textarea{width:100%;min-height:70px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--body);padding:8px;font:inherit}
+pre.reply{white-space:pre-wrap;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px;font:13px/1.5 Consolas,Menlo,monospace;min-height:4em}
+.btn{padding:8px 14px;border-radius:6px;border:1px solid var(--blue1);background:var(--blue1);color:#fff;cursor:pointer;font:inherit}
+.btn.ghost{background:transparent;color:var(--blue1)}
+footer{max-width:1000px;margin:0 auto;padding:0 16px 30px;font-size:13px;color:var(--muted)}
+@media (max-width:600px){h1{font-size:23px}section{padding:16px}.cv{height:300px}.hs{width:22px;height:22px;font-size:11px}}
+</style>
+</head>
+<body>
+<header><div class="hin top">
+  <div><div class="brand">Bluestaq Limited · PSIRENS change proposal · 24 November 2026</div>
+  <h1>Read the history once, write only what changed</h1>
+  <div class="sub">One change to the data layer. Nothing is built until you say go.</div></div>
+  <button type="button" id="theme">Theme</button>
+</div></header>
+
+<div class="wrap">
+<section class="ask">
+  <h2>What you are deciding</h2>
+  <p>PSIRENS keeps its whole 90-day history in one JSON file and reads or rewrites all of it to answer almost everything: every pull, every refresh, every readiness probe, every <code>/api/meta</code>. The proposal is to decode the history once at start, hold it, and write down only what each pull changed, as a small new file. The merge rules stay exactly as they are; the same production functions do the work.</p>
+  <div class="stats">
+    <div class="stat"><b data-k="wfactor">.</b><span>less written per hourly pull (<span data-k="wcur"></span> down to <span data-k="wled"></span>)</span></div>
+    <div class="stat"><b data-k="peaks">.</b><span>peak memory for a refresh with a probe overlapping, against the 1,024 MB the pod is given</span></div>
+    <div class="stat"><b data-k="probe">.</b><span>to answer one readiness probe, today against proposed</span></div>
+    <div class="stat"><b data-k="cycle">.</b><span>for a whole hourly refresh cycle on the server</span></div>
+  </div>
+  <p>Four decisions in the form at the foot of the page: go or no-go, how often to compact, whether to keep the old file current for rollback, and one fact only you can give me, where the store lives in the deployment.</p>
+</section>
+
+<section>
+  <h2>What I found looking at the architecture</h2>
+  <p><span class="tag fact">FACT</span>From the code. One hourly refresh parses the whole store <b>at least four times</b> and writes it once in full: the merge (<code>store.py:395</code>), the high-interest prune (<code>store.py:333</code>), the staleness report (<code>refresh.py:294</code>), and the resolved view that every route and the Shift Brief read (<code>agreement.py:518</code>). A backfill chunk does the same.</p>
+  <p><span class="tag fact">FACT</span>Each call to <code>/readyz</code> or <code>/api/meta</code> parses the whole store <b>three times</b>: <code>health()</code> reads the newest epoch directly, then twice more through the staleness check. Measured on a store at the retention cap: <b data-k="readyz">.</b> per probe. The platform probes <code>/readyz</code> (recorded in CONTEXT-001); how often is <span class="tag tbc">TBC</span>.</p>
+  <p><span class="tag fact">FACT</span>Measured worst case: one hourly refresh with one readiness probe overlapping it peaks at <b data-k="curpeak">.</b>, over the pod's 1,024 MB. The test store is 597 objects at the 2,000-sample cap. <span class="tag inf">INFERENCE</span>The live store is near that cap: your inspector screenshots showed about 1,900 samples on single objects.</p>
+  <p><span class="tag fact">FACT</span>When the platform's file-storage add-on is attached, the store goes to its mount (<code>config.py:189</code>). That mount is Mountpoint for Amazon S3. It refuses renames, refuses overwrites and deletes unless the platform mounted it with the <code>allow-overwrite</code> and <code>allow-delete</code> options, and only allows sequential writes to new files (<a href="https://github.com/awslabs/mountpoint-s3/blob/main/doc/SEMANTICS.md">Mountpoint semantics</a>, <a href="https://github.com/awslabs/mountpoint-s3/blob/main/doc/TROUBLESHOOTING.md">troubleshooting</a>). Today every write is a full upload of the file, after a rename the mount refuses. Whether the add-on is on, and with which flags, is <span class="tag tbc">TBC</span> (question 4 below).</p>
+
+  <h3>What that costs in an hour, by probe interval</h3>
+  <p>The probe interval is the platform's setting and I do not know it. Move the slider; the figures use the measured times above. <span class="tag inf">INFERENCE</span>Parse time is taken as proportional to store size.</p>
+  <div class="calc">
+    <label>Probe every <b id="pv">10</b> s<input type="range" id="period" min="5" max="60" step="5" value="10"></label>
+    <label>Store at <b id="sv">100</b>% of the cap<input type="range" id="size" min="25" max="100" step="5" value="100"></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="parses">.</b><span>full parses of the store an hour, today</span></div>
+    <div class="stat"><b id="cpu">.</b><span>server time an hour spent parsing, today, on one worker: <span id="cpupct"></span> of the hour</span></div>
+    <div class="stat"><b id="written">.</b><span>written a day by hourly refreshes: today against proposed, with one daily snapshot</span></div>
+  </div>
+
+  <h3>The live backfill fits the same picture</h3>
+  <figure><img src="figures/B-live-backfill.png" alt="Your 24 November backfill: 28 chunks answered in 192 to 342 seconds, 48 ran to the 900 second limit">
+  <figcaption><span class="tag fact">FACT</span>Your report: <b data-k="liveok">.</b> chunks answered, all between <b data-k="livemin">.</b> and <b data-k="livemax">.</b>; <b data-k="liveto">.</b> never answered. <span class="tag inf">INFERENCE</span>Each chunk rewrote 138 MB while probes parsed it three times over, on one worker with a 1 GiB ceiling. Whether that is what cut those chunks off is not proven; the retry you are running now tells us whether their data landed. The change below removes the rewrite, the repeated parsing and the memory peak whatever the answer.</figcaption></figure>
+</section>
+
+<section>
+  <h2>The change</h2>
+  <p>Press the numbered points for what each part does.</p>
+  <figure><div class="fig" id="figA"><img src="figures/A-data-path.png" alt="The data path today and proposed, with every figure measured"></div>
+  <div class="cap" id="capA" aria-live="polite">Press a number on the figure.</div>
+  <figcaption>Every number on the figure is read from <code>prototype/results.json</code>. There is no interface change, so there is nothing to mock up.</figcaption></figure>
+  <ul class="dot">
+    <li><b>Boot:</b> read the newest snapshot, replay the segments written since, hold the result. On the first start the existing <code>history.json</code> is adopted once (<b data-k="migrate">.</b>) and left in place.</li>
+    <li><b>Every pull:</b> merge in memory with the production functions (<code>_merge_object</code>, <code>_retain_elset</code>, <code>_retain_candidates</code>, unchanged), then write one new segment holding only the samples, element sets and fields that changed.</li>
+    <li><b>Probes and <code>/api/meta</code>:</b> the newest epoch is kept as the store changes, so health costs nothing.</li>
+    <li><b>The resolved view and the Shift Brief:</b> rebuilt once per change, as now, but from memory rather than a fresh parse. They key on a version counter instead of the file's timestamp.</li>
+    <li><b>Once a day:</b> a gzip snapshot (<b data-k="snap">.</b> against <b data-k="legacy">.</b>), then older files retired. A segment carries its own length, so a half-written one is ignored, never half-applied.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Measured, side by side</h2>
+  <p><span class="tag fact">FACT</span>Each scenario ran in its own process on the same 597 by 2,000 store, so each figure is that scenario's alone. Bars are drawn against today's value in each row.</p>
+  <canvas class="cv" id="cmp" role="presentation"></canvas>
+  <div class="tbl"><table id="tbl"><thead><tr><th>Scenario</th><th>Today</th><th>Proposed</th></tr></thead><tbody></tbody></table></div>
+  <p><span class="tag lim">LIMIT</span>At rest, between refreshes, the two hold about the same (<b data-k="restcur">.</b> today, <b data-k="restled">.</b> proposed): today already keeps the resolved view, and the proposal keeps the decoded store. The gain is the end of the peaks, not a smaller resting size. Cutting the resting size too is possible with a compact in-memory layout; I have not measured it and it is not part of this proposal.</p>
+</section>
+
+<section>
+  <h2>Proof that nothing changes in the data</h2>
+  <p><span class="tag fact">FACT</span><code>prototype/equivalence.py</code> runs the production store and the ledger through the same 40 pulls and prunes. After every step it compares the two stores, and a fresh boot of the ledger from disk alone, which is what a restart would see: <b>160 checks, all equal</b>. The run exercises every merge rule: new samples, re-pulls, filling a missing field, adopting untagged legacy samples (571 of them), age pruning, the per-object cap, object deletion and compaction part-way through. It refuses to pass if the legacy or enrichment paths were not exercised.</p>
+  <p><span class="tag fact">FACT</span>The proof goes red when the ledger is broken. Three deliberate faults each failed it at the first or second pull with "a restart would see a different store": recording only new keys, so a filled field is lost; ignoring removals; replaying without the prune or the length check.</p>
+</section>
+
+<section>
+  <h2>Limits and risks, stated</h2>
+  <ul class="dot">
+    <li><span class="tag tbc">TBC</span><b>Where the store lives.</b> If it is on the S3 mount, segment and snapshot writes are new files, which the mount allows. Retiring old files needs the <code>allow-delete</code> option; without it they are never read again but use quota (one day of segments is about <b data-k="dayseg">.</b>).</li>
+    <li><span class="tag lim">LIMIT</span><b>One writer.</b> The store is held by the one server process, as it is today in practice. If the platform ever ran two replicas, each would hold its own copy; today they would overwrite each other's file instead. Neither is safe, and this does not make it worse.</li>
+    <li><span class="tag lim">LIMIT</span><b>Boot is slower by about <span data-k="boot"></span>.</b> The decode now happens at start rather than on the first request. Readiness waits for it.</li>
+    <li><span class="tag lim">LIMIT</span><b>Rollback.</b> After the switch, new data is in the ledger, not in <code>history.json</code>. Question 3 offers to keep that file current once a day, so going back to 1.7.12 would lose at most a day.</li>
+    <li><span class="tag inf">INFERENCE</span><b>Measured here, not on the platform.</b> The figures come from this build machine, not the pod, but the ratios between today and proposed should carry over.</li>
+  </ul>
+  <h3>What the build would carry</h3>
+  <ul class="dot">
+    <li>The ledger inside <code>store.py</code> behind the same methods, so routes, events and the SPA are untouched. Health, the Resolver and the event cache read counters instead of the file.</li>
+    <li>The equivalence proof moved into <code>tests/</code>, plus a red case for each guard, run in the golden loop. A daily compaction step in the scheduler, off the request path.</li>
+    <li><code>/api/meta</code> gains a <code>store</code> block: snapshot age, segments since it, last write in bytes, boot seconds. This is so the change can be checked live rather than taken on trust.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Your decision</h2>
+  <form id="decide">
+    <fieldset><legend>1. Go or no-go</legend>
+      <label class="opt"><input type="radio" name="q1" value="Go: build it as the next version (recommended)"><span>Go: build it as the next version (recommended)</span></label>
+      <label class="opt"><input type="radio" name="q1" value="No-go: keep the single file"><span>No-go: keep the single file</span></label>
+    </fieldset>
+    <fieldset><legend>2. How often to compact</legend>
+      <label class="opt"><input type="radio" name="q2" value="Once a day (recommended)"><span>Once a day (recommended)<small>A restart replays at most a day of segments; one snapshot write a day</small></span></label>
+      <label class="opt"><input type="radio" name="q2" value="Every 6 hours"><span>Every 6 hours<small>Faster restarts, four snapshot writes a day</small></span></label>
+    </fieldset>
+    <fieldset><legend>3. Rollback safety</legend>
+      <label class="opt"><input type="radio" name="q3" value="Keep history.json current once a day (recommended)"><span>Keep <code>history.json</code> current once a day (recommended)<small>One full write a day, so a rollback loses at most a day</small></span></label>
+      <label class="opt"><input type="radio" name="q3" value="No: the ledger only"><span>No: the ledger only<small>Smallest I/O; a rollback would start from the switch-over day</small></span></label>
+    </fieldset>
+    <fieldset><legend>4. Where the store lives (a fact only you can see)</legend>
+      <label class="opt"><input type="radio" name="q4" value="File Storage add-on is enabled"><span>File Storage add-on is enabled<small>Configuration tab, add-ons</small></span></label>
+      <label class="opt"><input type="radio" name="q4" value="File Storage add-on is NOT enabled"><span>File Storage add-on is NOT enabled</span></label>
+      <label class="opt"><input type="radio" name="q4" value="Not sure: I will send the storage boot verdict log line"><span>Not sure: I will send the <code>storage boot verdict</code> log line</span></label>
+    </fieldset>
+    <label for="notes">Notes</label>
+    <textarea id="notes" placeholder="Anything to change, add or question"></textarea>
+  </form>
+  <pre class="reply" id="out" aria-live="polite"></pre>
+  <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button" id="copy">Copy reply</button><button class="btn ghost" type="button" id="clear">Clear answers</button><span id="copymsg" style="align-self:center;font-size:13px"></span></div>
+</section>
+</div>
+<footer>Bluestaq Limited · Not Classified · Evidence: <code>prototype/ledger.py</code>, <code>prototype/equivalence.py</code> and <code>prototype/measure.py</code> (production store code, synthetic store at the cap), <code>prototype/live-backfill-report.json</code> (your run of 24 November).</footer>
+
+<!--DATA--><script id="data" type="application/json">{"results":{"migrate":{"seconds":10.9,"snapshot_bytes":31102481,"legacy_bytes":137728004},"scenarios":[{"kind":"cur_hourly","boot_s":0.0,"boot_peak_mb":37,"incoming_samples":28656,"added":1194,"seconds":4.072,"bytes_written":137810675,"peak_mb":750,"resting_mb":478,"base_mb":37},{"kind":"led_hourly","boot_s":1.77,"boot_peak_mb":603,"incoming_samples":28656,"added":1194,"seconds":1.765,"bytes_written":957674,"peak_mb":603,"resting_mb":483,"base_mb":37},{"kind":"cur_day","boot_s":0.0,"boot_peak_mb":37,"incoming_samples":20298,"added":20298,"seconds":4.114,"bytes_written":138032151,"peak_mb":745,"resting_mb":481,"base_mb":37},{"kind":"led_day","boot_s":1.75,"boot_peak_mb":602,"incoming_samples":20298,"added":20298,"seconds":1.605,"bytes_written":3430487,"peak_mb":602,"resting_mb":486,"base_mb":37},{"kind":"cur_readyz","boot_s":0.0,"boot_peak_mb":36,"seconds":3.9908,"peak_mb":602,"resting_mb":47,"base_mb":36},{"kind":"led_readyz","boot_s":1.66,"boot_peak_mb":602,"seconds":0.0,"peak_mb":602,"resting_mb":471,"base_mb":37},{"kind":"cur_cycle","boot_s":0.0,"boot_peak_mb":37,"seconds":10.25,"probes":1,"probe_max_s":5.258,"peak_mb":1183,"resting_mb":524,"base_mb":37},{"kind":"led_cycle","boot_s":1.69,"boot_peak_mb":603,"seconds":2.75,"probes":1,"probe_max_s":0.0,"peak_mb":603,"resting_mb":494,"base_mb":37},{"kind":"led_compact","boot_s":1.66,"boot_peak_mb":602,"bytes_written":31102481,"seconds":9.99,"peak_mb":602,"resting_mb":472,"base_mb":37}],"store":"597 objects x 2000 samples, 4 providers"},"hotspots":[{"n":1,"left":47.1,"top":15.7,"c":"Every pull reads the whole store and writes all of it back, 138 MB each way, to add about 1,194 samples. A backfill chunk does the same."},{"n":2,"left":37.1,"top":29.7,"c":"Three more full parses in the same refresh, found by reading the code: the prune, the staleness report, and the resolved view every route reads."},{"n":3,"left":34.8,"top":59.4,"c":"health() reads the newest epoch three times, and each read parses the whole store: 4.0 s per probe, measured. /api/meta does the same."},{"n":4,"left":37.8,"top":75.3,"c":"Measured: 1,183 MB at the peak, over the 1,024 MB the pod is given. The store here is at its retention cap, which the live one is near (inference from your inspector screenshots)."},{"n":5,"left":96.7,"top":15.7,"c":"The store is decoded once, at start, and held. Nothing parses it again until the next restart."},{"n":6,"left":96.7,"top":34.3,"c":"The pull is merged by the same production functions, then only what changed is written, as a new file: 0.96 MB against 138 MB. No rename and no overwrite, which is all an S3-backed mount allows by default."},{"n":7,"left":96.7,"top":68.6,"c":"Compaction bounds what a restart replays to at most a day of segments. If the mount refuses deletes, old files are simply never read again."}],"live":{"chunks":90,"ok":28,"timeouts":48,"ok_min_s":192,"ok_max_s":342,"added":343051}}</script><!--/DATA-->
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("data").textContent);
+  var S = {}; D.results.scenarios.forEach(function (r) { S[r.kind] = r; });
+  var M = D.results.migrate, L = D.live;
+  var root = document.documentElement, KEY = "psirens-prop-ledger";
+  function css(v) { return getComputedStyle(root).getPropertyValue(v).trim(); }
+  function mb(b) { return b >= 1e6 ? (b / 1e6).toFixed(b >= 1e7 ? 0 : 2) + " MB" : (b / 1e3).toFixed(0) + " kB"; }
+  function secs(s) { return s < 0.001 ? "0.0 ms" : s < 1 ? (s * 1000).toFixed(0) + " ms" : s.toFixed(1) + " s"; }
+  function n0(v) { return Math.round(v).toLocaleString("en-GB"); }
+
+  var K = {
+    wfactor: Math.round(S.cur_hourly.bytes_written / S.led_hourly.bytes_written) + "x",
+    wcur: mb(S.cur_hourly.bytes_written), wled: mb(S.led_hourly.bytes_written),
+    peaks: n0(S.cur_cycle.peak_mb) + " to " + n0(S.led_cycle.peak_mb) + " MB",
+    probe: secs(S.cur_readyz.seconds) + " to " + secs(S.led_readyz.seconds),
+    cycle: secs(S.cur_cycle.seconds) + " to " + secs(S.led_cycle.seconds),
+    readyz: secs(S.cur_readyz.seconds), curpeak: n0(S.cur_cycle.peak_mb) + " MB",
+    liveok: String(L.ok), liveto: String(L.timeouts), livemin: L.ok_min_s + " s", livemax: L.ok_max_s + " s",
+    migrate: M.seconds.toFixed(0) + " s, once", snap: mb(M.snapshot_bytes), legacy: mb(M.legacy_bytes),
+    restcur: n0(S.cur_cycle.resting_mb) + " MB", restled: n0(S.led_cycle.resting_mb) + " MB",
+    dayseg: mb(24 * S.led_hourly.bytes_written), boot: secs(S.led_hourly.boot_s)
+  };
+  document.querySelectorAll("[data-k]").forEach(function (el) { el.textContent = K[el.dataset.k]; });
+
+  // The hourly calculator: measured probe and refresh costs, scaled.
+  var PARSE_PER_REFRESH = 4, PARSE_PER_PROBE = 3;
+  function calc() {
+    var p = +document.getElementById("period").value, f = +document.getElementById("size").value / 100;
+    document.getElementById("pv").textContent = p; document.getElementById("sv").textContent = Math.round(f * 100);
+    var probes = 3600 / p, parses = probes * PARSE_PER_PROBE + PARSE_PER_REFRESH;
+    var perParse = S.cur_readyz.seconds / PARSE_PER_PROBE * f;
+    var busy = parses * perParse;
+    document.getElementById("parses").textContent = n0(parses);
+    document.getElementById("cpu").textContent = n0(busy) + " s";
+    document.getElementById("cpupct").textContent = Math.round(100 * busy / 3600) + "%";
+    var today = 24 * S.cur_hourly.bytes_written * f, prop = 24 * S.led_hourly.bytes_written + M.snapshot_bytes * f;
+    document.getElementById("written").textContent = (today / 1e9).toFixed(1) + " GB to " + mb(prop);
+  }
+  ["period", "size"].forEach(function (id) { document.getElementById(id).addEventListener("input", calc); });
+  calc();
+
+  // Hotspots on figure A, positions from prototype/hotspots.json.
+  var figA = document.getElementById("figA"), capA = document.getElementById("capA");
+  D.hotspots.forEach(function (h) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "hs"; b.textContent = h.n;
+    b.style.left = h.left + "%"; b.style.top = h.top + "%";
+    b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-label", "Point " + h.n);
+    b.addEventListener("click", function () {
+      figA.querySelectorAll(".hs").forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      capA.textContent = h.n + ". " + h.c;
+    });
+    figA.appendChild(b);
+  });
+
+  // Side-by-side chart and table.
+  var ROWS = [
+    ["Written by one hourly pull", S.cur_hourly.bytes_written, S.led_hourly.bytes_written, mb],
+    ["Written by one backfill day", S.cur_day.bytes_written, S.led_day.bytes_written, mb],
+    ["One hourly refresh cycle", S.cur_cycle.seconds, S.led_cycle.seconds, secs],
+    ["One readiness probe", S.cur_readyz.seconds, S.led_readyz.seconds, secs],
+    ["Peak memory, refresh and probe", S.cur_cycle.peak_mb, S.led_cycle.peak_mb, function (v) { return n0(v) + " MB"; }]
+  ];
+  var tb = document.querySelector("#tbl tbody");
+  ROWS.forEach(function (r) {
+    var tr = document.createElement("tr");
+    [r[0], r[3](r[1]), r[3](r[2])].forEach(function (t) { var td = document.createElement("td"); td.textContent = t; tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+  function drawCmp() {
+    var cv = document.getElementById("cmp"), dpr = globalThis.devicePixelRatio || 1;
+    var w = cv.clientWidth, h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr;
+    var g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    var narrow = w < 560, left = narrow ? 12 : 230, right = w - 16, top = 14, rowH = (h - top - 34) / ROWS.length;
+    g.font = "13px Segoe UI, Arial, sans-serif"; g.textBaseline = "middle";
+    ROWS.forEach(function (r, i) {
+      var y0 = top + i * rowH, bw = right - left - 80;
+      g.fillStyle = css("--body");
+      if (narrow) { g.fillText(r[0], left, y0 + 8); } else { g.fillText(r[0], 12, y0 + rowH / 2 - 2); }
+      var by = narrow ? y0 + 18 : y0 + rowH / 2 - 15;
+      [[r[1], "--today"], [r[2], "--prop"]].forEach(function (pair, j) {
+        var frac = r[1] > 0 ? pair[0] / r[1] : 0, yy = by + j * 15, len = Math.max(2, bw * frac);
+        g.fillStyle = css(pair[1]); g.fillRect(left, yy, len, 11);
+        g.fillStyle = css("--muted"); g.fillText(r[3](pair[0]), left + len + 6, yy + 6);
+      });
+      if (i === ROWS.length - 1) {
+        var gx = left + bw * 1024 / r[1];
+        g.strokeStyle = css("--limit"); g.lineWidth = 2; g.setLineDash([4, 3]);
+        g.beginPath(); g.moveTo(gx, by - 4); g.lineTo(gx, by + 30); g.stroke(); g.setLineDash([]);
+        g.fillStyle = css("--limit"); g.fillText("1 GiB", gx - 16, by + 40);
+      }
+    });
+    var ly = h - 14;
+    g.fillStyle = css("--today"); g.fillRect(left, ly - 5, 14, 10); g.fillStyle = css("--body"); g.fillText("Today", left + 20, ly);
+    g.fillStyle = css("--prop"); g.fillRect(left + 90, ly - 5, 14, 10); g.fillStyle = css("--body"); g.fillText("Proposed", left + 110, ly);
+  }
+
+  try { var th = localStorage.getItem(KEY + "-theme"); if (th) { root.dataset.theme = th; } } catch (e) { /* storage blocked */ }
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.dataset.theme ? root.dataset.theme === "dark" : globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem(KEY + "-theme", root.dataset.theme); } catch (e) { /* storage blocked */ }
+    drawCmp();
+  });
+  globalThis.addEventListener("resize", drawCmp);
+  drawCmp();
+
+  var form = document.getElementById("decide"), out = document.getElementById("out");
+  var LABELS = { q1: "Go or no-go", q2: "Compaction", q3: "Rollback safety", q4: "Where the store lives" };
+  function render() {
+    var lines = ["Ledger store proposal (24 November 2026): decisions", ""], data = {};
+    Object.keys(LABELS).forEach(function (k, i) {
+      var c = form.querySelector('input[name="' + k + '"]:checked'); data[k] = c ? c.value : "";
+      lines.push((i + 1) + ". " + LABELS[k] + ": " + (data[k] || "(not answered)"));
+    });
+    var notes = document.getElementById("notes").value.trim(); data.notes = notes;
+    if (notes) { lines.push("", "Notes: " + notes); }
+    out.textContent = lines.join("\n");
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* storage blocked */ }
+  }
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    Object.keys(LABELS).forEach(function (k) {
+      if (saved[k]) { var i = form.querySelector('input[name="' + k + '"][value="' + CSS.escape(saved[k]) + '"]'); if (i) { i.checked = true; } }
+    });
+    if (saved.notes) { document.getElementById("notes").value = saved.notes; }
+  } catch (e) { /* storage blocked */ }
+  form.addEventListener("input", render); render();
+  document.getElementById("copy").addEventListener("click", function () {
+    var msg = document.getElementById("copymsg");
+    if (navigator.clipboard) { navigator.clipboard.writeText(out.textContent).then(function () { msg.textContent = "Copied"; }, function () { msg.textContent = "Select the text and copy it"; }); }
+    else { msg.textContent = "Select the text and copy it"; }
+  });
+  document.getElementById("clear").addEventListener("click", function () { form.reset(); document.getElementById("notes").value = ""; render(); });
+})();
+</script>
+</body>
+</html>

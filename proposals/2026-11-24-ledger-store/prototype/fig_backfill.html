@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<body style="margin:0;background:#fff">
+<div id="fig" style="width:1200px;height:520px;position:relative">
+<canvas id="c" width="1200" height="520"></canvas>
+</div>
+<script>
+// Figure B: Ash's own 90-chunk backfill report, 24 November 2026. capture.js
+// hands the report in; nothing here is typed by hand.
+function draw(report) {
+  "use strict";
+  var g = document.getElementById("c").getContext("2d");
+  var L = 90, R = 1170, T = 96, B = 440, ymax = 1000;
+  var NAVY = "#162646", BLUE = "#385FAF", AMBER = "#C67C00", MUTED = "#5B6B80", RED = "#B03A2E", GRID = "#E3E8EF";
+  g.font = "600 20px Segoe UI, Arial, sans-serif"; g.fillStyle = NAVY;
+  g.fillText("Your backfill, 24 November: how long each 24-hour chunk took on the server", L, 34);
+  g.font = "14px Segoe UI, Arial, sans-serif"; g.fillStyle = MUTED;
+  var other = report.chunks.filter(function (c) { return !c.ok && !/Timeout/.test(c.detail); }).length;
+  g.fillText("Seconds, with time spent waiting for a busy server removed. The " + other + " that failed for other reasons (your network, one 503, one reset) are left out.", L, 56);
+  function y(v) { return B - (B - T) * v / ymax; }
+  var chunks = report.chunks, n = chunks.length;
+  function x(i) { return L + (R - L) * (i + 0.5) / n; }
+  g.strokeStyle = GRID; g.lineWidth = 1; g.fillStyle = MUTED; g.font = "13px Segoe UI, Arial, sans-serif";
+  for (var v = 0; v <= ymax; v += 200) {
+    g.beginPath(); g.moveTo(L, y(v)); g.lineTo(R, y(v)); g.stroke();
+    g.fillText(String(v), L - 40, y(v) + 4);
+  }
+  var okMax = 0, ok = 0, to = 0;
+  chunks.forEach(function (c, i) {
+    var net = c.seconds - (c.waited_s || 0);
+    var timeout = !c.ok && /Timeout/.test(c.detail);
+    if (!c.ok && !timeout) { return; }
+    if (c.ok) { okMax = Math.max(okMax, net); ok++; } else { to++; }
+    g.fillStyle = c.ok ? BLUE : AMBER;
+    var w = Math.max(4, (R - L) / n - 3);
+    g.fillRect(x(i) - w / 2, y(Math.min(net, ymax)), w, B - y(Math.min(net, ymax)));
+  });
+  g.setLineDash([6, 5]); g.strokeStyle = RED; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(L, y(okMax)); g.lineTo(R, y(okMax)); g.stroke();
+  g.beginPath(); g.moveTo(L, y(900)); g.lineTo(R, y(900)); g.stroke(); g.setLineDash([]);
+  g.font = "600 14px Segoe UI, Arial, sans-serif";
+  [["slowest chunk that answered: " + Math.round(okMax) + " s", y(okMax)], ["client gives up: 900 s", y(900)]].forEach(function (t) {
+    var w = g.measureText(t[0]).width + 12;
+    g.fillStyle = "rgba(255,255,255,0.94)"; g.fillRect(R - w - 4, t[1] - 24, w, 20);
+    g.fillStyle = RED; g.fillText(t[0], R - w + 2, t[1] - 9);
+  });
+  g.fillStyle = MUTED; g.font = "13px Segoe UI, Arial, sans-serif";
+  g.fillText("chunk 1 (26 Aug)", L, B + 22); g.fillText("chunk " + n + " (23 Nov)", R - 120, B + 22);
+  g.fillText("seconds", L - 40, T - 16);
+  g.fillStyle = BLUE; g.fillRect(L, B + 44, 16, 12); g.fillStyle = NAVY; g.font = "14px Segoe UI, Arial, sans-serif";
+  g.fillText(ok + " answered, all at or under " + Math.round(okMax) + " s", L + 24, B + 55);
+  g.fillStyle = AMBER; g.fillRect(L + 380, B + 44, 16, 12); g.fillStyle = NAVY;
+  g.fillText(to + " never answered: every one ran to the 900 s limit, none in between", L + 404, B + 55);
+  document.body.dataset.done = "1";
+}
+</script>

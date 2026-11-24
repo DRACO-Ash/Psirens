@@ -1,0 +1,957 @@
+{
+  "summary": {
+    "chunks": 90,
+    "ok": 28,
+    "added": 343051,
+    "fetched": 744761,
+    "failed_windows": [
+      [
+        "2026-08-26T00:28:41+00:00",
+        "2026-08-27T00:28:41+00:00"
+      ],
+      [
+        "2026-08-27T00:28:41+00:00",
+        "2026-08-28T00:28:41+00:00"
+      ],
+      [
+        "2026-08-29T00:28:41+00:00",
+        "2026-08-30T00:28:41+00:00"
+      ],
+      [
+        "2026-08-30T00:28:41+00:00",
+        "2026-08-31T00:28:41+00:00"
+      ],
+      [
+        "2026-08-31T00:28:41+00:00",
+        "2026-09-01T00:28:41+00:00"
+      ],
+      [
+        "2026-09-01T00:28:41+00:00",
+        "2026-09-02T00:28:41+00:00"
+      ],
+      [
+        "2026-09-03T00:28:41+00:00",
+        "2026-09-04T00:28:41+00:00"
+      ],
+      [
+        "2026-09-04T00:28:41+00:00",
+        "2026-09-05T00:28:41+00:00"
+      ],
+      [
+        "2026-09-05T00:28:41+00:00",
+        "2026-09-06T00:28:41+00:00"
+      ],
+      [
+        "2026-09-06T00:28:41+00:00",
+        "2026-09-07T00:28:41+00:00"
+      ],
+      [
+        "2026-09-08T00:28:41+00:00",
+        "2026-09-09T00:28:41+00:00"
+      ],
+      [
+        "2026-09-09T00:28:41+00:00",
+        "2026-09-10T00:28:41+00:00"
+      ],
+      [
+        "2026-09-11T00:28:41+00:00",
+        "2026-09-12T00:28:41+00:00"
+      ],
+      [
+        "2026-09-12T00:28:41+00:00",
+        "2026-09-13T00:28:41+00:00"
+      ],
+      [
+        "2026-09-13T00:28:41+00:00",
+        "2026-09-14T00:28:41+00:00"
+      ],
+      [
+        "2026-09-14T00:28:41+00:00",
+        "2026-09-15T00:28:41+00:00"
+      ],
+      [
+        "2026-09-15T00:28:41+00:00",
+        "2026-09-16T00:28:41+00:00"
+      ],
+      [
+        "2026-09-17T00:28:41+00:00",
+        "2026-09-18T00:28:41+00:00"
+      ],
+      [
+        "2026-09-23T00:28:41+00:00",
+        "2026-09-24T00:28:41+00:00"
+      ],
+      [
+        "2026-09-24T00:28:41+00:00",
+        "2026-09-25T00:28:41+00:00"
+      ],
+      [
+        "2026-09-25T00:28:41+00:00",
+        "2026-09-26T00:28:41+00:00"
+      ],
+      [
+        "2026-09-26T00:28:41+00:00",
+        "2026-09-27T00:28:41+00:00"
+      ],
+      [
+        "2026-09-27T00:28:41+00:00",
+        "2026-09-28T00:28:41+00:00"
+      ],
+      [
+        "2026-09-28T00:28:41+00:00",
+        "2026-09-29T00:28:41+00:00"
+      ],
+      [
+        "2026-09-29T00:28:41+00:00",
+        "2026-09-30T00:28:41+00:00"
+      ],
+      [
+        "2026-09-30T00:28:41+00:00",
+        "2026-10-01T00:28:41+00:00"
+      ],
+      [
+        "2026-10-01T00:28:41+00:00",
+        "2026-10-02T00:28:41+00:00"
+      ],
+      [
+        "2026-10-02T00:28:41+00:00",
+        "2026-10-03T00:28:41+00:00"
+      ],
+      [
+        "2026-10-03T00:28:41+00:00",
+        "2026-10-04T00:28:41+00:00"
+      ],
+      [
+        "2026-10-04T00:28:41+00:00",
+        "2026-10-05T00:28:41+00:00"
+      ],
+      [
+        "2026-10-05T00:28:41+00:00",
+        "2026-10-06T00:28:41+00:00"
+      ],
+      [
+        "2026-10-06T00:28:41+00:00",
+        "2026-10-07T00:28:41+00:00"
+      ],
+      [
+        "2026-10-13T00:28:41+00:00",
+        "2026-10-14T00:28:41+00:00"
+      ],
+      [
+        "2026-10-15T00:28:41+00:00",
+        "2026-10-16T00:28:41+00:00"
+      ],
+      [
+        "2026-10-17T00:28:41+00:00",
+        "2026-10-18T00:28:41+00:00"
+      ],
+      [
+        "2026-10-18T00:28:41+00:00",
+        "2026-10-19T00:28:41+00:00"
+      ],
+      [
+        "2026-10-19T00:28:41+00:00",
+        "2026-10-20T00:28:41+00:00"
+      ],
+      [
+        "2026-10-20T00:28:41+00:00",
+        "2026-10-21T00:28:41+00:00"
+      ],
+      [
+        "2026-10-21T00:28:41+00:00",
+        "2026-10-22T00:28:41+00:00"
+      ],
+      [
+        "2026-10-22T00:28:41+00:00",
+        "2026-10-23T00:28:41+00:00"
+      ],
+      [
+        "2026-10-31T00:28:41+00:00",
+        "2026-11-01T00:28:41+00:00"
+      ],
+      [
+        "2026-11-01T00:28:41+00:00",
+        "2026-11-02T00:28:41+00:00"
+      ],
+      [
+        "2026-11-02T00:28:41+00:00",
+        "2026-11-03T00:28:41+00:00"
+      ],
+      [
+        "2026-11-03T00:28:41+00:00",
+        "2026-11-04T00:28:41+00:00"
+      ],
+      [
+        "2026-11-04T00:28:41+00:00",
+        "2026-11-05T00:28:41+00:00"
+      ],
+      [
+        "2026-11-06T00:28:41+00:00",
+        "2026-11-07T00:28:41+00:00"
+      ],
+      [
+        "2026-11-07T00:28:41+00:00",
+        "2026-11-08T00:28:41+00:00"
+      ],
+      [
+        "2026-11-08T00:28:41+00:00",
+        "2026-11-09T00:28:41+00:00"
+      ],
+      [
+        "2026-11-09T00:28:41+00:00",
+        "2026-11-10T00:28:41+00:00"
+      ],
+      [
+        "2026-11-10T00:28:41+00:00",
+        "2026-11-11T00:28:41+00:00"
+      ],
+      [
+        "2026-11-11T00:28:41+00:00",
+        "2026-11-12T00:28:41+00:00"
+      ],
+      [
+        "2026-11-12T00:28:41+00:00",
+        "2026-11-13T00:28:41+00:00"
+      ],
+      [
+        "2026-11-13T00:28:41+00:00",
+        "2026-11-14T00:28:41+00:00"
+      ],
+      [
+        "2026-11-14T00:28:41+00:00",
+        "2026-11-15T00:28:41+00:00"
+      ],
+      [
+        "2026-11-15T00:28:41+00:00",
+        "2026-11-16T00:28:41+00:00"
+      ],
+      [
+        "2026-11-16T00:28:41+00:00",
+        "2026-11-17T00:28:41+00:00"
+      ],
+      [
+        "2026-11-17T00:28:41+00:00",
+        "2026-11-18T00:28:41+00:00"
+      ],
+      [
+        "2026-11-18T00:28:41+00:00",
+        "2026-11-19T00:28:41+00:00"
+      ],
+      [
+        "2026-11-19T00:28:41+00:00",
+        "2026-11-20T00:28:41+00:00"
+      ],
+      [
+        "2026-11-20T00:28:41+00:00",
+        "2026-11-21T00:28:41+00:00"
+      ],
+      [
+        "2026-11-21T00:28:41+00:00",
+        "2026-11-22T00:28:41+00:00"
+      ],
+      [
+        "2026-11-22T00:28:41+00:00",
+        "2026-11-23T00:28:41+00:00"
+      ]
+    ],
+    "upstream_errors": []
+  },
+  "chunks": [
+    {
+      "start": "2026-08-26T00:28:41+00:00",
+      "end": "2026-08-27T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "waited_s": 60.0,
+      "seconds": 961.2
+    },
+    {
+      "start": "2026-08-27T00:28:41+00:00",
+      "end": "2026-08-28T00:28:41+00:00",
+      "ok": false,
+      "detail": "HTTP 503",
+      "seconds": 256.0
+    },
+    {
+      "start": "2026-08-28T00:28:41+00:00",
+      "end": "2026-08-29T00:28:41+00:00",
+      "ok": true,
+      "added": 13557,
+      "fetched": 26213,
+      "errors": [],
+      "waited_s": 270.0,
+      "seconds": 549.9
+    },
+    {
+      "start": "2026-08-29T00:28:41+00:00",
+      "end": "2026-08-30T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-08-30T00:28:41+00:00",
+      "end": "2026-08-31T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-08-31T00:28:41+00:00",
+      "end": "2026-09-01T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-01T00:28:41+00:00",
+      "end": "2026-09-02T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-02T00:28:41+00:00",
+      "end": "2026-09-03T00:28:41+00:00",
+      "ok": true,
+      "added": 15283,
+      "fetched": 26468,
+      "errors": [],
+      "seconds": 337.6
+    },
+    {
+      "start": "2026-09-03T00:28:41+00:00",
+      "end": "2026-09-04T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-04T00:28:41+00:00",
+      "end": "2026-09-05T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-05T00:28:41+00:00",
+      "end": "2026-09-06T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-06T00:28:41+00:00",
+      "end": "2026-09-07T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-07T00:28:41+00:00",
+      "end": "2026-09-08T00:28:41+00:00",
+      "ok": true,
+      "added": 17863,
+      "fetched": 27757,
+      "errors": [],
+      "seconds": 340.3
+    },
+    {
+      "start": "2026-09-08T00:28:41+00:00",
+      "end": "2026-09-09T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-09T00:28:41+00:00",
+      "end": "2026-09-10T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-10T00:28:41+00:00",
+      "end": "2026-09-11T00:28:41+00:00",
+      "ok": true,
+      "added": 28096,
+      "fetched": 24222,
+      "errors": [],
+      "seconds": 321.4
+    },
+    {
+      "start": "2026-09-11T00:28:41+00:00",
+      "end": "2026-09-12T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-12T00:28:41+00:00",
+      "end": "2026-09-13T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "waited_s": 270.0,
+      "seconds": 1174.1
+    },
+    {
+      "start": "2026-09-13T00:28:41+00:00",
+      "end": "2026-09-14T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-14T00:28:41+00:00",
+      "end": "2026-09-15T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-15T00:28:41+00:00",
+      "end": "2026-09-16T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-16T00:28:41+00:00",
+      "end": "2026-09-17T00:28:41+00:00",
+      "ok": true,
+      "added": 26349,
+      "fetched": 25408,
+      "errors": [],
+      "waited_s": 240.0,
+      "seconds": 537.1
+    },
+    {
+      "start": "2026-09-17T00:28:41+00:00",
+      "end": "2026-09-18T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-09-18T00:28:41+00:00",
+      "end": "2026-09-19T00:28:41+00:00",
+      "ok": true,
+      "added": 25599,
+      "fetched": 25213,
+      "errors": [],
+      "seconds": 326.3
+    },
+    {
+      "start": "2026-09-19T00:28:41+00:00",
+      "end": "2026-09-20T00:28:41+00:00",
+      "ok": true,
+      "added": 23929,
+      "fetched": 27102,
+      "errors": [],
+      "seconds": 320.6
+    },
+    {
+      "start": "2026-09-20T00:28:41+00:00",
+      "end": "2026-09-21T00:28:41+00:00",
+      "ok": true,
+      "added": 23044,
+      "fetched": 27253,
+      "errors": [],
+      "seconds": 299.3
+    },
+    {
+      "start": "2026-09-21T00:28:41+00:00",
+      "end": "2026-09-22T00:28:41+00:00",
+      "ok": true,
+      "added": 25559,
+      "fetched": 27808,
+      "errors": [],
+      "seconds": 326.0
+    },
+    {
+      "start": "2026-09-22T00:28:41+00:00",
+      "end": "2026-09-23T00:28:41+00:00",
+      "ok": true,
+      "added": 28306,
+      "fetched": 27044,
+      "errors": [],
+      "seconds": 323.5
+    },
+    {
+      "start": "2026-09-23T00:28:41+00:00",
+      "end": "2026-09-24T00:28:41+00:00",
+      "ok": false,
+      "detail": "ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host",
+      "seconds": 20.8
+    },
+    {
+      "start": "2026-09-24T00:28:41+00:00",
+      "end": "2026-09-25T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-09-25T00:28:41+00:00",
+      "end": "2026-09-26T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-09-26T00:28:41+00:00",
+      "end": "2026-09-27T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-09-27T00:28:41+00:00",
+      "end": "2026-09-28T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-09-28T00:28:41+00:00",
+      "end": "2026-09-29T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-09-29T00:28:41+00:00",
+      "end": "2026-09-30T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 12.1
+    },
+    {
+      "start": "2026-09-30T00:28:41+00:00",
+      "end": "2026-10-01T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-10-01T00:28:41+00:00",
+      "end": "2026-10-02T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 12.0
+    },
+    {
+      "start": "2026-10-02T00:28:41+00:00",
+      "end": "2026-10-03T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-10-03T00:28:41+00:00",
+      "end": "2026-10-04T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-10-04T00:28:41+00:00",
+      "end": "2026-10-05T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-10-05T00:28:41+00:00",
+      "end": "2026-10-06T00:28:41+00:00",
+      "ok": false,
+      "detail": "URLError: [Errno 11001] getaddrinfo failed",
+      "seconds": 0.0
+    },
+    {
+      "start": "2026-10-06T00:28:41+00:00",
+      "end": "2026-10-07T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "waited_s": 180.0,
+      "seconds": 1082.8
+    },
+    {
+      "start": "2026-10-07T00:28:41+00:00",
+      "end": "2026-10-08T00:28:41+00:00",
+      "ok": true,
+      "added": 8198,
+      "fetched": 27836,
+      "errors": [],
+      "seconds": 305.1
+    },
+    {
+      "start": "2026-10-08T00:28:41+00:00",
+      "end": "2026-10-09T00:28:41+00:00",
+      "ok": true,
+      "added": 10973,
+      "fetched": 26123,
+      "errors": [],
+      "seconds": 327.7
+    },
+    {
+      "start": "2026-10-09T00:28:41+00:00",
+      "end": "2026-10-10T00:28:41+00:00",
+      "ok": true,
+      "added": 11059,
+      "fetched": 28010,
+      "errors": [],
+      "seconds": 321.4
+    },
+    {
+      "start": "2026-10-10T00:28:41+00:00",
+      "end": "2026-10-11T00:28:41+00:00",
+      "ok": true,
+      "added": 9884,
+      "fetched": 25524,
+      "errors": [],
+      "seconds": 276.4
+    },
+    {
+      "start": "2026-10-11T00:28:41+00:00",
+      "end": "2026-10-12T00:28:41+00:00",
+      "ok": true,
+      "added": 10678,
+      "fetched": 24225,
+      "errors": [],
+      "seconds": 243.2
+    },
+    {
+      "start": "2026-10-12T00:28:41+00:00",
+      "end": "2026-10-13T00:28:41+00:00",
+      "ok": true,
+      "added": 10011,
+      "fetched": 29546,
+      "errors": [],
+      "seconds": 340.2
+    },
+    {
+      "start": "2026-10-13T00:28:41+00:00",
+      "end": "2026-10-14T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-14T00:28:41+00:00",
+      "end": "2026-10-15T00:28:41+00:00",
+      "ok": true,
+      "added": 9369,
+      "fetched": 27396,
+      "errors": [],
+      "seconds": 282.7
+    },
+    {
+      "start": "2026-10-15T00:28:41+00:00",
+      "end": "2026-10-16T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-16T00:28:41+00:00",
+      "end": "2026-10-17T00:28:41+00:00",
+      "ok": true,
+      "added": 9747,
+      "fetched": 27197,
+      "errors": [],
+      "seconds": 276.6
+    },
+    {
+      "start": "2026-10-17T00:28:41+00:00",
+      "end": "2026-10-18T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-18T00:28:41+00:00",
+      "end": "2026-10-19T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-19T00:28:41+00:00",
+      "end": "2026-10-20T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-20T00:28:41+00:00",
+      "end": "2026-10-21T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-21T00:28:41+00:00",
+      "end": "2026-10-22T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-22T00:28:41+00:00",
+      "end": "2026-10-23T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-10-23T00:28:41+00:00",
+      "end": "2026-10-24T00:28:41+00:00",
+      "ok": true,
+      "added": 5876,
+      "fetched": 28792,
+      "errors": [],
+      "seconds": 315.7
+    },
+    {
+      "start": "2026-10-24T00:28:41+00:00",
+      "end": "2026-10-25T00:28:41+00:00",
+      "ok": true,
+      "added": 5757,
+      "fetched": 23374,
+      "errors": [],
+      "seconds": 213.9
+    },
+    {
+      "start": "2026-10-25T00:28:41+00:00",
+      "end": "2026-10-26T00:28:41+00:00",
+      "ok": true,
+      "added": 4747,
+      "fetched": 29228,
+      "errors": [],
+      "seconds": 276.8
+    },
+    {
+      "start": "2026-10-26T00:28:41+00:00",
+      "end": "2026-10-27T00:28:41+00:00",
+      "ok": true,
+      "added": 4698,
+      "fetched": 29219,
+      "errors": [],
+      "waited_s": 270.0,
+      "seconds": 559.5
+    },
+    {
+      "start": "2026-10-27T00:28:41+00:00",
+      "end": "2026-10-28T00:28:41+00:00",
+      "ok": true,
+      "added": 3472,
+      "fetched": 28955,
+      "errors": [],
+      "seconds": 302.8
+    },
+    {
+      "start": "2026-10-28T00:28:41+00:00",
+      "end": "2026-10-29T00:28:41+00:00",
+      "ok": true,
+      "added": 3102,
+      "fetched": 21792,
+      "errors": [],
+      "seconds": 243.6
+    },
+    {
+      "start": "2026-10-29T00:28:41+00:00",
+      "end": "2026-10-30T00:28:41+00:00",
+      "ok": true,
+      "added": 2884,
+      "fetched": 19990,
+      "errors": [],
+      "seconds": 191.5
+    },
+    {
+      "start": "2026-10-30T00:28:41+00:00",
+      "end": "2026-10-31T00:28:41+00:00",
+      "ok": true,
+      "added": 2067,
+      "fetched": 28927,
+      "errors": [],
+      "seconds": 342.3
+    },
+    {
+      "start": "2026-10-31T00:28:41+00:00",
+      "end": "2026-11-01T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-01T00:28:41+00:00",
+      "end": "2026-11-02T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-02T00:28:41+00:00",
+      "end": "2026-11-03T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-03T00:28:41+00:00",
+      "end": "2026-11-04T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-04T00:28:41+00:00",
+      "end": "2026-11-05T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-05T00:28:41+00:00",
+      "end": "2026-11-06T00:28:41+00:00",
+      "ok": true,
+      "added": 2938,
+      "fetched": 28445,
+      "errors": [],
+      "seconds": 280.7
+    },
+    {
+      "start": "2026-11-06T00:28:41+00:00",
+      "end": "2026-11-07T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-07T00:28:41+00:00",
+      "end": "2026-11-08T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-08T00:28:41+00:00",
+      "end": "2026-11-09T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-09T00:28:41+00:00",
+      "end": "2026-11-10T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-10T00:28:41+00:00",
+      "end": "2026-11-11T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-11T00:28:41+00:00",
+      "end": "2026-11-12T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "waited_s": 210.0,
+      "seconds": 1113.0
+    },
+    {
+      "start": "2026-11-12T00:28:41+00:00",
+      "end": "2026-11-13T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-13T00:28:41+00:00",
+      "end": "2026-11-14T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-14T00:28:41+00:00",
+      "end": "2026-11-15T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-15T00:28:41+00:00",
+      "end": "2026-11-16T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "waited_s": 180.0,
+      "seconds": 1082.8
+    },
+    {
+      "start": "2026-11-16T00:28:41+00:00",
+      "end": "2026-11-17T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-17T00:28:41+00:00",
+      "end": "2026-11-18T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-18T00:28:41+00:00",
+      "end": "2026-11-19T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-19T00:28:41+00:00",
+      "end": "2026-11-20T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "waited_s": 180.0,
+      "seconds": 1082.8
+    },
+    {
+      "start": "2026-11-20T00:28:41+00:00",
+      "end": "2026-11-21T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-21T00:28:41+00:00",
+      "end": "2026-11-22T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.4
+    },
+    {
+      "start": "2026-11-22T00:28:41+00:00",
+      "end": "2026-11-23T00:28:41+00:00",
+      "ok": false,
+      "detail": "TimeoutError: The read operation timed out",
+      "seconds": 900.3
+    },
+    {
+      "start": "2026-11-23T00:28:41+00:00",
+      "end": "2026-11-24T00:28:41+00:00",
+      "ok": true,
+      "added": 6,
+      "fetched": 25694,
+      "errors": [],
+      "waited_s": 150.0,
+      "seconds": 478.4
+    }
+  ]
+}

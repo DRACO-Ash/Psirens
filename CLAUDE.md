@@ -81,6 +81,25 @@ untagged history and gives the observed cross-check its 24 h; run
 `tools/udl_elset_probe.py` to confirm live element sets state their
 ephemeris type, which the agreement check and the consensus both depend on.
 
+PROPOSAL AWAITING ASH, 24 November 2026: LEDGER STORE ("read the history
+once, write only what changed"), `proposals/2026-11-24-ledger-store/PROPOSAL.html`.
+Ash asked for one bold architectural change, proposal first. FACT from the
+code: one hourly refresh parses the whole store at least four times and
+rewrites it once (`store.py:395`, `:333`, `refresh.py:294`, `agreement.py:518`);
+EVERY `/readyz` and `/api/meta` parses it three times (`health()` reads
+`newest_epoch` directly and twice via staleness). MEASURED on a 597 x 2,000
+store (`prototype/measure.py`, each scenario its own process, VmHWM): hourly
+pull writes 138 MB today vs 0.96 MB; one probe 4.0 s vs 0.0 ms; one refresh
+cycle with one overlapping probe 10.3 s and PEAK 1,183 MB (over the 1 GiB
+pod) vs 2.8 s and 603 MB; resting about the same (524 vs 494 MB). PROVEN:
+`prototype/equivalence.py`, production Store vs ledger over 40 pulls, 160
+checks incl. a fresh boot from disk, legacy adoption and enrichment
+exercised; three deliberate faults go red. FACT, cited: the file-storage
+add-on is Mountpoint for S3 (no rename; overwrite and delete only with mount
+options), and `config.py:189` puts the store there when it is attached; which
+applies live is TBC (question 4). Four decisions: go, compaction cadence,
+daily `history.json` for rollback, where the store lives. NOT BUILT.
+
 DECISIONS, FACT, Ash, 23 November 2026 (answers to the five open items):
 (1) finer E-W timing: YES, which on the timeline proposal's form means "send
 a separate proposal" (decision 5's wording), so a PROPOSAL is owed, not a

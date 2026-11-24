@@ -1,0 +1,108 @@
+{
+ "migrate": {
+  "seconds": 10.9,
+  "snapshot_bytes": 31102481,
+  "legacy_bytes": 137728004
+ },
+ "scenarios": [
+  {
+   "kind": "cur_hourly",
+   "boot_s": 0.0,
+   "boot_peak_mb": 37,
+   "incoming_samples": 28656,
+   "added": 1194,
+   "seconds": 4.072,
+   "bytes_written": 137810675,
+   "peak_mb": 750,
+   "resting_mb": 478,
+   "base_mb": 37
+  },
+  {
+   "kind": "led_hourly",
+   "boot_s": 1.77,
+   "boot_peak_mb": 603,
+   "incoming_samples": 28656,
+   "added": 1194,
+   "seconds": 1.765,
+   "bytes_written": 957674,
+   "peak_mb": 603,
+   "resting_mb": 483,
+   "base_mb": 37
+  },
+  {
+   "kind": "cur_day",
+   "boot_s": 0.0,
+   "boot_peak_mb": 37,
+   "incoming_samples": 20298,
+   "added": 20298,
+   "seconds": 4.114,
+   "bytes_written": 138032151,
+   "peak_mb": 745,
+   "resting_mb": 481,
+   "base_mb": 37
+  },
+  {
+   "kind": "led_day",
+   "boot_s": 1.75,
+   "boot_peak_mb": 602,
+   "incoming_samples": 20298,
+   "added": 20298,
+   "seconds": 1.605,
+   "bytes_written": 3430487,
+   "peak_mb": 602,
+   "resting_mb": 486,
+   "base_mb": 37
+  },
+  {
+   "kind": "cur_readyz",
+   "boot_s": 0.0,
+   "boot_peak_mb": 36,
+   "seconds": 3.9908,
+   "peak_mb": 602,
+   "resting_mb": 47,
+   "base_mb": 36
+  },
+  {
+   "kind": "led_readyz",
+   "boot_s": 1.66,
+   "boot_peak_mb": 602,
+   "seconds": 0.0,
+   "peak_mb": 602,
+   "resting_mb": 471,
+   "base_mb": 37
+  },
+  {
+   "kind": "cur_cycle",
+   "boot_s": 0.0,
+   "boot_peak_mb": 37,
+   "seconds": 10.25,
+   "probes": 1,
+   "probe_max_s": 5.258,
+   "peak_mb": 1183,
+   "resting_mb": 524,
+   "base_mb": 37
+  },
+  {
+   "kind": "led_cycle",
+   "boot_s": 1.69,
+   "boot_peak_mb": 603,
+   "seconds": 2.75,
+   "probes": 1,
+   "probe_max_s": 0.0,
+   "peak_mb": 603,
+   "resting_mb": 494,
+   "base_mb": 37
+  },
+  {
+   "kind": "led_compact",
+   "boot_s": 1.66,
+   "boot_peak_mb": 602,
+   "bytes_written": 31102481,
+   "seconds": 9.99,
+   "peak_mb": 602,
+   "resting_mb": 472,
+   "base_mb": 37
+  }
+ ],
+ "store": "597 objects x 2000 samples, 4 providers"
+}
