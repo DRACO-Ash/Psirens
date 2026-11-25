@@ -111,6 +111,15 @@ function checkBodyFits(m, label) {
   try {
     await page.goto(BASE, { waitUntil: "networkidle" });
 
+    // The upload number (version 50 on). The title bar must read exactly what
+    // /api/meta reports, so the screen and the App Store Versions column agree.
+    const metaVersion = await page.evaluate(async () =>
+      (await (await fetch("/api/meta")).json()).version);
+    const shownVersion = await page.locator("#appver").textContent();
+    if (shownVersion !== "v" + metaVersion) {
+      fail(`the title bar reads "${shownVersion}", not "v${metaVersion}" from /api/meta.`);
+    }
+
     // Drive the real controls: watchlist row, then the inspector's Co-Planar
     // button. Playwright's evaluate cannot see the page's top-level bindings,
     // and that is a feature here: the probe can only reach the app the way an

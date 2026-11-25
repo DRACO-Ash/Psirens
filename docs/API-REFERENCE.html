@@ -314,7 +314,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--muted);fon
   <h3>Response</h3>
   <div class="tbl"><table>
     <tr><th>Field</th><th>Meaning</th></tr>
-    <tr><td><code>version</code></td><td>The running build, read from the application itself</td></tr>
+    <tr><td><code>version</code></td><td>The running build, read from the application itself. From 50 on it is the App Store upload number, so it matches the Versions column (until 1.7.14 it was a dotted version)</td></tr>
     <tr><td><code>classification_default</code>, <code>views</code></td><td>Default marking, and the data modes each view shows</td></tr>
     <tr><td><code>refresh_seconds</code>, <code>refresh_lookback_hours</code>, <code>retention_days</code></td><td>Refresh cadence (3600), how far each scheduled refresh looks back (24) and how long fixes are kept (90)</td></tr>
     <tr><td><code>manual_count</code></td><td>Active operator element sets</td></tr>

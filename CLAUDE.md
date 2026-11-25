@@ -57,7 +57,27 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.14; platform v49 ACTIVE, ALL 12 STAGES GREEN, 25 November 2026)
+## Current state (repo 50; platform v49 = 1.7.14 ACTIVE, ALL 12 STAGES GREEN, 25 November 2026)
+
+VERSION 50, 25 November 2026: THE VERSION IS NOW THE APP STORE UPLOAD
+NUMBER. Ash, asked "Can we match the versioning on the app to the
+uploads?", chose option 1 ("build it now"): the platform numbers each upload
+itself (v46, v47, v48, v49 in three days, never our semver), so the app takes
+that number. The build after 1.7.14 is `50`, in `main.py` and `pyproject.toml`;
+the zip is `psirens-appstore-50.zip`; the title bar shows `v50` (`#appver`,
+filled from `/api/meta` by `showVersion`); the guide says "for PSIRENS v50".
+THE RULE: next version = the highest number in the Versions column + 1. It is
+a PREDICTION made before the upload; if an upload is rejected and still uses
+a number (TBC, never observed), or anyone else uploads in between, read the
+Versions column and correct the next build. GUARDED:
+`test_the_version_is_the_app_store_upload_number` (a plain integer, 50 or
+more) and the layout probe (title bar must read "v" plus `/api/meta`'s
+version; PROVEN: removing the `showVersion()` call fails it with "the title
+bar reads "", not "v50""). `tools/backfill_pull.py` still accepts it (`50`
+parses as newer than 1.7.4). Loop GREEN, 350 tests. Older entries below keep
+their dotted names.
+UPLOAD MAP: v49 = 1.7.14 (FACT, uploaded and seen); v48 = 1.7.13 (FACT);
+v47 = 1.7.12 (INFERENCE); v46 = 1.7.10 (INFERENCE, accepted 23 November).
 
 LATEST, FACT, 25 November 2026, Pipeline tab screenshot from Ash: 1.7.14
 uploaded; Source Code panel "v49 accepted Nov 25, 2026", platform commit
@@ -856,7 +876,9 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
 
 ## Packaging and release
 
-1. Bump the version in BOTH `src/psirens/main.py` and `pyproject.toml`.
+1. Set the version in BOTH `src/psirens/main.py` and `pyproject.toml` to the
+   NEXT App Store upload number (the Versions column's highest plus 1; from
+   50, 25 November 2026). A plain integer, never dotted again.
 2. `sh package-appstore.sh <version>` writes a flat `psirens-appstore-<version>.zip`
    with Dockerfile, both requirements files, pyproject, sonar config, README,
    src, tests at the archive ROOT (no wrapping folder). CLAUDE.md and other dev

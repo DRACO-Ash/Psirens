@@ -1628,7 +1628,7 @@ function showVersion(){
     throw new Error("meta unavailable");
   }).then(j=>{
     if(typeof j.version==="string"){
-      $("appver").textContent="for PSIRENS "+j.version;
+      $("appver").textContent="for PSIRENS v"+j.version;
     }
   }).catch(()=>{});
 }

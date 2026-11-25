@@ -474,6 +474,16 @@ def test_meta_reports_the_running_version(client):
     assert body["version"], "/api/meta must report the running version"
 
 
+def test_the_version_is_the_app_store_upload_number():
+    """From upload 50 (25 November 2026, Ash's decision) the version IS the
+    number the App Store's Versions column gives the upload: a plain positive
+    integer, so the app and the platform show the same thing. A dotted
+    version here means someone went back to the old scheme."""
+    version = create_app().version
+    assert version.isdigit() and int(version) >= 50, (
+        f"version {version!r} is not an App Store upload number (50 or more)")
+
+
 def test_the_version_string_is_the_same_in_both_places():
     """The version lives in src/psirens/main.py AND pyproject.toml, and a
     half-done bump is invisible until something downstream reads the wrong

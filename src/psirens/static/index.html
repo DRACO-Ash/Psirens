@@ -23,6 +23,7 @@ body{background:radial-gradient(120% 90% at 50% -10%,#0d1730,#05070e 70%);color:
 .brand{font-weight:700;letter-spacing:.24em;font-size:11px;color:var(--accent);text-transform:uppercase}
 .top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.03em}
 .top h1 small{color:var(--dim);font-weight:300;font-size:12.5px;letter-spacing:.06em}
+.top h1 .ver{margin-left:6px;font-weight:600}
 .reads{margin-left:auto;display:flex;gap:24px}
 /* Top right, beside the readouts: the guide is the first thing a new operator
    needs and the last thing an experienced one wants in the way. */
@@ -262,7 +263,8 @@ details.fold[open]>summary{margin-bottom:9px}
 </style>
 </head>
 <body>
-<div class="top"><span class="brand">Bluestaq</span><h1>PSIRENS <small>GEO Sentinel Command</small></h1>
+<div class="top"><span class="brand">Bluestaq</span><h1>PSIRENS <small>GEO Sentinel Command</small> <small class="ver" id="appver"
+    title="The App Store upload this is: the Versions column reads the same number"></small></h1>
   <div class="reads" id="reads"></div>
   <a class="guidebtn" href="/static/guide.html" target="_blank" rel="noopener"
     title="Operator Guide: what every element on this screen means">Guide</a></div>
@@ -554,6 +556,18 @@ async function refreshDiagnosis(){
     const j=await r.json();
     STALE_WHY=typeof j.ingest_diagnosis==="string"?j.ingest_diagnosis:"";
   }catch{STALE_WHY="";}
+}
+// The running build, from the server rather than a copy in this page. From
+// upload 50 the version IS the App Store upload number, so this label and the
+// Versions column read the same. Silent on failure: a missing label is
+// cosmetic, and the banner and inspector carry the operational state.
+async function showVersion(){
+  try{
+    const r=await fetch("/api/meta");
+    if(!r.ok){return;}
+    const j=await r.json();
+    if(typeof j.version==="string"){document.getElementById("appver").textContent="v"+j.version;}
+  }catch{/* cosmetic: leave the label empty */}
 }
 function syncStale(){
   const el=document.getElementById("stale"),age=freshestAgeH();
@@ -1911,6 +1925,7 @@ async function loadHrr(){try{const r=await fetch("/api/hrr");
     document.getElementById("hrrnote").textContent=e.message||"HRR list unavailable";}}
 function boot(){
   showOverlay("loading");paint();
+  showVersion();
   loadHrr().then(()=>{
     let tries=0;const fast=setInterval(async()=>{await load();tries++;
       if((state.loaded&&OBJECTS.length>0)||tries>=8){clearInterval(fast);setInterval(load,60000);}},2500);
