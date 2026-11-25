@@ -288,8 +288,8 @@ def test_a_live_start_purges_anything_synthetic(tmp_path):
                             "sub_lon_deg": 140.0, "inclination_deg": 1.9,
                             "p": len(real["provenance"]) - 1})
     store._write_atomic(data)
-    create_app(_cfg(tmp_path), sources=[])
-    left = store.load()["objects"]
+    # From 1.7.13 the purge runs where the store is first used, in the worker.
+    left = create_app(_cfg(tmp_path), sources=[]).state.store.load()["objects"]
     assert set(left) == {"64467"}
     assert [sample_provenance(left["64467"], s)["source"] for s in left["64467"]["samples"]] == ["SAFRAN"]
 

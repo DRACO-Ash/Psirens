@@ -44,7 +44,6 @@ drift fit per provider stream.
 
 from __future__ import annotations
 
-import os
 import statistics
 import threading
 from dataclasses import dataclass, field
@@ -488,9 +487,10 @@ def drift_withheld(block: dict | None) -> str | None:
 
 
 class Resolver:
-    """Caches `resolve_data` against the store file's signature.
+    """Caches `resolve_data` against the store's version (1.7.13; until then
+    the store file's signature, read by a stat on every request).
 
-    Duck-types the store for `events.EventEngine` (`path`, `load`), so the
+    Duck-types the store for `events.EventEngine` (`version`, `load`), so the
     Shift Brief reads exactly the resolved view the plot does.
     """
 
@@ -503,19 +503,18 @@ class Resolver:
         self._result: dict | None = None
         self.computations = 0
 
-    def _signature(self) -> tuple:
-        try:
-            st = os.stat(self.path)
-            return (st.st_mtime_ns, st.st_size)
-        except OSError:
-            return (None, None)
+    @property
+    def version(self) -> int:
+        return int(self.store.version)
 
     def load(self) -> dict:
-        key = self._signature()
+        key = (self.version,)
         with self._lock:
             if self._result is not None and key == self._key:
                 return self._result
-            self._result = resolve_data(self.store.load(), self.policy)
+            # Resolved under the store's lock, so no change lands mid-read; the
+            # result shares no mutable part the store will ever edit in place.
+            self._result = self.store.read(lambda data: resolve_data(data, self.policy))
             self._key = key
             self.computations += 1
             return self._result

@@ -329,10 +329,11 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--muted);fon
     <tr><td><code>last_ingest_rejected</code>, <code>last_ingest_rejected_reasons</code></td><td>Records refused at the boundary and why: no catalogue number, no usable epoch with a time zone, incomplete elements, no provider (source), no classification marking, no recognised data mode. Never filled in.</td></tr>
     <tr><td><code>last_ingest_requests_halved</code> <span class="tag new">1.7.9</span></td><td>Responses at or above the 9000-row threshold that were set aside and re-requested as two halves</td></tr>
     <tr><td><code>last_ingest_truncated_windows</code> <span class="tag new">1.7.9</span></td><td>Windows still at the threshold at the smallest slice. Above 0 means newer fixes may be missing.</td></tr>
+    <tr><td><code>store</code> <span class="tag new">1.7.13</span></td><td>The ledger store: <code>backend</code> ("ledger"), <code>version</code> (changes with every change to the held store), <code>snapshot_seq</code>, <code>snapshot_age_hours</code>, <code>segments_since_snapshot</code>, <code>last_write_bytes</code> (an hourly refresh is of the order of 1 MB, never the whole store), <code>boot_seconds</code> and <code>compact_hours</code> (24). Health is answered from counters, so this route and <code>/readyz</code> no longer read the store file.</td></tr>
     <tr><td><code>ingest_diagnosis</code></td><td>One line naming the state: failing requests, possible truncation, nothing returned, everything rejected, nothing on the HRR list, healthy with N new fixes, or no new epochs</td></tr>
   </table></div>
   <div class="callout info">From 1.7.9 a healthy cycle reads <code>healthy: 1177 new fix(es) merged for 581 high-interest object(s)</code>. Build 1.7.8 says "no new epochs in the window" even when fixes arrived: that line is wrong on 1.7.8, the counts beside it are right.</div>
-  <div class="cmd"><pre>curl -s "$PSIRENS/api/meta" | jq '{version, data_age_hours, stale, last_ingest_added, ingest_diagnosis}'</pre><button type="button">Copy</button></div>
+  <div class="cmd"><pre>curl -s "$PSIRENS/api/meta" | jq '{version, data_age_hours, stale, last_ingest_added, ingest_diagnosis, store}'</pre><button type="button">Copy</button></div>
 </div>
 </details>
 

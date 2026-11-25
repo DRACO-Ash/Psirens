@@ -57,7 +57,7 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.8; DEPLOYED, ALL 12 STAGES GREEN, 21 November 2026)
+## Current state (repo 1.7.13; platform version 47 ACTIVE, ALL 12 STAGES GREEN, 24 November 2026)
 
 LATEST, FACT, 24 November 2026, Pipeline tab screenshot from Ash: platform
 version 47 is Active and "All 12 stages passed", Deploy included; the Source
@@ -81,7 +81,37 @@ untagged history and gives the observed cross-check its 24 h; run
 `tools/udl_elset_probe.py` to confirm live element sets state their
 ephemeris type, which the agreement check and the consensus both depend on.
 
-PROPOSAL AWAITING ASH, 24 November 2026: LEDGER STORE ("read the history
+1.7.13, 25 November 2026: THE LEDGER STORE, BUILT on Ash's approval (24
+November: go; compact once a day; keep `history.json` current once a day;
+the File Storage add-on IS enabled, so the store is on the Mountpoint-for-S3
+mount). `store.Store` now holds the history in memory, decoded LAZILY in the
+worker (never in the `--preload` master), and writes each change as a NEW
+file under `ledger/`: a segment per change (`seg-N.json`, a length header
+then only what changed), a gzip snapshot plus a current `history.json` once
+a day (`compact`, run by the scheduler when `compaction_due`), older files
+retired with a refused delete tolerated. Merges use the SAME helpers and are
+COPY ON WRITE: touched objects are replaced, never edited, so the resolved
+view a route holds is never altered underneath it. `history.json` written by
+anyone else (a rollback, a test) is adopted at boot when newer than the
+ledger, and in-process by a stat on `load`/`version`. Health reads counters,
+lock-free once held, and answers at once while the first decode runs.
+`Resolver` and `EventEngine` key on `store.version`, not a file stat.
+`/api/meta` gains `store`. Config `LEDGER_COMPACT_HOURS` (24). MEASURED at
+the cap (597 x 2,000): hourly pull 1.75 s writing 0.96 MB; probe 0.0 ms;
+refresh with a probe 3.0 s, peak 603 MB (1.7.12: 10.3 s, 1,183 MB); boot
+1.9 s; FIRST start 12 s once (adopts the 138 MB file). PROVEN: 
+`tests/test_ledger.py` (14 tests); `prototype/build_equivalence.py` runs the
+1.7.12 `store.py` FROM GIT (`d3c8f28`) beside the new one, 160 checks over
+40 pulls, all equal; 8 new red cases (33 of 33 go red). NOT GUARDED, stated:
+the segment length check and the JSON parse each catch a torn segment, so
+neither alone can be shown red by a one-line revert. FOUND ON THE WAY,
+FIXED SEPARATELY (`c7d4bfb`): two ROTTED tests in `test_agreement.py`
+asserted the consensus against the generator's -0.024 deg/day; SDP4's
+lunisolar terms move a one-orbit rate between -0.0130 and -0.0193 through
+November, and both failed on the 1.7.12 source at 23:00Z on 24 November
+(see CONTEXT-001). Upload 1.7.13: it carries that fix.
+
+PROPOSAL APPROVED, 24 November 2026: LEDGER STORE ("read the history
 once, write only what changed"), `proposals/2026-11-24-ledger-store/PROPOSAL.html`.
 Ash asked for one bold architectural change, proposal first. FACT from the
 code: one hourly refresh parses the whole store at least four times and
@@ -527,7 +557,10 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
   `drift_deg_per_day` remains as the rate-only wrapper.
 - `config.py` — env-only config (UDL base/path, epoch param, retention, HRR
   cadence, conjunction window, memory-independent tunables).
-- `store.py` — atomic JSON store. PROVENANCE (1.7.4): each object holds a
+- `store.py` — the history store. From 1.7.13 the LEDGER: held in memory
+  (decoded lazily in the worker), each change appended as a new segment file,
+  a daily gzip snapshot and `history.json`, copy-on-write merges, health from
+  counters, `version` for caches; see Current state. PROVENANCE (1.7.4): each object holds a
   `provenance` table (provider, data mode, marking) and each sample a `p`
   index into it (`sample_provenance`); samples are keyed on (provider, epoch);
   an untagged pre-1.7.4 sample takes a provider's tags only when a re-pull
@@ -634,7 +667,7 @@ this machine can, wire it and stop the one-rule-per-cycle pattern.
 
 Tests: `tests/test_api.py`, `test_astro.py`, `test_conjunction.py`,
 `test_agreement.py`, `test_coplanar.py`, `test_drift.py`, `test_events.py`, `test_hrr.py`, `test_logging.py`,
-`test_provenance.py`, `test_sources.py`,
+`test_provenance.py`, `test_sources.py`, `test_ledger.py`,
 `test_store.py`, `test_tle.py`.
 Offline-safe (demo mode when `UDL_BASE_URL` is unset). TLE fixtures are produced
 by the exporter, never hand-typed, so every "valid" line genuinely checksums.
@@ -758,7 +791,10 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   `last_ingest_kept`, `hrr_list_size` and `ingest_diagnosis`; from 1.7.9
   `last_ingest_requests_halved` (responses at the threshold set aside and
   re-requested in halves, which `last_ingest_rows` still counts) and
-  `last_ingest_truncated_windows` (still full at the smallest slice).
+  `last_ingest_truncated_windows` (still full at the smallest slice);
+  from 1.7.13 `/api/meta` carries `store` {backend, version, snapshot_seq,
+  snapshot_age_hours, segments_since_snapshot, last_write_bytes,
+  boot_seconds, compact_hours}.
   `last_refresh` alone is a trap: it advances every tick whether or not a
   record arrived. `last_ingest_added: 0` is a second trap: on its own it
   cannot tell a quiet feed from a rejected one. `/readyz` stays 200 when
@@ -1432,6 +1468,17 @@ credentials and network; `--self-test` runs offline. NOT part of the deploy zip.
   (~75 s server time), and `--retry-from REPORT.json` re-runs only the failed
   windows (248 chunks of 6 h for this report, about six hours). Self-test 39
   checks; proven against a local fake server.
+  RETRY RUN, 25 November 2026, FACT from Ash's screen: 6 h chunks ran at
+  78 to 145 s each and the first 23 landed, then the platform session ended
+  (sign-in redirect on every chunk, about 40 minutes in). The August and early
+  September chunks "added" 3,000 to 7,000 each, which does NOT show the first
+  run's work was lost: the 2,000-sample cap holds about 6 to 8 weeks
+  (INFERENCE, CONTEXT-001), so those samples are merged and trimmed at once.
+  Tool, same day: `--ask-cookie` asks for a fresh cookie mid-run and retries
+  the window (without one the run stops and records the rest), and `--since`
+  skips windows the cap cannot hold. Recommended re-run: `--retry-from
+  backfill-report.json --since 2026-10-13T00:00:00Z`. The question the retry
+  was to settle (lost or landed) is answered only by windows inside the cap.
   FOUND ON THE WAY, FACT: the SPA's own Pull control sends NO token
   (`index.html:1862`, `fetch("/api/pull?"+qs,{method:"POST"})`) and ignores
   the response. So either `TEAM_TOKEN` is unset in the deployment (writes are

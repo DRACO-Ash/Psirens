@@ -1,7 +1,24 @@
-"""Atomic JSON store on the file-storage add-on.
+"""The history store: held in memory, with an append-only ledger on disk.
+
+1.7.13, the ledger store (proposal of 24 November 2026, approved by Ash the
+same day). Before it, every pull, refresh, readiness probe and /api/meta call
+read or rewrote one 138 MB JSON file in full; measured at the retention cap, a
+refresh with one overlapping probe peaked at 1,183 MB in a 1 GiB pod. Now the
+history is decoded once, in the worker, and held; each change is written as a
+small NEW file holding only what changed (a segment), and once a day a gzip
+snapshot and a current ``history.json`` are written and older files retired.
+New files and deletes are all an S3-backed mount allows by default: it
+refuses renames, and overwrites need an option (Mountpoint semantics).
 
 Contracts held here:
-  * atomic writes (temp file then rename on the same filesystem);
+  * the merge RULES are unchanged: the same helpers below do the merging;
+  * a restart sees exactly what was held (segments carry their own length,
+    so a torn one is ignored, never half-applied);
+  * copy on write: a change replaces the objects it touches rather than
+    editing them, so a view built from the store before the change (the
+    resolved view every route reads) is never altered underneath a reader;
+  * ``history.json`` stays authoritative if anyone else writes it (a rollback
+    to 1.7.12, or a test): a newer file is adopted, never overwritten blind;
   * anti-shrink merge (a refresh never deletes an object or its history that
     the new pull happened not to include);
   * dedup by (object_id, provider, epoch) so overlapping pulls do not
@@ -15,18 +32,20 @@ Contracts held here:
 from __future__ import annotations
 
 import errno
+import gzip
 import json
-import math
 import logging
+import math
 import os
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from .models import SCHEMA_VERSION
 
-_LOCK = threading.Lock()  # single-writer per process
 _log = logging.getLogger("psirens.store")
 
 # errnos raised by volumes that do not implement rename (seen on some
@@ -251,46 +270,398 @@ def _merge_object(existing: dict, rec: dict) -> int:
     return added
 
 
+LEDGER_DIR = "ledger"
+_SNAP, _SEG = "snap-", "seg-"
+_META_FIELDS = _META_KEYS
+
+
+def _sig(path: str) -> tuple | None:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+def _empty() -> dict:
+    return {"schema": SCHEMA_VERSION, "objects": {}}
+
+
+def _read_json(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+        return _empty()
+    if data.get("schema") != SCHEMA_VERSION:  # forward-migrate additively
+        data.setdefault("objects", {})
+        data["schema"] = SCHEMA_VERSION
+    return data
+
+
+def dump_file(data_dir: str, path: str, obj: dict) -> None:
+    """`resilient_write` for a large object: streamed to disk rather than
+    built as one string first, which would cost the store's size again."""
+    os.makedirs(data_dir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=data_dir, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh, separators=(",", ":"))
+        try:
+            os.replace(tmp, path)
+        except OSError as exc:
+            if exc.errno not in _NO_RENAME:
+                raise
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(obj, fh, separators=(",", ":"))
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _newest(data: dict) -> str | None:
+    newest: str | None = None
+    for rec in data.get("objects", {}).values():
+        samples = rec.get("samples") or []
+        if samples and (newest is None or samples[-1]["epoch"] > newest):
+            newest = samples[-1]["epoch"]
+    return newest
+
+
+def _prune(obj: dict, cutoff: datetime, max_samples: int) -> None:
+    merged = [s for s in obj["samples"] if _parse(s["epoch"]) >= cutoff]
+    merged.sort(key=lambda s: s["epoch"])
+    obj["samples"] = merged[-max_samples:]
+
+
+def _touched_keys(rec: dict) -> set:
+    """Every stored key an incoming record could enrich or adopt."""
+    want: set = set()
+    for s in rec.get("samples", []):
+        _, tags = _split_tags(s)
+        want.add(((tags or {}).get("source") or "", s["epoch"]))
+        want.add(("", s["epoch"]))
+    return want
+
+
+def _cow(held: dict | None, rec: dict) -> tuple[dict, dict]:
+    """A private copy of one stored object for a merge to change, and a
+    fingerprint of it before the change. Only the samples the incoming record
+    could alter are copied: the rest are shared, and nothing shared is ever
+    edited in place, so a reader holding the old object sees the old object."""
+    if held is None:
+        obj: dict = {"samples": []}
+        return obj, {"samples": {}, "meta": {}, "elset": None, "cands": {}, "prov": 0}
+    obj = dict(held)
+    if isinstance(obj.get("provenance"), list):
+        obj["provenance"] = list(obj["provenance"])
+    if isinstance(obj.get("elset_candidates"), dict):
+        obj["elset_candidates"] = dict(obj["elset_candidates"])
+    want = _touched_keys(rec)
+    samples, seen = [], {}
+    for s in held["samples"]:
+        key = _stored_key(obj, s)
+        seen[key] = len(s)
+        samples.append(dict(s) if key in want else s)
+    obj["samples"] = samples
+    before = {"samples": seen, "meta": {k: obj.get(k) for k in _META_FIELDS},
+              "elset": obj.get("elset"), "cands": dict(obj.get("elset_candidates") or {}),
+              "prov": len(obj.get("provenance") or [])}
+    return obj, before
+
+
+def _object_delta(obj: dict, before: dict) -> dict:
+    """What one change did to one object: the fields, element sets and
+    samples that differ, and the sample keys that went."""
+    d: dict = {}
+    meta = {k: obj.get(k) for k in _META_FIELDS if obj.get(k) != before["meta"].get(k)}
+    if meta:
+        d["meta"] = meta
+    if obj.get("elset") != before["elset"]:
+        d["elset"] = obj.get("elset")
+    cands = {k: v for k, v in (obj.get("elset_candidates") or {}).items()
+             if before["cands"].get(k) != v}
+    if cands:
+        d["cands"] = cands
+    if len(obj.get("provenance") or []) != before["prov"]:
+        d["prov"] = obj.get("provenance")
+    held, now_keys, upserts = before["samples"], set(), []
+    for s in obj["samples"]:
+        key = _stored_key(obj, s)
+        now_keys.add(key)
+        if held.get(key) != len(s):
+            upserts.append(s)
+    if upserts:
+        d["up"] = upserts
+    removed = [list(k) for k in held if k not in now_keys]
+    if removed:
+        d["rm"] = removed
+    return d
+
+
+def _apply(obj: dict, d: dict) -> None:
+    for k, v in (d.get("meta") or {}).items():
+        obj[k] = v
+    if "prov" in d:
+        obj["provenance"] = d["prov"]
+    if "elset" in d:
+        obj["elset"] = d["elset"]
+    if d.get("cands"):
+        obj.setdefault("elset_candidates", {}).update(d["cands"])
+    by_key = {_stored_key(obj, s): s for s in obj["samples"]}
+    for k in d.get("rm", []):
+        by_key.pop(tuple(k), None)
+    for s in d.get("up", []):
+        by_key[_stored_key(obj, s)] = s
+    obj["samples"] = list(by_key.values())
+
+
+def _replay(delta: dict, data: dict) -> None:
+    objects = data.setdefault("objects", {})
+    if delta.get("op") == "merge":
+        cutoff = _parse(delta["now"]) - timedelta(days=delta["retention_days"])
+        for oid, d in delta["objects"].items():
+            obj = objects.setdefault(oid, {"samples": []})
+            _apply(obj, d)
+            _prune(obj, cutoff, delta["max_samples"])
+    for oid in delta.get("deleted", []):
+        objects.pop(oid, None)
+
+
 class Store:
-    def __init__(self, data_dir: str):
+    """The history, held once per worker, with an append-only ledger.
+
+    `load()` returns the HELD store, not a copy: it is read-only by contract.
+    Every change goes through a method here, under the lock, and replaces the
+    objects it touches. The store is decoded lazily on first use, so the
+    gunicorn master (``--preload``) never holds a copy beside its worker.
+    """
+
+    def __init__(self, data_dir: str, *, purge_on_boot: bool = False,
+                 compact_hours: float = 24.0, keep_history: bool = True):
         self.data_dir = data_dir
         self.path = os.path.join(data_dir, "history.json")
+        self.ledger_dir = os.path.join(data_dir, LEDGER_DIR)
+        self.purge_on_boot = purge_on_boot
+        self.compact_hours = compact_hours
+        self.keep_history = keep_history   # Ash, 24 Nov: history.json kept current daily
+        self._lock = threading.RLock()
+        self._data: dict | None = None
+        self._seq = 0
+        self._version = 0
+        self._newest: str | None = None
+        self._file_sig: tuple | None = None
+        self._snap_seq = 0
+        self._snap_at: float | None = None
+        self._since_snap = 0
+        self.last_write_bytes = 0
+        self.boot_seconds: float | None = None
 
-    # -- durability -------------------------------------------------------
-    def _write_atomic(self, payload: dict) -> None:
-        resilient_write(self.data_dir, self.path,
-                        json.dumps(payload, separators=(",", ":")))
-
-    def load(self) -> dict:
+    # -- files --------------------------------------------------------------
+    def _files(self, prefix: str) -> list[tuple[int, str]]:
         try:
-            with open(self.path, encoding="utf-8") as fh:
-                data = json.load(fh)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {"schema": SCHEMA_VERSION, "objects": {}}
-        if data.get("schema") != SCHEMA_VERSION:  # forward-migrate additively
-            data.setdefault("objects", {})
-            data["schema"] = SCHEMA_VERSION
-        return data
+            names = os.listdir(self.ledger_dir)
+        except OSError:
+            return []
+        out = []
+        for name in names:
+            if name.startswith(prefix):
+                try:
+                    out.append((int(name[len(prefix):].split(".")[0]),
+                                os.path.join(self.ledger_dir, name)))
+                except ValueError:
+                    continue
+        return sorted(out)
+
+    def _write_new(self, name: str, text: str) -> int:
+        os.makedirs(self.ledger_dir, exist_ok=True)
+        with open(os.path.join(self.ledger_dir, name), "x", encoding="utf-8") as fh:
+            fh.write(text)   # a NEW file, never an overwrite
+        return len(text.encode("utf-8"))
+
+    def _next_seq(self) -> int:
+        """The next file number, never one already on disk: another process
+        (a rolling deploy, or a test's second instance) may have written."""
+        on_disk = [s for s, _ in self._files(_SNAP) + self._files(_SEG)]
+        self._seq = max([self._seq] + on_disk) + 1
+        return self._seq
+
+    def _append(self, delta: dict) -> None:
+        self._next_seq()
+        body = json.dumps(delta, separators=(",", ":"))
+        self.last_write_bytes = self._write_new(
+            "%s%010d.json" % (_SEG, self._seq), json.dumps({"len": len(body)}) + "\n" + body)
+        self._since_snap += 1
+        self._changed()
+
+    def _snapshot(self) -> int:
+        """A full snapshot as a new file; with `keep_history`, history.json
+        first, so the snapshot is the newer of the two."""
+        assert self._data is not None
+        if self.keep_history:
+            dump_file(self.data_dir, self.path, self._data)
+            self._file_sig = _sig(self.path)
+        self._next_seq()
+        os.makedirs(self.ledger_dir, exist_ok=True)
+        path = os.path.join(self.ledger_dir, "%s%010d.json.gz" % (_SNAP, self._seq))
+        with gzip.open(path, "xt", encoding="utf-8", compresslevel=1) as fh:
+            json.dump(self._data, fh, separators=(",", ":"))
+        self._snap_seq, self._snap_at, self._since_snap = self._seq, time.time(), 0
+        self.last_write_bytes = os.path.getsize(path)
+        return self.last_write_bytes
+
+    def _retire(self) -> None:
+        for seq, path in self._files(_SEG) + self._files(_SNAP):
+            if seq < self._snap_seq:
+                try:
+                    os.remove(path)   # refused on a mount without delete: the
+                except OSError:       # file is simply never read again
+                    pass
+
+    # -- boot ---------------------------------------------------------------
+    def _read_ledger(self) -> tuple[dict | None, float]:
+        """The newest readable snapshot with every later segment replayed,
+        and the mtime of the newest ledger file (0 when there is none)."""
+        snaps, segs = self._files(_SNAP), self._files(_SEG)
+        newest = max([os.path.getmtime(p) for _, p in snaps + segs] or [0.0])
+        self._seq = max([s for s, _ in snaps + segs] or [0])
+        for seq, path in reversed(snaps):
+            try:
+                with gzip.open(path, "rt", encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, EOFError, ValueError):
+                continue   # a torn snapshot: fall back to the one before
+            self._snap_seq, self._snap_at = seq, os.path.getmtime(path)
+            self._replay_after(segs, seq, data)
+            return data, newest
+        if segs and not snaps:
+            # Segments from a store that began empty, before any snapshot.
+            data = _empty()
+            self._replay_after(segs, 0, data)
+            return data, newest
+        if snaps:
+            _log.error("no ledger snapshot in %s could be read", self.ledger_dir)
+        return None, newest
+
+    def _replay_after(self, segs: list[tuple[int, str]], seq: int, data: dict) -> None:
+        for s, seg in segs:
+            if s > seq and self._replay_file(seg, data):
+                self._since_snap += 1
+
+    @staticmethod
+    def _replay_file(path: str, data: dict) -> bool:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                head, body = fh.read().split("\n", 1)
+            if json.loads(head)["len"] != len(body):
+                return False   # torn: ignored, never half-applied
+            _replay(json.loads(body), data)
+            return True
+        except (OSError, ValueError, KeyError):
+            return False
+
+    def _boot(self) -> None:
+        started = time.monotonic()
+        data, ledger_mtime = self._read_ledger()
+        sig = _sig(self.path)
+        # The file wins when it is newer than everything in the ledger: the
+        # first start of 1.7.13, or a return after a rollback that wrote it.
+        if sig is not None and (data is None or sig[0] / 1e9 > ledger_mtime):
+            data = _read_json(self.path)
+            self._data = data
+            self._file_sig = sig
+            keep, self.keep_history = self.keep_history, False
+            try:
+                self._snapshot()
+            except OSError as exc:
+                _log.warning("ledger snapshot refused at %s: %s", self.ledger_dir, exc)
+            finally:
+                self.keep_history = keep
+        else:
+            self._data = data if data is not None else _empty()
+            self._file_sig = sig
+        if self.purge_on_boot:
+            self._purge_locked()
+        self._changed()
+        self.boot_seconds = round(time.monotonic() - started, 2)
+
+    def _check_external(self) -> None:
+        sig = _sig(self.path)
+        if sig is not None and sig != self._file_sig:
+            _log.warning("history.json changed outside this process; adopting it")
+            self._data = _read_json(self.path)
+            self._file_sig = sig
+            keep, self.keep_history = self.keep_history, False
+            try:
+                self._snapshot()
+            finally:
+                self.keep_history = keep
+            self._changed()
+
+    def _changed(self) -> None:
+        self._version += 1
+        self._newest = _newest(self._data or {})
+
+    def ensure(self) -> dict:
+        """The held store, decoding it on first use."""
+        with self._lock:
+            if self._data is None:
+                self._boot()
+            else:
+                self._check_external()
+            assert self._data is not None
+            return self._data
+
+    # -- the read side ------------------------------------------------------
+    def load(self) -> dict:
+        """The HELD store. Read-only by contract; see the class docstring."""
+        return self.ensure()
+
+    def read(self, fn: Callable[[dict], Any]) -> Any:
+        """Run `fn` over the held store with no change able to land mid-read."""
+        with self._lock:
+            return fn(self.ensure())
+
+    @property
+    def version(self) -> int:
+        """Changes whenever the held store does: what caches key on."""
+        with self._lock:
+            self.ensure()
+            return self._version
 
     def newest_epoch(self) -> str | None:
         """The newest sample epoch held, across every object, or None if empty.
 
-        The single number that says whether ingest is actually working. Before
-        1.6.6 nothing exposed it, so a feed that had been silently returning
-        truncated pages for a fortnight looked identical to a healthy one: the
-        refresh timestamp kept advancing, the object count was unchanged, and
-        the staleness was visible only by opening one object and reading its
-        epoch by eye. Which is how it was found.
+        The single number that says whether ingest is actually working. Kept
+        as the store changes (1.7.13): until then each call parsed the whole
+        file, three times per readiness probe. Read WITHOUT the lock once the
+        store is held: a probe must never wait behind a merge or a resolve
+        (measured: 1.7 s when it did), and one attribute read is atomic.
         """
-        newest: str | None = None
-        for rec in self.load().get("objects", {}).values():
-            samples = rec.get("samples") or []
-            if not samples:
-                continue
-            latest = samples[-1].get("epoch")
-            if latest and (newest is None or latest > newest):
-                newest = latest
-        return newest
+        if self._data is None:
+            # Still decoding (12 s on the first start, which adopts the old
+            # file): answer at once as an empty store would, never hang a probe.
+            if not self._lock.acquire(blocking=False):
+                return None
+            try:
+                self.ensure()
+            finally:
+                self._lock.release()
+        return self._newest
+
+    def stats(self) -> dict:
+        with self._lock:
+            self.ensure()
+            age = None if self._snap_at is None else (time.time() - self._snap_at) / 3600
+            return {"backend": "ledger", "version": self._version,
+                    "snapshot_seq": self._snap_seq,
+                    "snapshot_age_hours": None if age is None else round(age, 2),
+                    "segments_since_snapshot": self._since_snap,
+                    "last_write_bytes": self.last_write_bytes,
+                    "boot_seconds": self.boot_seconds,
+                    "compact_hours": self.compact_hours}
 
     # -- health -----------------------------------------------------------
     def probe_write(self, timeout_s: float = 2.0) -> tuple[bool, str]:
@@ -309,16 +680,48 @@ class Store:
         except OSError as exc:
             return False, f"errno {exc.errno} writing {self.data_dir}: {exc.strerror}"
 
+    # -- whole-store operations ---------------------------------------------
+    def _write_atomic(self, payload: dict) -> None:
+        """Replace the whole store (tests, migrations): a snapshot, and with
+        `keep_history` a current history.json."""
+        with self._lock:
+            if self._data is None:
+                self._boot()
+            self._data = payload
+            self._snapshot()
+            self._changed()
+
+    def compact(self) -> int:
+        """Write a snapshot (and history.json) and retire older files.
+        Returns the snapshot's size in bytes."""
+        with self._lock:
+            self.ensure()
+            size = self._snapshot()
+            self._retire()
+            return size
+
+    def compaction_due(self, now: float | None = None) -> bool:
+        with self._lock:
+            if self._data is None:
+                return False
+            if self._snap_at is None:
+                return True
+            return ((now or time.time()) - self._snap_at) >= self.compact_hours * 3600
+
+    # -- deletions ------------------------------------------------------------
+    def _delete(self, drop: list[str]) -> None:
+        objects = self.ensure().setdefault("objects", {})
+        for oid in drop:
+            del objects[oid]
+        self._append({"op": "delete", "deleted": drop})
+
     def remove_object(self, object_id: str) -> bool:
         """Remove one object from the store (used when a manual elset is
         deleted, so it disappears from the plot immediately)."""
-        with _LOCK:
-            data = self.load()
-            objects = data.setdefault("objects", {})
-            if object_id not in objects:
+        with self._lock:
+            if object_id not in self.ensure().get("objects", {}):
                 return False
-            del objects[object_id]
-            self._write_atomic(data)
+            self._delete([object_id])
             return True
 
     def retain_only(self, ids: set[str], *, keep_origins: tuple[str, ...] = (),
@@ -329,46 +732,54 @@ class Store:
         REAL objects that dropped off the list; SIMULATED/TEST/EXERCISE data
         that an operator pulled for a scenario is never touched. Returns the
         number removed."""
-        with _LOCK:
-            data = self.load()
-            objects = data.setdefault("objects", {})
+        with self._lock:
+            objects = self.ensure().get("objects", {})
             drop = [o for o, r in objects.items()
                     if o not in ids and r.get("origin") not in keep_origins
                     and not (keep_nonreal and r.get("data_mode", "REAL") != "REAL")]
-            if not drop:
-                return 0
-            for o in drop:
-                del objects[o]
-            self._write_atomic(data)
+            if drop:
+                self._delete(drop)
             return len(drop)
 
     def purge_synthetic(self) -> int:
-        """Remove every trace of the offline demo belt. Called when the app
-        starts against live UDL, so a store that was ever run offline on the
-        same volume cannot carry synthetic objects into the live picture.
-        This is the one deletion the archive rule allows: the data was never
-        observed. Returns the number of samples and objects removed."""
+        """Remove every trace of the offline demo belt. Run when the app
+        starts against live UDL (from 1.7.13 at boot, in the worker), so a
+        store that was ever run offline on the same volume cannot carry
+        synthetic objects into the live picture. This is the one deletion the
+        archive rule allows: the data was never observed. Returns the number
+        of samples and objects removed."""
+        with self._lock:
+            self.ensure()
+            return self._purge_locked()
+
+    def _purge_locked(self) -> int:
+        assert self._data is not None
+        objects = self._data.setdefault("objects", {})
         removed = 0
-        with _LOCK:
-            data = self.load()
-            objects = data.setdefault("objects", {})
-            # Decide first, delete after: the dict cannot change size while
-            # it is being walked, and wrapping it in list() to allow that was
-            # python:S7504 on the 1.7.5 upload.
-            doomed = []
-            for oid, rec in objects.items():
-                if rec.get("origin") == "DEMO" or oid.startswith("DEMO-"):
-                    removed += 1 + len(rec.get("samples") or [])
-                    doomed.append(oid)
-                    continue
-                removed += _drop_demo_parts(rec)
-                if not rec.get("samples"):
-                    doomed.append(oid)
-            for oid in doomed:
-                del objects[oid]
-            if removed:
-                self._write_atomic(data)
+        # Decide first, change after: the dict cannot change size while it is
+        # walked (python:S7504 on the 1.7.5 upload). Kept objects are copied
+        # before they are trimmed, so no reader sees one change.
+        doomed, trimmed = [], {}
+        for oid, rec in objects.items():
+            if rec.get("origin") == "DEMO" or oid.startswith("DEMO-"):
+                removed += 1 + len(rec.get("samples") or [])
+                doomed.append(oid)
+                continue
+            copy = dict(rec, elset_candidates=dict(rec.get("elset_candidates") or {}))
+            dropped = _drop_demo_parts(copy)
+            if dropped:
+                removed += dropped
+                trimmed[oid] = copy
+        for oid, rec in trimmed.items():
+            if rec.get("samples"):
+                objects[oid] = rec
+            else:
+                doomed.append(oid)
+        for oid in doomed:
+            del objects[oid]
         if removed:
+            self._snapshot()
+            self._changed()
             _log.warning("purged %d synthetic (DEMO) item(s) from the live store", removed)
         return removed
 
@@ -385,32 +796,31 @@ class Store:
 
         `incoming` maps object_id -> {meta..., "samples": [{epoch, sub_lon_deg,
         inclination_deg}, ...]}. Existing objects and samples absent from the
-        pull are retained; samples are deduped by epoch; the result is age-
-        pruned and capped. Returns the number of new samples added.
+        pull are retained; samples are deduped by provider and epoch; the result
+        is age-pruned and capped. Only what changed is written, as one new
+        segment. Returns the number of new samples added.
         """
         now = now or datetime.now(timezone.utc)
         cutoff = now - timedelta(days=retention_days)
         added = 0
-        with _LOCK:
-            data = self.load()
-            objects: dict[str, dict] = data.setdefault("objects", {})
+        delta: dict = {"op": "merge", "now": now.astimezone(timezone.utc).isoformat(),
+                       "retention_days": retention_days, "max_samples": max_samples,
+                       "objects": {}, "deleted": []}
+        with self._lock:
+            objects = self.ensure().setdefault("objects", {})
             for oid, rec in incoming.items():
-                existing = objects.get(oid)
-                if existing is None:
-                    existing = {"samples": []}
-                    objects[oid] = existing
+                existing, before = _cow(objects.get(oid), rec)
                 _copy_meta(existing, rec)  # display fields; latest non-blank wins
                 _retain_elset(existing, rec)  # newest full element set
                 _retain_candidates(existing, rec)  # newest per provider
                 added += _merge_object(existing, rec)
-                merged = [
-                    s for s in existing["samples"]
-                    if _parse(s["epoch"]) >= cutoff
-                ]
-                merged.sort(key=lambda s: s["epoch"])
-                existing["samples"] = merged[-max_samples:]
+                _prune(existing, cutoff, max_samples)
+                objects[oid] = existing
+                delta["objects"][oid] = _object_delta(existing, before)
             # prune objects that have no surviving samples in the window
-            for oid in [o for o, r in objects.items() if not r.get("samples")]:
+            doomed = [o for o, r in objects.items() if not r.get("samples")]
+            for oid in doomed:
                 del objects[oid]
-            self._write_atomic(data)
+            delta["deleted"] = doomed
+            self._append(delta)
         return added

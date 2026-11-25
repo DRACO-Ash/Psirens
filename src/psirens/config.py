@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 # Default storage lives under the system temp dir resolved at runtime, not a
 # hardcoded world-writable path, and the store creates it with owner-only mode.
+DEFAULT_LEDGER_COMPACT_HOURS = 24.0
 _DEFAULT_DATA_DIR = os.path.join(tempfile.gettempdir(), "psirens-data")
 
 
@@ -181,6 +182,8 @@ class Config:
     # switches it off. It is personal data: the standard asks for it.
     log_user_email: bool = True
     scheduler_enabled: bool = True  # background refresh loop; off in tests
+    # Hours between ledger snapshots (1.7.13). Ash chose once a day, 24 Nov.
+    ledger_compact_hours: float = DEFAULT_LEDGER_COMPACT_HOURS
     data_dir: str = ""  # explicit override (tests); empty means resolve from env
 
     def storage_dir(self) -> str:
@@ -241,4 +244,6 @@ def load_config() -> Config:
         drift_max_residual_deg=_env_float("DRIFT_MAX_RESIDUAL_DEG", 1),
         elset_max_lag_hours=_env_float("ELSET_MAX_LAG_HOURS", 48),
         log_user_email=_env_bool("LOG_USER_EMAIL", default=True),
+        ledger_compact_hours=_env_float("LEDGER_COMPACT_HOURS",
+                                        DEFAULT_LEDGER_COMPACT_HOURS),
     )

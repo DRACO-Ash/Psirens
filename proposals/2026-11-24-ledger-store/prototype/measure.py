@@ -149,6 +149,7 @@ def scenario(kind: str, src: str) -> dict:
         row.update(cycle(st, make_pull(st.load(), HOURLY_NEW, HOURLY_REPEAT, 0)))
     elif action == "readyz":
         ref = Refresher(load_config(), st, [], None)
+        ref.health(NOW)   # the store is held from here on (1.7.13 decodes lazily)
         t = time.perf_counter()
         ref.health(NOW)
         row["seconds"] = round(time.perf_counter() - t, 4)

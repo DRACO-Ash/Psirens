@@ -588,7 +588,8 @@ class EventEngine:
             return (None, None)
 
     def current(self, store: Any, now: datetime | None = None) -> dict:
-        key = self._signature(store.path)
+        version = getattr(store, "version", None)
+        key = (version,) if version is not None else self._signature(store.path)
         with self._lock:
             if self._result is not None and key == self._key:
                 return self._result

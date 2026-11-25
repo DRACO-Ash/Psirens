@@ -270,6 +270,18 @@ class Refresher:
         finally:
             self.flight.end()
 
+    async def _compact_if_due(self) -> None:
+        """The daily ledger snapshot, off the event loop and off the request
+        path. A failure is logged and retried next cycle, never fatal."""
+        due = getattr(self.store, "compaction_due", None)
+        if due is None or not due():
+            return
+        try:
+            size = await asyncio.to_thread(self.store.compact)
+            _log.info("ledger compacted: snapshot %d bytes", size)
+        except OSError as exc:
+            _log.warning("ledger compaction failed, will retry: %s", exc)
+
     async def scheduler(self, stop: asyncio.Event) -> None:
         """Background loop. Seeds on the first tick then repeats on cadence, and
         runs each refresh off the event loop so app startup is never blocked by
@@ -283,6 +295,7 @@ class Refresher:
             if first:
                 first = False
                 self._log_first_verdict()
+            await self._compact_if_due()
             try:
                 await asyncio.wait_for(stop.wait(), timeout=self.cfg.refresh_seconds)
             except asyncio.TimeoutError:

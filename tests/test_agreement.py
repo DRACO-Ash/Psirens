@@ -332,7 +332,7 @@ def test_the_resolver_computes_once_per_store_change(tmp_path):
     resolver.load()
     resolver.load()
     assert resolver.computations == 1
-    os.utime(store.path, ns=(1, 1))
+    assert store.remove_object(SAT)   # any change to the held store (1.7.13)
     resolver.load()
     assert resolver.computations == 2
 

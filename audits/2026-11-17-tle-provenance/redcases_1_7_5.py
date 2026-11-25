@@ -15,6 +15,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 T = "tests/test_agreement.py"
+LEDGER = "tests/test_ledger.py"
 CASES = [
  ("providers pooled into one track (1.7.4, F1)", "src/psirens/agreement.py",
   "        out.streams[mode] = here[primary]",
@@ -121,6 +122,40 @@ CASES = [
   "CROSS_COVERAGE_K = 2.6",
   "CROSS_COVERAGE_K = 2.0",
   "tests/test_events.py", "test_the_stated_range_covers_95_percent_of_true_burn_times"),
+ # 1.7.13, the ledger store.
+ ("a merge edits samples a reader already holds", "src/psirens/store.py",
+  "        samples.append(dict(s) if key in want else s)",
+  "        samples.append(s)",
+  LEDGER, "test_a_view_taken_before_a_change_is_never_altered"),
+ ("health parses the whole store again", "src/psirens/store.py",
+  "            return self._newest",
+  "            return _newest(_read_json(self.path))",
+  LEDGER, "test_health_reads_no_file"),
+ ("a merge rewrites the whole store", "src/psirens/store.py",
+  "            self._append(delta)\n",
+  "            self._append(delta)\n            self._snapshot()\n",
+  LEDGER, "test_a_merge_writes_only_what_changed"),
+ ("a history.json written after the ledger is ignored at boot", "src/psirens/store.py",
+  "        if sig is not None and (data is None or sig[0] / 1e9 > ledger_mtime):",
+  "        if sig is not None and data is None:",
+  LEDGER, "test_a_history_file_written_after_the_ledger_is_adopted"),
+ ("a history.json written while running is ignored", "src/psirens/store.py",
+  "        if sig is not None and sig != self._file_sig:",
+  "        if False:",
+  LEDGER, "test_a_history_file_written_after_the_ledger_is_adopted"),
+ ("the store decoded at construction (twice the memory under --preload)",
+  "src/psirens/store.py",
+  "        self.boot_seconds: float | None = None\n",
+  "        self.boot_seconds: float | None = None\n        self.ensure()\n",
+  LEDGER, "test_the_first_start_adopts_the_legacy_file_once"),
+ ("a refused delete breaks compaction", "src/psirens/store.py",
+  "                except OSError:       # file is simply never read again",
+  "                except FileNotFoundError:",
+  LEDGER, "test_a_mount_that_refuses_deletes_still_works"),
+ ("segments before the first snapshot are never replayed", "src/psirens/store.py",
+  "        if segs and not snaps:",
+  "        if False:",
+  T, "test_the_api_serves_the_agreement_and_never_a_projection"),
 ]
 
 

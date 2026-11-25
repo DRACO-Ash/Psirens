@@ -525,6 +525,9 @@ def _meta(request: Request) -> JSONResponse:
         # tick whether or not a single record arrived, which is exactly how a
         # fortnight of truncated responses went unnoticed.
         **refresher.health(),
+        # The ledger (1.7.13), so the change can be checked live: the last
+        # write should be of the order of a megabyte, never the whole store.
+        "store": request.app.state.store.stats(),
     }), cfg)
 
 
@@ -645,12 +648,25 @@ def _hrr(request: Request) -> JSONResponse:
 # --------------------------------------------------------------------------
 # Lifespan and factory
 # --------------------------------------------------------------------------
+def _hold_store(store: Store) -> None:
+    try:
+        held = len(store.load().get("objects", {}))
+    except OSError as exc:
+        _log.warning("store could not be read at start: %s", exc)
+        return
+    _log.info("store held: %d object(s), decoded in %s s", held, store.stats()["boot_seconds"])
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     store: Store = app.state.store
     refresher: Refresher = app.state.refresher
     ok, detail = store.probe_write()
     _log.info("storage boot verdict: %s (%s)", "WRITABLE" if ok else "UNWRITABLE", detail)
+    # Decode the held store now, in this worker and off the event loop, so
+    # the first request does not pay for it. Requests that arrive first wait
+    # on the store's lock rather than reading half a store.
+    app.state.store_boot = asyncio.create_task(asyncio.to_thread(_hold_store, store))
     # Seed and refresh in the background. Startup must NEVER block on a source:
     # a slow or unreachable UDL host must not stall readiness and get the pod
     # torn down. The scheduler runs its first refresh immediately, off the loop.
@@ -694,9 +710,11 @@ def create_app(cfg: Config | None = None,
             "unset or '*'. Set ALLOWED_ORIGIN to the app's real origin."
         )
 
-    store = Store(cfg.storage_dir())
-    if cfg.udl_enabled:
-        store.purge_synthetic()   # nothing synthetic survives into a live store
+    # Nothing is read here: the store decodes on first use, in the worker, so
+    # the gunicorn master (--preload) never holds a copy of the history. The
+    # synthetic purge runs at that first use for the same reason.
+    store = Store(cfg.storage_dir(), purge_on_boot=cfg.udl_enabled,
+                  compact_hours=cfg.ledger_compact_hours)
     manual = ManualElsetSource(cfg.storage_dir())
     hrr = HrrStore(cfg, http_client=http_client,
                    static_fallback=_ASSET_PATHS["hrr-geo.json"])
@@ -720,7 +738,7 @@ def create_app(cfg: Config | None = None,
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="1.7.12", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="1.7.13", lifespan=_lifespan)
     # Request context for every log line, and one standard request line. The
     # X-Auth-Request-Email header becomes user.email, as the standard requires;
     # LOG_USER_EMAIL=false switches that off (see config.py).
