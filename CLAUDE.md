@@ -59,7 +59,30 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 
 ## Current state (repo 1.7.13; platform version 47 ACTIVE, ALL 12 STAGES GREEN, 24 November 2026)
 
-LATEST, FACT, 24 November 2026, Pipeline tab screenshot from Ash: platform
+LATEST, FACT, 25 November 2026, Pipeline tab screenshot from Ash: 1.7.13
+uploaded; Source Code panel "v48 accepted Nov 25, 2026", platform commit
+`76d4ac58`; "All 12 stages passed", Deploy included. The App Store list shows
+PSIRENS "CATO STATUS: Pass (97)" where Ash's other five apps read Pass (100)
+(two of them with a warning triangle). REPORTED, from an analysis Ash pasted
+of the Code Quality job (source and exact wording TBC): `qualityGate.status
+ERROR`, failed condition `new_violations` actual 2 against 0; 2
+VULNERABILITIES, security rating C, 0 bugs, 0 smells; coverage 95.5%,
+duplication 0.0%; found by `PythonSecuritySensor` (taint analysis); the job
+marked `allowFailure: true`, which is why the stage reads Passed. The same
+paste describes the CATO gate as four conditions on CHANGED code (coverage
+>= 80%, new issues 0, duplication <= 3%, security review), which differs from
+this file's "five conditions on OVERALL code": TBC which is current. What the
+97 measures is TBC; it is NOT coverage (95.5%). The two issues' rule keys and
+file:line are NOT known here: needed from the SonarQube dashboard
+(`code-quality.bluestaq.com`, project psirens, Issues, type Vulnerability) or
+the job's `sonar-issues.json`. Do not "fix" blind. PSIRENS has no SQL, no
+shell commands and no user-built file paths, so the paste's generic list does
+not apply; SPECULATION only: Python taint rules most likely to fire here are
+log injection (request headers such as the user agent reach log lines,
+`logjson.py`, which strips control characters with its own regex the
+analyser may not recognise as a sanitiser).
+
+LATEST BEFORE THAT, FACT, 24 November 2026, Pipeline tab screenshot from Ash: platform
 version 47 is Active and "All 12 stages passed", Deploy included; the Source
 Code panel offers v46, "accepted Nov 23, 2026", commit `2db868cb` (the
 platform's GitLab hash; it is NOT a commit in this repo). Date Uploaded again
