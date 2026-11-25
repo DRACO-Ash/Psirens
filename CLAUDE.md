@@ -57,7 +57,27 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 50; platform v49 = 1.7.14 ACTIVE, ALL 12 STAGES GREEN, 25 November 2026)
+## Current state (repo 50 = platform v50 ACTIVE, ALL 12 STAGES GREEN, CATO PASS (100), 25 November 2026)
+
+LATEST, FACT, 25 November 2026, three screenshots from Ash after uploading 50:
+(1) CATO IS BACK TO 100. The App Store list reads PSIRENS "Pass (100)", level
+with Ash's other five apps (97 on v48). So the three bandit B101 asserts were
+the whole of the 3-point loss and 1.7.14 (v49) cleared them; the "2 taint
+vulnerabilities" paste was not what the score measured. Item CLOSED. The
+list's own Version column reads "—" for every app, so it never shows a
+version. Spectre carries a warning triangle (not ours).
+(2) THE UPLOAD-NUMBER PREDICTION HELD: the Versions column reads 50, our
+version is 50, the Source Code panel reads "v50 accepted Nov 25, 2026",
+platform commit `794cca03`, all 12 stages passed, Deploy included.
+(3) THE PIPELINE TAB LAGS AN UPLOAD. A screenshot taken just after uploading
+showed Versions "50 Active" while the Source Code panel still read v49
+(`5b2d8983`) and the stage list (all green) was v49's run. Only once the
+panel read v50 was the stage list 50's. This also explains 24 November (v47
+Active beside a v46 Source Code panel). RULE: read the stage results only when
+the Source Code panel names the version just uploaded; until then the green
+list belongs to the previous upload. The Date Uploaded column still reads
+"Jul 28, 2026" (the known oddity). Push rule: this green Deploy re-confirms
+push without asking. NEXT version: 51.
 
 VERSION 50, 25 November 2026: THE VERSION IS NOW THE APP STORE UPLOAD
 NUMBER. Ash, asked "Can we match the versioning on the app to the

@@ -236,7 +236,10 @@ written that week, and every one a rule the local gates did not carry.
   CALIBRATED on git: exactly the three lines on 1.7.13 (`b1976b6`), and
   nothing on 1.7.12 (`d3c8f28`) or 1.6.12 (`9258395`). A test asserts each
   guard raises the named error, and three red cases put each assert back.
-● **Cost:** no upload rejected, three points of CATO score.
+● **Outcome, FACT, 25 November 2026:** after v49 (1.7.14) the App Store list
+  reads PSIRENS "Pass (100)" (checked on v50). The three asserts were the
+  whole of the loss.
+● **Cost:** no upload rejected, three points of CATO score for one upload.
 
 ---
 
