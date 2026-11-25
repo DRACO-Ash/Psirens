@@ -57,7 +57,16 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.14; platform v48 = 1.7.13 ACTIVE, ALL 12 STAGES GREEN, CATO 97, 25 November 2026)
+## Current state (repo 1.7.14; platform v49 ACTIVE, ALL 12 STAGES GREEN, 25 November 2026)
+
+LATEST, FACT, 25 November 2026, Pipeline tab screenshot from Ash: 1.7.14
+uploaded; Source Code panel "v49 accepted Nov 25, 2026", platform commit
+`5b2d8983`; "All 12 stages passed", Deploy included; status Active. Date
+Uploaded again reads "Jul 28, 2026" (the known oddity). INFERENCE: v49 is
+1.7.14 (`/api/meta` is the check). NOT YET SEEN: the CATO score on the App
+Store list, which is what 1.7.14 was for (97 on v48); a green Code Quality
+stage does not show it, because that job is `allowFailure: true` (reported).
+Push rule: this green Deploy re-confirms push without asking.
 
 1.7.14, 25 November 2026: THE CATO 97 FIX. FACT, from Ash: the findings
 behind "Pass (97)" are three bandit B101 `assert` statements in `store.py`
