@@ -59,7 +59,31 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 
 ## Current state (repo 50 = platform v50 ACTIVE, ALL 12 STAGES GREEN, CATO PASS (100), 25 November 2026)
 
-LATEST, FACT, 25 November 2026, Ash's live `/api/meta` on v50 (read about
+LATEST, FACT, 26 November 2026, Ash's `retry-report.json` (the
+`--retry-from ... --since 2026-10-13` run): 112 six-hour chunks, ALL 112 OK,
+49,247 added, 1,711,226 offered, no failed windows, no upstream errors,
+server time 53 to 190 s a chunk (3.5 h in all). THE BACKFILL IS DONE; the
+6 h chunk fixed the cut-off. Added per day, by window date: 17 to 22 Oct
+5,600 to 8,400; 31 Oct to 10 Nov 150 to 860, falling; 11 Nov 36; 12 to 19
+Nov 0; 20 to 22 Nov 2 to 12. READING IT: `added` is counted BEFORE the cap
+trims (`Store.merge_samples`, `added += _merge_object(...)` then `_prune`;
+FACT, code), so old windows can "add" samples the 2,000 cap discards in the
+same merge. INFERENCE: the gradient is each object's cap horizon (dense
+objects hold about 2 weeks, sparse ones longer), so the 2,000-SAMPLE CAP, not
+missing data, now limits history, and 90-day retention is never reached for
+dense objects. LOST OR LANDED (the first run's timeouts): NOT decidable from
+this report, because the cap confounds the old windows and live ingest the
+recent ones; now moot, since every timed-out window from 17 October on has
+been re-pulled successfully. NOT RETRIED, TBC: the first run's timed-out 13
+and 15 October windows are absent although `since_filter` keeps them (the
+input report used is TBC); low value, as they sit beyond most objects' cap
+horizon. ALSO: 112 merges is 112 segments, which with the hourly pulls
+accounts for the 131 `segments_since_snapshot` and the 67 s boot (INFERENCE,
+strong). Adoption of untagged history and `raan_deg` enrichment are NOT
+counted in `added`; the check is an inspector's Providers row, where
+`untagged` should have fallen from ~1,900. The cap against retention is a
+proposal for Ash if he wants longer history (memory cost to be measured).
+
 23:40Z): `version` "50" (the title bar's source, confirmed live). THE LEDGER
 STORE WORKS LIVE: `store.backend` "ledger", `last_write_bytes` 117,772 (an
 hourly pull that added 98 fixes wrote 0.12 MB; 1.7.12 rewrote ~138 MB).
