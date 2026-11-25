@@ -187,6 +187,12 @@ def _check_python(path: str, text: str) -> list[Finding]:
             # files and passed, so the profile does not hold tests to S1244.
             if not _is_test_file(path):
                 out.extend(_check_float_eq(path, node))
+        # bandit B101, source only: tests assert by design. CATO scored 1.7.13
+        # 97 on three of these in store.py.
+        if isinstance(node, ast.Assert) and not _is_test_file(path):
+            out.append(Finding(path, node.lineno, "PY-ASSERT",
+                               "assert in shipped code (bandit B101): `python -O` "
+                               "strips it; raise an explicit error instead"))
         if isinstance(node, (ast.For, ast.AsyncFor)):
             out.extend(_check_loop_lambda(path, node))
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -738,6 +744,11 @@ _CASES = [
     ("PY-FLOAT-EQ",
      "def f(gap, closing):\n    return gap == 0.0 or gap * closing <= 0.0\n",
      "def g(gap, closing):\n    return gap * closing <= 0.0\n", ".py"),
+    # The real one, PSIRENS 1.7.13, raised by the CATO score (97, not 100).
+    ("PY-ASSERT",
+     "def f(data):\n    assert data is not None\n    return data\n",
+     "def g(data):\n    if data is None:\n        raise RuntimeError('x')\n    return data\n",
+     ".py"),
     # The real ones, PSIRENS 1.7.5, each raised by Code Quality on upload.
     ("PY-DICT-UNPACK",
      "def f(streams: dict, mode):\n    return [n for (n, m) in streams if m == mode]\n",
@@ -830,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
                      "PY-BARE-EXCEPT", "PY-NONE-COMPARE", "PY-LOOP-LAMBDA",
                      "PY-DUP-LITERAL", "PY-REPLACE-RETURN", "PY-FLOAT-EQ",
                      "PY-DICT-UNPACK", "PY-SORTED-INDEX", "PY-REDUNDANT-CALL",
-                     "PY-LIST-ITER"):
+                     "PY-LIST-ITER", "PY-ASSERT"):
             print(f"{rule:22} see SNIFFS.md")
         return 0
     if not args.paths:

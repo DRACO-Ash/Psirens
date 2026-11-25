@@ -270,6 +270,9 @@ def _merge_object(existing: dict, rec: dict) -> int:
     return added
 
 
+# The one message for a store used before it holds anything (1.7.14: these
+# were asserts, which `python -O` strips; bandit B101).
+NOT_LOADED = "store not loaded"
 LEDGER_DIR = "ledger"
 _SNAP, _SEG = "snap-", "seg-"
 _META_FIELDS = _META_KEYS
@@ -499,7 +502,8 @@ class Store:
     def _snapshot(self) -> int:
         """A full snapshot as a new file; with `keep_history`, history.json
         first, so the snapshot is the newer of the two."""
-        assert self._data is not None
+        if self._data is None:
+            raise RuntimeError(NOT_LOADED)
         if self.keep_history:
             dump_file(self.data_dir, self.path, self._data)
             self._file_sig = _sig(self.path)
@@ -611,7 +615,8 @@ class Store:
                 self._boot()
             else:
                 self._check_external()
-            assert self._data is not None
+            if self._data is None:
+                raise RuntimeError(NOT_LOADED)
             return self._data
 
     # -- the read side ------------------------------------------------------
@@ -753,7 +758,8 @@ class Store:
             return self._purge_locked()
 
     def _purge_locked(self) -> int:
-        assert self._data is not None
+        if self._data is None:
+            raise RuntimeError(NOT_LOADED)
         objects = self._data.setdefault("objects", {})
         removed = 0
         # Decide first, change after: the dict cannot change size while it is

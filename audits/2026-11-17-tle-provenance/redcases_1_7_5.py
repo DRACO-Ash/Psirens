@@ -128,8 +128,8 @@ CASES = [
   "        samples.append(s)",
   LEDGER, "test_a_view_taken_before_a_change_is_never_altered"),
  ("health parses the whole store again", "src/psirens/store.py",
-  "            return self._newest",
-  "            return _newest(_read_json(self.path))",
+  "        return self._newest\n\n    def stats",
+  "        return _newest(_read_json(self.path))\n\n    def stats",
   LEDGER, "test_health_reads_no_file"),
  ("a merge rewrites the whole store", "src/psirens/store.py",
   "            self._append(delta)\n",
@@ -156,6 +156,21 @@ CASES = [
   "        if segs and not snaps:",
   "        if False:",
   T, "test_the_api_serves_the_agreement_and_never_a_projection"),
+ # 1.7.14, bandit B101: each guard put back to the 1.7.13 assert.
+ ("_snapshot guarded by assert again", "src/psirens/store.py",
+  'newer of the two."""\n        if self._data is None:\n            raise RuntimeError(NOT_LOADED)\n',
+  'newer of the two."""\n        assert self._data is not None\n',
+  LEDGER, "under_python_O and _snapshot"),
+ ("ensure guarded by assert again", "src/psirens/store.py",
+  "                self._check_external()\n            if self._data is None:\n"
+  "                raise RuntimeError(NOT_LOADED)\n",
+  "                self._check_external()\n            assert self._data is not None\n",
+  LEDGER, "under_python_O and ensure"),
+ ("_purge_locked guarded by assert again", "src/psirens/store.py",
+  "    def _purge_locked(self) -> int:\n        if self._data is None:\n"
+  "            raise RuntimeError(NOT_LOADED)\n",
+  "    def _purge_locked(self) -> int:\n        assert self._data is not None\n",
+  LEDGER, "under_python_O and _purge_locked"),
 ]
 
 

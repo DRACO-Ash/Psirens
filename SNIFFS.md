@@ -466,6 +466,23 @@ off-the-shelf linter already covers the rest of it, then calibrate that linter
 on git rather than trusting its documentation. Ruff is still not the profile:
 it caught one of these eight directly.
 
+### 3.20 `assert` in shipped code (bandit `B101`) GATE
+
+PSIRENS 1.7.13 passed every stage and still lost three points of its CATO
+score (97, not 100) to three `assert self._data is not None` lines, written to
+narrow a type for mypy (QUALITY-LEDGER A18). `python -O` strips an assert, so
+the guard is not there when it might matter. Raise instead:
+`if x is None: raise RuntimeError(MESSAGE)`. mypy narrows the same way. Put the
+message in one constant: the same literal three times is `python:S1192`.
+
+● `PY-ASSERT` in `sniff_check.py`, source only (tests assert by design).
+● The loop also runs ruff's bandit port, the whole `S` family, over `src`, with
+  a red case. That applies the 3.19 lesson: when a rule arrives, gate its family.
+  Calibrated on git: exactly the three lines on 1.7.13, nothing on 1.7.12 or
+  1.6.12.
+● A passing pipeline is not the whole verdict. The App Store list carries a
+  CATO score of its own. Read it on every upload, as you read the Pipeline tab.
+
 ## 5. The meta-rules, which cost more than any sniff
 
 Four habits, each learned from a real failure. They are the reason the rules

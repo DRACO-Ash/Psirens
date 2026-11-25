@@ -212,6 +212,32 @@ written that week, and every one a rule the local gates did not carry.
   the tenant's own scanner before upload.
 ● **Cost:** one upload cycle.
 
+### A18. Three `assert` statements in shipped code (bandit `B101`, 1.7.13)
+● **Raised:** 25 November 2026. 1.7.13 passed all 12 stages, but the App Store
+  list showed its CATO status as "Pass (97)" where Ash's other apps read 100.
+  The findings, from Ash: `store.py:502` (`_snapshot`), `:614` (`ensure`) and
+  `:756` (`_purge_locked`), each `assert self._data is not None`, written to
+  narrow the type for mypy. bandit flags them because `python -O` strips an
+  assert. An earlier paste described two taint-analysis vulnerabilities;
+  the three findings Ash then listed are what was acted on.
+● **Live risk, measured rather than assumed:** none. `_boot` sets the store
+  on every path and the image does not run `-O`. Under `-O` the 1.7.13
+  methods, given an unloaded store, returned without error (`_snapshot`,
+  `ensure`) or failed with an `AttributeError` that names nothing
+  (`_purge_locked`).
+● **Fix (1.7.14):** `if self._data is None: raise RuntimeError(NOT_LOADED)`
+  at each site. mypy narrows the type the same way. The message is one
+  constant, because the suggested literal repeated three times trips
+  `python:S1192`, the rule that failed 1.7.0. `PY-DUP-LITERAL` caught that
+  before upload.
+● **Guards:** the loop runs ruff's bandit port, the whole `S` family, over
+  `src`, with a red case (`gate-cases/bandit_case.py`: S101, S301, S307,
+  S602). `sniff_check.py` gains `PY-ASSERT` (source only). Both are
+  CALIBRATED on git: exactly the three lines on 1.7.13 (`b1976b6`), and
+  nothing on 1.7.12 (`d3c8f28`) or 1.6.12 (`9258395`). A test asserts each
+  guard raises the named error, and three red cases put each assert back.
+● **Cost:** no upload rejected, three points of CATO score.
+
 ---
 
 ## 4. Caught by local gates before upload
@@ -625,6 +651,8 @@ Ordered by return on effort, from this project's evidence.
      "fixed_in": "1.7.6", "cost": "upload cycle", "guard": "PY-REDUNDANT-CALL; ruff C4"},
     {"id": "A17", "rule": "python:S7504", "title": "list() around a dict being mutated in the loop",
      "fixed_in": "1.7.6", "cost": "upload cycle", "guard": "PY-LIST-ITER (ruff PERF101 declines this form)"},
+    {"id": "A18", "rule": "bandit:B101", "title": "assert in shipped code (x3, store.py), CATO 97",
+     "fixed_in": "1.7.14", "cost": "CATO score", "guard": "ruff S over src; PY-ASSERT"},
 
     {"id": "B1", "rule": "python:S3776", "title": "cognitive complexity 18 in load_config",
      "fixed_in": "1.6.6", "cost": "none", "guard": "tools/ast_gates.py"},

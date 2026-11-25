@@ -83,6 +83,26 @@ ruff check --isolated --select "$RUFF_COLLECTIONS" --ignore C408 src tests --out
 echo "collection idioms OK (ruff bit all six codes in its red case, nothing in src or tests)"
 
 # ---------------------------------------------------------------------------
+# Bandit family (1.7.14). 1.7.13 passed every stage but its CATO score read 97,
+# not 100, on three bandit B101 findings: `assert` in store.py, which
+# `python -O` strips. This gate runs ruff's flake8-bandit port (`S`, the whole
+# family, not just S101) over SHIPPED code only: tests assert by design and are
+# not what CATO scores. CALIBRATED on git: silent on 1.7.12 (d3c8f28) and 1.6.12
+# (9258395); on 1.7.13 (b1976b6) it reports exactly the three lines the
+# platform did. Red case first, every code in it must be bitten.
+# ---------------------------------------------------------------------------
+RED_S="$(ruff check --isolated --select S "$ROOT/gate-cases/bandit_case.py" --output-format concise 2>/dev/null \
+  | sed -n 's/.*:[0-9]*:[0-9]*: \([A-Z]*[0-9]*\) .*/\1/p' | sort -u | tr '\n' ' ')"
+for code in S101 S301 S307 S602; do
+  case " $RED_S" in *" $code "*) ;; *)
+    echo "FAIL: the bandit gate did not flag $code in its red case (saw: $RED_S)"; exit 1;;
+  esac
+done
+ruff check --isolated --select S src --output-format concise \
+  || { echo "FAIL: bandit findings above in shipped code (CATO scores these; see SNIFFS.md 3.20)"; exit 1; }
+echo "bandit family OK (ruff bit all four codes in its red case, nothing in src)"
+
+# ---------------------------------------------------------------------------
 # The four text rules the eslint plugin does not carry. MEASURED, not assumed:
 # eslint-plugin-sonarjs does NOT carry the throw-versus-rejected-promise rule
 # even with all 279 of its rules enabled, so running eslint would NOT have

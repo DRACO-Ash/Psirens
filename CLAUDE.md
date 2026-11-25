@@ -57,7 +57,26 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 1.7.13; platform version 47 ACTIVE, ALL 12 STAGES GREEN, 24 November 2026)
+## Current state (repo 1.7.14; platform v48 = 1.7.13 ACTIVE, ALL 12 STAGES GREEN, CATO 97, 25 November 2026)
+
+1.7.14, 25 November 2026: THE CATO 97 FIX. FACT, from Ash: the findings
+behind "Pass (97)" are three bandit B101 `assert` statements in `store.py`
+(`_snapshot` :502, `ensure` :614, `_purge_locked` :756), not the taint
+analysis the earlier paste suggested (that paste said 2 violations; Ash then
+listed 3 findings, and the 3 were fixed). Each is now `if self._data is None:
+raise RuntimeError(NOT_LOADED)`; the message is ONE constant because the
+literal three times is `python:S1192`, which `sniff_check` caught before
+upload. No live risk existed: `_boot` sets the store on every path and the
+image does not run `-O` (MEASURED: under `-O` the 1.7.13 methods ran on
+None silently). GATED: ruff's bandit port (whole `S` family) over `src` in
+the loop with a red case, and `PY-ASSERT` in `sniff_check`; both calibrated
+on git (exactly the three lines on 1.7.13, nothing on 1.7.12 or 1.6.12).
+PROVEN: a new test per guard, three red cases (36 of 36 go red; the
+1.7.13 harness had one ANCHOR MISSING, the health case, broken when
+`newest_epoch` went lock-free late in that build, now re-pointed). Loop
+GREEN, 349 tests, 95.54%; the zip passes on its own. QUALITY-LEDGER A18,
+SNIFFS 3.20. Upload 1.7.14; expect CATO 100 (INFERENCE: what else the
+score weighs is TBC).
 
 LATEST, FACT, 25 November 2026, Pipeline tab screenshot from Ash: 1.7.13
 uploaded; Source Code panel "v48 accepted Nov 25, 2026", platform commit

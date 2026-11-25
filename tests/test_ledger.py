@@ -294,3 +294,15 @@ def test_the_scheduler_compacts_only_when_due(due):
     ref.store = Fake()
     asyncio.run(ref._compact_if_due())
     assert Fake.compacted == (1 if due else 0)
+
+
+@pytest.mark.parametrize("call", ["_snapshot", "_purge_locked", "ensure"])
+def test_an_unloaded_store_says_so_even_under_python_O(tmp_path, monkeypatch, call):
+    """1.7.14: these guards were `assert` statements (bandit B101, CATO 97 on
+    1.7.13). `python -O` strips an assert, so the method would run on None and
+    fail somewhere further in with a TypeError naming nothing. An explicit check
+    survives -O and names the cause."""
+    st = Store(str(tmp_path))
+    monkeypatch.setattr(st, "_boot", lambda: None)   # a boot that held nothing
+    with pytest.raises(RuntimeError, match="store not loaded"):
+        getattr(st, call)()
