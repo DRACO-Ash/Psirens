@@ -59,7 +59,31 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 
 ## Current state (repo 50 = platform v50 ACTIVE, ALL 12 STAGES GREEN, CATO PASS (100), 25 November 2026)
 
-LATEST, FACT, 25 November 2026, three screenshots from Ash after uploading 50:
+LATEST, FACT, 25 November 2026, Ash's live `/api/meta` on v50 (read about
+23:40Z): `version` "50" (the title bar's source, confirmed live). THE LEDGER
+STORE WORKS LIVE: `store.backend` "ledger", `last_write_bytes` 117,772 (an
+hourly pull that added 98 fixes wrote 0.12 MB; 1.7.12 rewrote ~138 MB).
+Ingest healthy: data 0.82 h old, 26 requests (24 slices, 1 halved), 0
+failures, 0 truncated, 131,456 rows, 583 of 597 high-interest objects kept,
+98 new fixes, 3,883 rows rejected for "no catalogue number" (INFERENCE:
+uncorrelated element sets, which no HRR entry could match anyway; harmless).
+TWO THINGS TO WATCH: (a) `boot_seconds` 66.78, against 1.9 s measured offline.
+`store.version` 2 says this pod booted recently (one change since boot), and
+`segments_since_snapshot` 131 with `snapshot_seq` 1 aged 23.37 h says the
+boot replayed every segment since the 1.7.13 first-start snapshot, each read
+from the S3 mount. 131 in 23 h is far more than the 23 hourly pulls: INFERENCE,
+backfill chunks or operator pulls (one segment each); TBC, Ash. Health answers
+during the decode, so a slow boot is not a restart risk. (b) COMPACTION HAS
+NEVER RUN LIVE. It is due at 24 h (snapshot age from the file's mtime, so it
+survives restarts) and the scheduler checks after each hourly cycle: expected
+by about 01:00Z on 26 November. The check: `snapshot_seq` above 1,
+`snapshot_age_hours` near 0, `segments_since_snapshot` small, and a later
+boot far under 67 s. If it fails, the log says "ledger compaction failed,
+will retry" with the OS error (the first live test of overwrite and delete on
+the mount). OPTION, not built: also compact when segments since the snapshot
+pass a count (for example 48), which bounds boot time during a backfill; it
+changes Ash's "once a day" decision, so it is his call.
+
 (1) CATO IS BACK TO 100. The App Store list reads PSIRENS "Pass (100)", level
 with Ash's other five apps (97 on v48). So the three bandit B101 asserts were
 the whole of the 3-point loss and 1.7.14 (v49) cleared them; the "2 taint
