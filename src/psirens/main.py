@@ -714,7 +714,8 @@ def create_app(cfg: Config | None = None,
     # the gunicorn master (--preload) never holds a copy of the history. The
     # synthetic purge runs at that first use for the same reason.
     store = Store(cfg.storage_dir(), purge_on_boot=cfg.udl_enabled,
-                  compact_hours=cfg.ledger_compact_hours)
+                  compact_hours=cfg.ledger_compact_hours,
+                  compact_segments=cfg.ledger_compact_segments)
     manual = ManualElsetSource(cfg.storage_dir())
     hrr = HrrStore(cfg, http_client=http_client,
                    static_fallback=_ASSET_PATHS["hrr-geo.json"])
@@ -738,7 +739,7 @@ def create_app(cfg: Config | None = None,
 
     refresher.on_cycle = _warm_events
 
-    app = FastAPI(title="PSIRENS", version="50", lifespan=_lifespan)
+    app = FastAPI(title="PSIRENS", version="51", lifespan=_lifespan)
     # Request context for every log line, and one standard request line. The
     # X-Auth-Request-Email header becomes user.email, as the standard requires;
     # LOG_USER_EMAIL=false switches that off (see config.py).

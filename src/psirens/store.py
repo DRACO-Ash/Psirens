@@ -443,12 +443,14 @@ class Store:
     """
 
     def __init__(self, data_dir: str, *, purge_on_boot: bool = False,
-                 compact_hours: float = 24.0, keep_history: bool = True):
+                 compact_hours: float = 24.0, compact_segments: int = 48,
+                 keep_history: bool = True):
         self.data_dir = data_dir
         self.path = os.path.join(data_dir, "history.json")
         self.ledger_dir = os.path.join(data_dir, LEDGER_DIR)
         self.purge_on_boot = purge_on_boot
         self.compact_hours = compact_hours
+        self.compact_segments = compact_segments   # 51: early, during a backfill
         self.keep_history = keep_history   # Ash, 24 Nov: history.json kept current daily
         self._lock = threading.RLock()
         self._data: dict | None = None
@@ -666,7 +668,8 @@ class Store:
                     "segments_since_snapshot": self._since_snap,
                     "last_write_bytes": self.last_write_bytes,
                     "boot_seconds": self.boot_seconds,
-                    "compact_hours": self.compact_hours}
+                    "compact_hours": self.compact_hours,
+                    "compact_segments": self.compact_segments}
 
     # -- health -----------------------------------------------------------
     def probe_write(self, timeout_s: float = 2.0) -> tuple[bool, str]:
@@ -706,12 +709,26 @@ class Store:
             return size
 
     def compaction_due(self, now: float | None = None) -> bool:
+        """Once a day (Ash, 24 Nov), or sooner once `compact_segments` segments
+        have piled up since the snapshot (Ash, 26 Nov): a backfill writes one
+        per chunk, and every boot replays them all from the mount (131 gave a
+        67 s boot on 25 Nov). Hourly pulls alone write 24 a day, so the daily
+        cadence is unchanged in normal running."""
         with self._lock:
             if self._data is None:
                 return False
             if self._snap_at is None:
                 return True
+            if 0 < self.compact_segments <= self._since_snap:
+                return True
             return ((now or time.time()) - self._snap_at) >= self.compact_hours * 3600
+
+    def compact_if_due(self) -> int | None:
+        """Compact only if still due, decided under the lock, so two callers
+        racing for the same backlog compact it once. Returns the snapshot's
+        size, or None when nothing was due."""
+        with self._lock:
+            return self.compact() if self.compaction_due() else None
 
     # -- deletions ------------------------------------------------------------
     def _delete(self, drop: list[str]) -> None:

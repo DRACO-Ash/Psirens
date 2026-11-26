@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -264,11 +265,33 @@ class Refresher:
             self.last_errors = list(errors)
             if added > 0:
                 self.last_ok = real_now
-            return {"status": "ok", "mode": mode, "start": start.isoformat(),
-                    "end": end.isoformat(), "added": added, "errors": errors,
-                    "fetched": fetched}
         finally:
             self.flight.end()
+        self.compact_soon()
+        return {"status": "ok", "mode": mode, "start": start.isoformat(),
+                "end": end.isoformat(), "added": added, "errors": errors,
+                "fetched": fetched}
+
+    def compact_soon(self) -> threading.Thread | None:
+        """After an operator pull (one backfill chunk), compact on a background
+        thread if the segment backlog makes it due (51). Off the request, so a
+        chunk's answer is never held behind a snapshot write; the store lock
+        orders it against the next merge. Returns the thread, or None."""
+        due = getattr(self.store, "compaction_due", None)
+        if due is None or not due():
+            return None
+        worker = threading.Thread(target=self._compact_now, name="ledger-compact",
+                                  daemon=True)
+        worker.start()
+        return worker
+
+    def _compact_now(self) -> None:
+        try:
+            size = self.store.compact_if_due()
+            if size is not None:
+                _log.info("ledger compacted after a pull: snapshot %d bytes", size)
+        except OSError as exc:
+            _log.warning("ledger compaction failed, will retry: %s", exc)
 
     async def _compact_if_due(self) -> None:
         """The daily ledger snapshot, off the event loop and off the request

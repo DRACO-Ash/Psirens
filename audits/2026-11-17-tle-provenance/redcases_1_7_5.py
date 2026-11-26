@@ -171,6 +171,15 @@ CASES = [
   "            raise RuntimeError(NOT_LOADED)\n",
   "    def _purge_locked(self) -> int:\n        assert self._data is not None\n",
   LEDGER, "under_python_O and _purge_locked"),
+ # 51, the segment trigger (Ash, 26 Nov).
+ ("a segment backlog never makes compaction due", "src/psirens/store.py",
+  "            if 0 < self.compact_segments <= self._since_snap:\n",
+  "            if False:\n",
+  LEDGER, "segment_backlog"),
+ ("a pull never compacts its backlog", "src/psirens/refresh.py",
+  "        self.compact_soon()\n        return {",
+  "        return {",
+  LEDGER, "backfill_chunk"),
 ]
 
 

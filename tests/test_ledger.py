@@ -306,3 +306,65 @@ def test_an_unloaded_store_says_so_even_under_python_O(tmp_path, monkeypatch, ca
     monkeypatch.setattr(st, "_boot", lambda: None)   # a boot that held nothing
     with pytest.raises(RuntimeError, match="store not loaded"):
         getattr(st, call)()
+
+
+def test_a_segment_backlog_makes_compaction_due_before_the_day_is_out(tmp_path):
+    """51 (Ash, 26 Nov): 131 segments after a backfill gave a 67 s boot on 25
+    Nov, because a boot replays every segment since the snapshot. So the
+    ledger also compacts once `compact_segments` have piled up, whatever the
+    hour; and `compact_if_due` decides under the lock, so it compacts once."""
+    rng = random.Random(14)
+    legacy = seed_legacy(os.path.join(tmp_path, "history.json"), rng)
+    store = Store(str(tmp_path), compact_hours=24, compact_segments=3)
+    store.load()                       # the first start writes the snapshot
+    seq = store.stats()["snapshot_seq"]
+    for step in range(2):
+        merge(store, a_pull(rng, step, legacy, []), step)
+    assert not store.compaction_due(), "two segments, fresh snapshot: not yet"
+    assert store.compact_if_due() is None
+    merge(store, a_pull(rng, 2, legacy, []), 2)
+    assert store.compaction_due(), "the third segment must make it due"
+    assert store.compact_if_due() is not None
+    stats = store.stats()
+    assert stats["snapshot_seq"] > seq and stats["segments_since_snapshot"] == 0
+    assert stats["compact_segments"] == 3
+    assert store.compact_if_due() is None, "the backlog is compacted once"
+
+
+def test_a_segment_limit_of_zero_leaves_the_daily_cadence_alone(tmp_path):
+    rng = random.Random(15)
+    legacy = seed_legacy(os.path.join(tmp_path, "history.json"), rng)
+    store = Store(str(tmp_path), compact_hours=24, compact_segments=0)
+    store.load()
+    for step in range(5):
+        merge(store, a_pull(rng, step, legacy, []), step)
+    assert not store.compaction_due()
+
+
+def test_a_backfill_chunk_compacts_the_backlog_off_the_request(tmp_path):
+    """The pull route is how a backfill arrives, one chunk a request, so the
+    early compaction has to follow a pull, not wait for the hourly cycle."""
+    import time as _time
+
+    from fastapi.testclient import TestClient
+
+    from psirens.config import load_config
+    from psirens.main import create_app
+    from psirens.sources import DemoElsetSource
+    cfg = load_config()
+    for key, value in (("data_dir", str(tmp_path)), ("scheduler_enabled", False),
+                       ("ledger_compact_segments", 1), ("demo_mode", True),
+                       ("udl_enabled", False)):
+        object.__setattr__(cfg, key, value)
+    app = create_app(cfg, sources=[DemoElsetSource()])
+    with TestClient(app) as c:
+        store = app.state.store
+        store.compact()        # a fresh snapshot: only the pull's segment can make it due
+        assert not store.compaction_due()
+        seq = store.stats()["snapshot_seq"]
+        assert c.post("/api/pull?mode=sim&hours=48").json()["status"] == "ok"
+        deadline = _time.monotonic() + 10
+        while store.stats()["snapshot_seq"] == seq and _time.monotonic() < deadline:
+            _time.sleep(0.05)
+        assert store.stats()["snapshot_seq"] > seq, "the pull left its backlog uncompacted"
+        assert store.stats()["segments_since_snapshot"] == 0

@@ -57,7 +57,25 @@ Server archetype: FastAPI backend plus a single-file canvas SPA
 (`src/psirens/static/index.html`). Deployed on the Bluestaq App Store. Slug
 `psirens` (lowercase); display name PSIRENS.
 
-## Current state (repo 50 = platform v50 ACTIVE, ALL 12 STAGES GREEN, CATO PASS (100), 25 November 2026)
+## Current state (repo 51; platform v50 ACTIVE, ALL 12 STAGES GREEN, CATO PASS (100), 26 November 2026)
+
+51, 26 November 2026: THE SEGMENT COMPACTION TRIGGER, built on Ash's "yes,
+add the 48-segment compaction trigger". `Store.compaction_due` is also true
+once `compact_segments` (48, `LEDGER_COMPACT_SEGMENTS`, 0 turns it off)
+segments have piled up since the snapshot; `Store.compact_if_due` decides
+under the lock, so racing callers compact a backlog once. A backfill arrives
+one chunk per `/api/pull`, so `Refresher.pull_window` now calls
+`compact_soon()` after each pull, which compacts on a background thread
+(never inside the request); the hourly scheduler still checks too. Hourly
+pulls alone write 24 segments a day, so the daily cadence is unchanged in
+normal running. `/api/meta` `store` gains `compact_segments`. PROVEN: three
+tests (backlog trigger with a fresh snapshot, the off switch, and the pull
+route end to end with the snapshot made fresh first so only the pull's own
+segment can trigger it; the first draft of that test could pass on an empty
+store's first-snapshot rule and was tightened); two red cases (38 of 38 go
+red). Loop GREEN, 353 tests, 95%; the zip passes on its own. Upload 51.
+STILL TO CONFIRM LIVE: the first compaction on the mount (see below).
+
 
 LATEST, FACT, 26 November 2026, Ash's `retry-report.json` (the
 `--retry-from ... --since 2026-10-13` run): 112 six-hour chunks, ALL 112 OK,
